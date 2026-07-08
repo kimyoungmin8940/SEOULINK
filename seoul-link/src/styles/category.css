@@ -1,0 +1,154 @@
+/*
+  category.css
+  - hero 아래에 겹쳐 올라오는 여행 카테고리 메뉴 스타일
+  - CategoryMenu.jsx와 연결됨
+*/
+
+/* hero 아래에 겹쳐 올라오는 카테고리 박스 */
+.category-box {
+  width: min(1160px, calc(100% - 96px));
+  box-sizing: border-box;
+  max-width: none;
+  margin: -54px auto 58px;
+  padding: 18px 66px 17px;
+
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(227, 237, 245, 0.96);
+  border-radius: 16px;
+  box-shadow: var(--shadow-card);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+
+  position: relative;
+  z-index: 2;
+
+  display: flex;
+  align-items: center;
+  gap: 66px;
+}
+
+/* 각 카테고리 버튼의 기본 정렬*/
+.category-item {
+  min-width: 0;
+  padding: 0;
+  background: transparent;
+  text-align: center;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+}
+
+/* 아이콘을 담는 둥근 사각형 배경*/
+.category-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 15px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  box-shadow: 0 8px 18px rgba(24, 50, 74, 0.06);
+  transition: 0.18s ease;
+}
+
+/* SVG 아이콘 선 스타일을 통일*/
+.category-icon svg {
+  width: 27px;
+  height: 27px;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* 카테고리 이름 텍스트 스타일*/
+.category-title {
+  font-size: 13px;
+  font-weight: 750;
+  color: #40576B;
+  letter-spacing: -0.3px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* 지도 카테고리 전용 색상 */
+.category-icon-map {
+  background: #E7F6FF;
+  color: #0B7FC3;
+}
+
+/* 참고 이미지처럼 파스텔 별색을 약하게 준 버전 */
+/* 궁궐/문화 카테고리 전용 색상 */
+.category-icon-palace {
+  background: #E9F0F5;
+  color: #65788D;
+}
+
+/* 자연/한강 카테고리 전용 색상 */
+.category-icon-nature {
+  background: #EAF2FC;
+  color: #5D83B5;
+}
+
+/* 데이트 카테고리 전용 색상*/
+.category-icon-date {
+  background: #F9ECEF;
+  color: #C9828B;
+}
+
+/* 맛집 카테고리 전용 색상*/
+.category-icon-food {
+  background: #FFF3DF;
+  color: #C88B43;
+}
+
+/* 카페 카테고리 전용 색상*/
+.category-icon-cafe {
+  background: #F3ECE8;
+  color: #927467;
+}
+
+/* 쇼핑/핫플 카테고리 전용 색상 */
+.category-icon-shopping {
+  background: #F1ECF8;
+  color: #9A7BBC;
+}
+
+/* 야경 카테고리 전용 색상 */
+.category-icon-night {
+  background: #ECF3FD;
+  color: #617CBA;
+}
+
+/* 숙소 카테고리 전용 색상 */
+.category-icon-stay {
+  background: #E9F4F1;
+  color: #5C9A8C;
+}
+
+/* 지도 메뉴와 나머지 메뉴 사이의 세로 구분선*/
+.category-divider {
+  width: 1px;
+  height: 44px;
+  flex: 0 0 1px;
+
+  border-radius: 999px;
+  background: rgba(95, 124, 148, 0.24);
+  box-shadow: 1px 0 0 rgba(255, 255, 255, 0.85);
+}
+
+/* 카테고리에 마우스를 올렸을 때 아이콘 박스가 살짝 올라감*/
+.category-item:hover .category-icon {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 24px rgba(24, 50, 74, 0.11);
+  filter: saturate(1.06);
+}
+
+/* 카테고리 hover 시 텍스트 색상을 메인 블루로 변경*/
+.category-item:hover .category-title {
+  color: #2F6FAF;
+}

@@ -1,0 +1,239 @@
+/*
+  review.css
+  - 사용자 후기 카드 섹션 스타일
+  - ReviewSection.jsx의 프로필, 별점, 이미지 그리드, 반응형 배치를 담당
+*/
+
+/* 후기 섹션의 아래 여백 */
+.review-section {
+  margin-bottom: 72px;
+}
+
+/* 후기 섹션 제목과 전체 보기 버튼을 양쪽으로 배치 */
+.review-heading {
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* 후기 제목과 설명을 한 줄에 배치 */
+.review-heading-left {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+}
+
+/* 후기 섹션 제목 */
+.review-heading h2 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  color: var(--text-dark);
+  white-space: nowrap;
+}
+
+/* 후기 섹션 설명 문구 */
+.review-heading p {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* 후기 전체 보기 버튼 */
+.review-more-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  color: var(--primary-blue);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.review-more-btn svg {
+  color: var(--primary-blue);
+  stroke: currentColor;
+}
+
+/* 후기 카드를 3열 그리드로 배치 */
+.review-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 22px;
+}
+
+/* 후기 카드의 흰색 박스, 테두리, 그림자 스타일 */
+.review-card {
+  min-width: 0;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid var(--line-soft);
+  border-radius: 18px;
+  padding: 20px;
+  box-shadow: var(--shadow-card-light);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+/* 프로필, 닉네임/별점, 좋아요 버튼을 한 줄로 배치 */
+.review-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* 후기 좋아요 하트 버튼 */
+.review-heart-btn {
+  margin-left: auto;
+  padding: 0;
+  background: transparent;
+  color: #ec4c8a;
+  font-size: 22px;
+  line-height: 1;
+}
+
+/* 사용자 프로필 이미지를 원형으로 보여줌 */
+.avatar {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: var(--sub-blue);
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+/* 후기 작성자 닉네임 텍스트 */
+.review-top strong {
+  display: block;
+  color: var(--text-dark);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+/* 별점 아이콘들을 가로로 배치 */
+.review-stars {
+  margin-top: 5px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--main-blue);
+  line-height: 1;
+}
+
+/* 별 SVG의 크기를 고정 */
+.review-star {
+  width: 12px;
+  height: 12px;
+  display: block;
+  overflow: visible;
+}
+
+/* 별 모양 path의 채움/선 스타일 */
+.review-star path {
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-width: 1.25;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+/* 비어 있는 별의 연한 색상 */
+.review-star.is-empty {
+  color: #d6e8f8;
+}
+
+/* 후기 본문 문장 스타일 */
+.review-text {
+  min-height: 50px;
+  margin: 18px 0 16px;
+  color: #4c596b;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.65;
+  word-break: keep-all;
+}
+
+/* 후기 이미지 2장을 그리드로 배치 */
+.review-images {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+/* 후기 이미지 크기와 라운드 처리 */
+.review-images img {
+  width: 100%;
+  height: 116px;
+  object-fit: cover;
+  border-radius: 14px;
+  display: block;
+}
+
+/* 후기 카드 hover 효과 */
+.review-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-hover);
+}
+
+/* 태블릿에서는 제목 배치와 후기 카드 열 개수를 조정 */
+@media (max-width: 1100px) {
+  .review-heading,
+/* 후기 제목과 설명을 한 줄에 배치 */
+  .review-heading-left {
+    align-items: flex-start;
+  }
+
+/* 후기 제목과 설명을 한 줄에 배치 */
+  .review-heading-left {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .review-heading h2,
+/* 후기 섹션 설명 문구 */
+  .review-heading p {
+    white-space: normal;
+  }
+
+/* 후기 카드를 3열 그리드로 배치 */
+  .review-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* 모바일에서는 후기 카드를 1열로 표시 */
+@media (max-width: 720px) {
+/* 후기 섹션 제목과 전체 보기 버튼을 양쪽으로 배치 */
+  .review-heading {
+    gap: 16px;
+  }
+
+/* 후기 섹션 제목 */
+  .review-heading h2 {
+    font-size: 22px;
+  }
+
+/* 후기 전체 보기 버튼 */
+  .review-more-btn {
+    min-height: auto;
+    padding: 0;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+  }
+
+/* 후기 카드를 3열 그리드로 배치 */
+  .review-grid {
+    grid-template-columns: 1fr;
+  }
+
+/* 후기 이미지 크기와 라운드 처리 */
+  .review-images img {
+    height: 112px;
+  }
+}

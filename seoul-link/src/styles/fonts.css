@@ -1,0 +1,39 @@
+/*
+  fonts.css
+  - 프로젝트에서 사용할 웹폰트와 로컬 Pretendard 폰트를 등록
+  - font-weight 값별로 파일을 나눠 등록해야 CSS에서 400, 500, 600처럼 굵기를 지정할 수 있음
+*/
+
+/* 손글씨 느낌의 Nanum Pen Script 폰트입니다. hero의 취향 글자에 사용함 */
+@import url('https://fonts.googleapis.com/css2?family=Nanum+Pen+Script&display=swap');
+
+/* Pretendard 폰트를 굵기별로 등록함*/
+@font-face {
+  font-family: 'Pretendard';
+  src: url('../assets/fonts/Pretendard-Regular.woff') format('woff');
+  font-weight: 400;
+}
+
+@font-face {
+  font-family: 'Pretendard';
+  src: url('../assets/fonts/Pretendard-Medium.woff') format('woff');
+  font-weight: 500;
+}
+
+@font-face {
+  font-family: 'Pretendard';
+  src: url('../assets/fonts/Pretendard-SemiBold.woff') format('woff');
+  font-weight: 600;
+}
+
+@font-face {
+  font-family: 'Pretendard';
+  src: url('../assets/fonts/Pretendard-Bold.woff') format('woff');
+  font-weight: 700;
+}
+
+@font-face {
+  font-family: 'Pretendard';
+  src: url('../assets/fonts/Pretendard-ExtraBold.woff') format('woff');
+  font-weight: 800;
+}

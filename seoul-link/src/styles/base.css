@@ -1,0 +1,55 @@
+/*
+  base.css
+  - 모든 페이지에 공통으로 적용되는 기본 스타일
+  - body 배경색, 기본 폰트, a/button 초기화처럼 프로젝트 전체 기준을 잡음
+*/
+
+/* html/body/#root를 화면 전체 너비로 맞추고 기본 여백을 제거 */
+html,
+body,
+#root {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+/* Home 페이지 전체를 감싸는 바깥 컨테이너 */
+.home {
+  width: 100%;
+  min-height: 100vh;
+  background: var(--soft-blue);
+}
+
+/* 모든 요소에 border-box와 기본 폰트를 적용 */
+* {
+  box-sizing: border-box;
+  font-family: Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+}
+
+/* 사이트 전체 배경색과 기본 글자색을 지정*/
+body {
+  margin: 0;
+  font-family: Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  background: var(--soft-blue);
+  color: var(--text-dark);
+}
+
+/* 링크의 기본 밑줄과 파란색을 제거해 디자인을 통일*/
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+/* 버튼 기본 테두리를 제거하고 프로젝트 폰트를 상속*/
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+}
+
+/* 본문 영역이 화면 전체 너비를 사용하도록 설정*/
+main {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+}

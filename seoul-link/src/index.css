@@ -1,0 +1,25 @@
+/*
+  src/index.css
+  - React 앱 전체에 적용되는 가장 기본적인 크기 설정입니다.
+  - main.jsx에서 import되기 때문에 전역으로 적용됩니다.
+*/
+
+/* 브라우저 기본 여백을 제거하고 앱이 화면 전체 너비를 쓰도록 설정합니다. */
+html,
+body,
+  /* React 앱이 최소한 화면 높이만큼 차지하도록 설정 */
+#root {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+/* 모바일에서 너무 좁아지는 것을 방지하기 위한 최소 너비*/
+body {
+  min-width: 320px;
+}
+
+/* React 앱이 최소한 화면 높이만큼 차지하도록 설정 */
+#root {
+  min-height: 100vh;
+}

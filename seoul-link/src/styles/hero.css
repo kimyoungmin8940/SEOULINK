@@ -1,0 +1,189 @@
+/*
+  hero.css
+  - 메인 상단 hero 영역의 배경 이미지, 오버레이, 대표 문구, 버튼 스타일
+  - HeroSection.jsx와 연결됨
+*/
+
+/* 메인 비주얼 영역입니다. 배경 이미지는 HeroSection.jsx에서 inline style로 전달 */
+.hero {
+  min-height: 620px;
+  background-size: cover;
+  background-position: center center;
+  position: relative;
+  padding: 120px 70px 90px;
+}
+
+/* 배경 이미지 위에 파란색/어두운 그라데이션 필터를 얹음 */
+.hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(6, 38, 76, 0.56) 0%,
+      rgba(var(--main-blue-rgb), 0.28) 42%,
+      rgba(var(--sky-blue-rgb), 0.07) 70%,
+      rgba(255, 255, 255, 0.02) 100%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.08) 0%,
+      rgba(255, 255, 255, 0) 45%
+    );
+}
+
+/* hero 문구와 버튼을 배경 위에 올리는 텍스트 영역 */
+.hero-content {
+  position: relative;
+  z-index: 1;
+  transform: translate(65px, 45px);
+}
+
+/* hero 제목의 공통 글자 스타일 */
+.hero h1,
+/* 줄 단위 span을 쓰는 hero 제목 전용 줄간격. */
+.hero-title {
+  margin: 0;
+  font-size: 41px;
+  letter-spacing: -0.2px;
+  font-weight: 600;
+  color: #ffffff;
+  text-shadow: var(--shadow-text);
+}
+
+/* 기본 h1 줄간격 */
+.hero h1 {
+  line-height: 1.10;
+}
+
+/* 줄 단위 span을 쓰는 hero 제목 전용 줄간격 */
+.hero-title {
+  line-height: 1;
+}
+
+/* 제목을 한 줄씩 block 처리해 줄바꿈 위치를 고정 */
+.hero-line {
+  display: block;
+  line-height: 48px;
+}
+
+/* 손글씨 폰트로 강조한 취향 단어 */
+.taste-word {
+  color: var(--sky-blue);
+  font-family: 'Nanum Pen Script', cursive;
+  font-size: 1.75em;
+  margin-left: 6px;
+  margin-right: 4px;
+  font-weight: 100;
+
+  display: inline-block;
+  position: relative;
+  top: 10px;
+}
+
+/* 마지막 줄만 살짝 아래로 내려 제목 리듬을 맞춤 */
+.hero-line-last {
+  margin-top: 6px;
+}
+
+/* hero 설명 문구 */
+.hero p {
+  margin: 24px 0 28px;
+  color: #ffffff;
+  text-shadow: var(--shadow-text-soft);
+  line-height: 1.7;
+  font-weight: 500;
+  transform: translate(5px, -18px);
+  font-size: 16px;
+}
+
+/* hero 안의 두 버튼을 가로로 배치 */
+.hero-buttons {
+  display: flex;
+  gap: 16px;
+  transform: translateY(-8px);
+}
+
+.primary-btn,
+/* 보조 버튼. 흰색 배경과 파란 테두리를 사용 */
+.secondary-btn {
+  min-width: 210px;
+  padding: 18px 42px;
+  border-radius: 16px;
+  font-size: 17px;
+  font-weight: 700;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  line-height: 1;
+  transition: 0.18s ease;
+}
+
+/* 가장 중요한 CTA 버튼. 파란색 배경을 사용 */
+.primary-btn {
+  background: var(--primary-blue);
+  color: white;
+  box-shadow: var(--shadow-button);
+}
+
+/* primary 버튼 hover 효과 */
+.primary-btn:hover {
+  transform: translateY(-2px);
+  background: var(--primary-blue-dark);
+  box-shadow: 0 14px 30px rgba(var(--primary-blue-rgb), 0.30);
+}
+
+/* 보조 버튼. 흰색 배경과 파란 테두리를 사용 */
+.secondary-btn {
+  background: #ffffff;
+  color: var(--primary-blue);
+  border: 2px solid var(--primary-blue);
+  box-shadow: var(--shadow-button-light);
+}
+
+/* secondary 버튼 hover 효과 */
+.secondary-btn:hover {
+  transform: translateY(-2px);
+  background: var(--sub-blue);
+  color: var(--primary-blue);
+  border-color: var(--primary-blue);
+  box-shadow: 0 14px 28px rgba(var(--primary-blue-rgb), 0.14);
+}
+
+
+/* 보조 버튼 안 아이콘 색상 */
+.secondary-btn svg {
+  color: var(--primary-blue);
+  stroke: currentColor;
+}
+
+.secondary-btn:hover svg {
+  color: var(--primary-blue);
+  stroke: currentColor;
+}
+
+/* 버튼 아이콘이 찌그러지지 않게 크기를 고정 */
+.btn-icon {
+  flex-shrink: 0;
+  display: block;
+}
+
+/* 버튼 텍스트 세로 정렬을 미세 조정 */
+.btn-text {
+  display: inline-block;
+  line-height: 1;
+  transform: translateY(1px);
+}
+
+/* primary 버튼 아이콘 위치를 미세 조정 */
+.primary-icon {
+  transform: translate(-1px, 0px);
+}
+
+/* secondary 버튼 아이콘 위치를 미세 조정 */
+.secondary-icon {
+  transform: translate(-2px, 0px);
+}

@@ -1,0 +1,136 @@
+/*
+  footer.css
+  - 페이지 하단 footer 영역 스타일
+  - Footer.jsx의 로고, 약관 링크, SNS 버튼과 연결
+*/
+
+/* 페이지 가장 아래 footer 레이아웃 */
+.footer {
+  height: 72px;
+  padding: 0 34px;
+  border-top: 1px solid var(--line-soft);
+  background: rgba(255, 255, 255, 0.98);
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  column-gap: 28px;
+}
+
+/* footer 왼쪽 로고 영역 */
+.footer-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-self: start;
+}
+
+/* footer 로고 심볼 크기*/
+.footer-logo-symbol {
+  width: 27px;
+  height: 27px;
+  object-fit: contain;
+  display: block;
+  transform: translate(0px, 0px);
+}
+
+/* footer 텍스트 로고 크기와 위치*/
+.footer-logo-text {
+  width: 82px;
+  height: auto;
+  object-fit: contain;
+  display: block;
+  transform: translate(-3px, 1px);
+}
+
+/* 이용약관/개인정보처리방침/고객센터 링크를 가운데 배치*/
+.footer-links {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 46px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* footer 링크 기본 효과 */
+.footer-links a {
+  transition: 0.18s ease;
+}
+
+/* footer 링크 hover 색상 */
+.footer-links a:hover {
+  color: var(--main-blue);
+}
+
+/* 오른쪽 SNS 아이콘 목록 */
+.sns {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 11px;
+  justify-self: end;
+}
+
+/* SNS 아이콘을 원형 버튼으로 만듦*/
+.sns a {
+  width: 31px;
+  height: 31px;
+  border-radius: 50%;
+  border: 1px solid rgba(220, 235, 250, 0.95);
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--text-dark);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 5px 12px rgba(21, 48, 71, 0.05);
+  transition: 0.18s ease;
+}
+
+/* SNS 버튼 hover 효과*/
+.sns a:hover {
+  color: var(--main-blue);
+  border-color: rgba(var(--main-blue-rgb), 0.24);
+  transform: translateY(-2px);
+}
+
+/* SNS SVG 아이콘 크기 */
+.sns svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+  stroke: currentColor;
+}
+
+.sns a:nth-child(2) svg {
+  width: 14px;
+  height: 14px;
+}
+
+.sns a:nth-child(3) svg {
+  width: 17px;
+  height: 17px;
+}
+
+@media (max-width: 760px) {
+/* 페이지 가장 아래 footer 레이아웃*/
+  .footer {
+    height: auto;
+    padding: 24px;
+    grid-template-columns: 1fr;
+    row-gap: 20px;
+  }
+
+  .footer-logo,
+/* 오른쪽 SNS 아이콘 목록*/
+  .sns {
+    justify-self: center;
+  }
+
+/* 이용약관/개인정보처리방침/고객센터 링크를 가운데 배치 */
+  .footer-links {
+    flex-wrap: wrap;
+    gap: 14px 24px;
+  }
+}
