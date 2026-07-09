@@ -1,7 +1,7 @@
 /*
   footer.css
   - 페이지 하단 footer 영역 스타일
-  - Footer.jsx의 로고, 약관 링크, SNS 버튼과 연결
+  - Footer.jsx의 로고, 약관 링크, SNS 아이콘과 연결
 */
 
 /* 페이지 가장 아래 footer 레이아웃 */
@@ -55,13 +55,9 @@
 }
 
 /* footer 링크 기본 효과 */
-.footer-links a {
-  transition: 0.18s ease;
-}
-
-/* footer 링크 hover 색상 */
-.footer-links a:hover {
-  color: var(--main-blue);
+.footer-links span {
+  color: inherit;
+  cursor: default;
 }
 
 /* 오른쪽 SNS 아이콘 목록 */
@@ -73,8 +69,8 @@
   justify-self: end;
 }
 
-/* SNS 아이콘을 원형 버튼으로 만듦*/
-.sns a {
+/* SNS 아이콘은 링크가 아니라 장식용 원형 아이콘으로만 표시 */
+.sns-icon {
   width: 31px;
   height: 31px;
   border-radius: 50%;
@@ -85,14 +81,8 @@
   align-items: center;
   justify-content: center;
   box-shadow: 0 5px 12px rgba(21, 48, 71, 0.05);
-  transition: 0.18s ease;
-}
-
-/* SNS 버튼 hover 효과*/
-.sns a:hover {
-  color: var(--main-blue);
-  border-color: rgba(var(--main-blue-rgb), 0.24);
-  transform: translateY(-2px);
+  cursor: default;
+  pointer-events: none;
 }
 
 /* SNS SVG 아이콘 크기 */
@@ -103,12 +93,12 @@
   stroke: currentColor;
 }
 
-.sns a:nth-child(2) svg {
+.sns-icon:nth-child(2) svg {
   width: 14px;
   height: 14px;
 }
 
-.sns a:nth-child(3) svg {
+.sns-icon:nth-child(3) svg {
   width: 17px;
   height: 17px;
 }

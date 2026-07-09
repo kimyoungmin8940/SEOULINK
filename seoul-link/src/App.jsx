@@ -3,14 +3,13 @@
 // App.css -> styles/index.css 순서로 한 번에 import하는 구조
 import './App.css';
 
-// 현재는 메인 페이지만 구현되어 있으므로 Home 페이지만 연결
-// 나중에 react-router-dom을 적용하면 여기에서 Routes/Route 구조로 확장
-import Home from './pages/Home';
+// 실제 페이지 이동 구조는 routes/Router.jsx에서 관리
+import Router from './routes/Router';
 
 function App() {
     // 프로젝트의 최상위 화면
-    // 지금은 바로 Home을 보여주지만, 추후 로그인/마이페이지/추천코스 등 라우팅이 들어갈 수 있음
-    return <Home />;
+    // Router가 현재 주소에 맞는 페이지를 골라서 렌더링함
+    return <Router />;
 }
 
 export default App;

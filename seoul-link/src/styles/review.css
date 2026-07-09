@@ -89,11 +89,40 @@
 /* 후기 좋아요 하트 버튼 */
 .review-heart-btn {
   margin-left: auto;
+  width: 22px;
+  height: 22px;
   padding: 0;
   background: transparent;
+  border: none;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
   color: #ec4c8a;
-  font-size: 22px;
   line-height: 1;
+  transition: 0.18s ease;
+}
+
+/* 기본 상태는 코스 카드 하트처럼 외곽선만 보이게 처리 */
+.review-heart-btn svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.85;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.review-heart-btn:hover {
+  transform: scale(1.08);
+}
+
+/* 로그인 후 좋아요를 누른 상태 */
+.review-heart-btn.is-liked svg {
+  fill: #ec4c8a;
+  stroke: #ec4c8a;
 }
 
 /* 사용자 프로필 이미지를 원형으로 보여줌 */
