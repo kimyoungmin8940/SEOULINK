@@ -651,4 +651,208 @@ button {
   .subCta {
     width: 100%;
   }
+
+  body {
+    margin: 0;
+    background: #f4f6f8;
+    font-family: Arial, sans-serif;
+  }
+
+  .simple-page {
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .simple-box {
+    width: 360px;
+    padding: 24px;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+  }
+
+  .simple-box.wide {
+    width: 720px;
+    align-self: flex-start;
+    margin-top: 40px;
+  }
+
+  h1 {
+    margin-top: 0;
+    margin-bottom: 16px;
+  }
+
+  h2 {
+    margin-top: 24px;
+    font-size: 18px;
+  }
+
+  h3 {
+    margin-top: 16px;
+    font-size: 15px;
+  }
+
+  .tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+
+  .tabs button {
+    flex: 1;
+  }
+
+  .tabs .active {
+    background: #222;
+    color: white;
+  }
+
+  input,
+  button {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px;
+    margin-top: 8px;
+  }
+
+  button {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+  }
+
+  .primary {
+    background: #2563eb;
+    color: white;
+    border: none;
+  }
+
+  .error {
+    color: #d00;
+    font-size: 14px;
+    white-space: pre-wrap;
+  }
+
+  .member-info {
+    padding: 12px;
+    background: #f7f7f7;
+    border-radius: 6px;
+    margin-bottom: 12px;
+  }
+
+  .member-info p {
+    margin: 6px 0;
+  }
+
+  .social-area {
+    margin-top: 16px;
+  }
+
+  .social-area button {
+    background: #eee;
+    color: #777;
+    border: 1px solid #ddd;
+  }
+
+  pre {
+    background: #f1f1f1;
+    padding: 12px;
+    overflow: auto;
+    font-size: 12px;
+    border-radius: 6px;
+  }
+
+  body {
+    margin: 0;
+    background: #f5f6f8;
+    font-family: Arial, sans-serif;
+  }
+
+  .page {
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .box {
+    width: 380px;
+    padding: 24px;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+  }
+
+  h1 {
+    margin-top: 0;
+  }
+
+  .tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+
+  .tabs button {
+    flex: 1;
+  }
+
+  .tabs .active {
+    background: #222;
+    color: white;
+  }
+
+  label {
+    display: block;
+    margin-top: 12px;
+    font-size: 14px;
+  }
+
+  input,
+  button {
+    box-sizing: border-box;
+    padding: 10px;
+    margin-top: 6px;
+  }
+
+  input {
+    width: 100%;
+  }
+
+  button {
+    cursor: pointer;
+  }
+
+  .row {
+    display: flex;
+    gap: 8px;
+  }
+
+  .row input {
+    flex: 1;
+  }
+
+  .row button {
+    width: 100px;
+  }
+
+  .primary {
+    width: 100%;
+    margin-top: 16px;
+    background: #2563eb;
+    color: white;
+    border: none;
+  }
+
+  .error {
+    margin-top: 12px;
+    padding: 10px;
+    background: #fff0f0;
+    color: #d00;
+    white-space: pre-wrap;
+  }
 }

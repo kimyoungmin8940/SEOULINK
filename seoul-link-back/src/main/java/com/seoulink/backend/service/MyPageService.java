@@ -52,11 +52,11 @@ public class MyPageService {
 
         MemberLoginResponse memberResponse = new MemberLoginResponse(
                 member.getMemberId(),
+                member.getLoginId(),
                 member.getEmail(),
                 member.getName(),
                 member.getNickname()
         );
-
         MyTravelTypeResponse travelTypeResponse = null;
 
         List<SurveyResult> results = surveyResultRepository.findResultsByMemberId(memberId);

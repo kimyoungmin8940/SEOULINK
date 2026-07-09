@@ -27,6 +27,11 @@ public class MemberController {
         return memberService.login(request);
     }
 
+    @GetMapping("/check-login-id")
+    public boolean checkLoginId(@RequestParam String loginId) {
+        return memberService.checkLoginId(loginId);
+    }
+
     @GetMapping("/check-email")
     public boolean checkEmail(@RequestParam String email) {
         return memberService.checkEmail(email);

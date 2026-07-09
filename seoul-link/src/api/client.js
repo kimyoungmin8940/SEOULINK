@@ -7,11 +7,7 @@ async function parseResponse(response) {
         throw new Error(text || `HTTP ${response.status}`);
     }
 
-    if (!text) {
-        return null;
-    }
-
-    return JSON.parse(text);
+    return text ? JSON.parse(text) : null;
 }
 
 export async function apiGet(path) {
