@@ -1,0 +1,230 @@
+/*
+  course.css
+  - 추천 코스 섹션의 제목 영역과 CourseCard 카드 디자인을 담당
+  - RecommendSection.jsx, CourseCard.jsx와 연결됨
+*/
+
+/* 추천 코스 제목 영역 */
+/* 추천 코스 섹션 상단 제목/더보기 버튼 영역 */
+.course-heading {
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* 제목 그룹과 설명 문구를 가로로 배치 */
+.course-heading-left {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+}
+
+/* 반짝이 아이콘과 제목을 한 줄로 묶음*/
+.course-heading-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* 추천 코스 제목 왼쪽 아이콘 색상 */
+.course-heading-icon {
+  color: var(--primary-blue);
+  stroke: currentColor;
+  flex-shrink: 0;
+}
+
+/* 추천 코스 제목 텍스트 */
+.course-heading h2 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  color: var(--text-dark);
+  white-space: nowrap;
+}
+
+/* 추천 코스 설명 문구 */
+.course-heading p {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* 추천 코스 전체 보기 버튼 */
+.course-more-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  background: transparent;
+  color: var(--primary-blue);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.course-more-btn svg {
+  color: var(--primary-blue);
+  stroke: currentColor;
+}
+
+.course-more-btn:hover svg {
+  color: var(--primary-blue);
+  stroke: currentColor;
+}
+
+/* 여기부터 카드 부분 복구 */
+/* 추천 코스 카드를 4열 그리드로 배치*/
+.course-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 22px;
+}
+
+/* 코스 카드의 흰색 박스, 테두리, 그림자 스타일 */
+.course-card {
+  cursor: pointer;
+  background: white;
+  border: 1px solid var(--line-soft);
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: var(--shadow-card-light);
+  transition: 0.18s ease;
+}
+
+/* 카드 상단 이미지와 찜 버튼이 들어가는 영역 */
+.course-img-wrap {
+  height: 190px;
+  position: relative;
+  overflow: hidden;
+  background: #d9d9d9;
+}
+
+/* 코스 이미지를 카드 크기에 맞게 채움 */
+.course-img-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* 이미지 오른쪽 위 찜하기 버튼*/
+.heart-btn {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+
+  width: 32px;
+  height: 32px;
+  padding: 0;
+
+  background: transparent;
+  border: none;
+  border-radius: 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  color: #ffffff;
+  line-height: 1;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+
+  transition: 0.18s ease;
+}
+
+/* 찜하기 아이콘의 기본 색상 */
+.heart-btn svg {
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: #ffffff;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.45));
+}
+
+/* 찜 버튼 hover 효과 */
+.heart-btn:hover {
+  transform: scale(1.08);
+}
+
+/* 로그인 후 찜한 상태 */
+.heart-btn.is-liked svg {
+  fill: #ec4c8a;
+  stroke: #ec4c8a;
+}
+
+/* 카드 하단 텍스트 정보 영역*/
+.course-info {
+  padding: 18px;
+}
+
+/* 코스 카드 제목*/
+.course-info h3 {
+  margin: 0 0 10px;
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--text-dark);
+}
+
+/* 코스 카드 설명*/
+.course-info p {
+  margin: 0 0 16px;
+  font-size: 14px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  min-height: 42px;
+}
+
+/* 소요 시간과 지역 정보를 가로로 배치 */
+.course-meta {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 14px;
+  font-size: 13px;
+  color: #526070;
+}
+
+/* 각각의 메타 정보 아이템 */
+.course-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* 메타 정보 아이콘 색상 */
+.course-meta svg {
+  color: #6b7480;
+  flex-shrink: 0;
+}
+
+/* 태그들을 줄바꿈 가능한 flex 형태로 배치*/
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* 개별 태그 칩 스타일*/
+.tags span {
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: var(--sub-blue);
+  font-size: 12px;
+  color: #6b7685;
+  line-height: 1;
+}
+/* 카드 hover 시 살짝 위로 이동하고 그림자를 강하게 함*/
+.course-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-hover);
+}
+
+.course-more-btn:hover {
+  color: var(--primary-blue);
+}

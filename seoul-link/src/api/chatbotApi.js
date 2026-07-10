@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import { apiGet, apiPost } from "./client";
 
 export const chatbotApi = {
@@ -31,3 +32,9 @@ export const chatbotApi = {
         });
     },
 };
+=======
+import { apiClient } from './apiClient';
+
+export const askChatbot = (question) => apiClient.post('/chatbot/ask', { question });
+export const getChatbotHistory = () => apiClient.get('/chatbot/history/me');
+>>>>>>> origin/goeun

@@ -1,0 +1,161 @@
+// Router.jsx
+// 지금 프로젝트는 프론트 구조를 먼저 잡는 단계라 외부 라우터 라이브러리 없이
+// 현재 주소(pathname)에 맞는 페이지 컴포넌트를 보여주는 가벼운 라우터를 사용합니다.
+// 나중에 react-router-dom을 설치하면 이 파일만 Routes/Route 구조로 바꾸면 됩니다.
+
+import Home from '../pages/home/Home';
+
+import LoginPage from '../pages/auth/LoginPage';
+import SignupPage from '../pages/auth/SignupPage';
+import FindPasswordPage from '../pages/auth/FindPasswordPage';
+
+import SurveyPage from '../pages/survey/SurveyPage';
+import SurveyResultPage from '../pages/survey/SurveyResultPage';
+
+import CourseRecommendPage from '../pages/course/CourseRecommendPage';
+import CourseListPage from '../pages/course/CourseListPage';
+import CourseDetailPage from '../pages/course/CourseDetailPage';
+
+import MapCourseBuilderPage from '../pages/map/MapCourseBuilderPage';
+
+import ReviewListPage from '../pages/review/ReviewListPage';
+import ReviewDetailPage from '../pages/review/ReviewDetailPage';
+import ReviewWritePage from '../pages/review/ReviewWritePage';
+import ReviewEditPage from '../pages/review/ReviewEditPage';
+
+import MyPage from '../pages/mypage/MyPage';
+import MyTravelTypePage from '../pages/mypage/MyTravelTypePage';
+import MyCoursesPage from '../pages/mypage/MyCoursesPage';
+import MyFavoritesPage from '../pages/mypage/MyFavoritesPage';
+import MyReviewsPage from '../pages/mypage/MyReviewsPage';
+
+import ChatbotPage from '../pages/chatbot/ChatbotPage';
+
+import PaymentPage from '../pages/payment/PaymentPage';
+import PaymentSuccessPage from '../pages/payment/PaymentSuccessPage';
+import PaymentFailPage from '../pages/payment/PaymentFailPage';
+
+import NotFoundPage from '../pages/NotFoundPage';
+import { isLoggedIn, requireLogin } from '../utils/authGuard';
+
+
+function isProtectedPath(pathname) {
+    const isPublicReviewDetail =
+        pathname.startsWith('/reviews/') &&
+        pathname !== '/reviews/write' &&
+        !pathname.endsWith('/edit');
+
+    const isPublicCourseDetail =
+        pathname.startsWith('/courses/') &&
+        pathname !== '/courses/list' &&
+        !pathname.startsWith('/courses/recommendations/') &&
+        !pathname.startsWith('/courses/themes/');
+
+    // 로그인 없이 접근 가능한 페이지
+    if (
+        pathname === '/' ||
+        pathname === '/login' ||
+        pathname === '/signup' ||
+        pathname === '/find-password' ||
+        pathname === '/reviews' ||
+        pathname === '/courses/themes' ||
+        pathname.startsWith('/courses/themes/') ||
+        isPublicReviewDetail ||
+        isPublicCourseDetail
+    ) {
+        return false;
+    }
+
+    // 후기 작성/수정, 취향 검사, 추천 코스, 지도, 마이페이지, 챗봇, 결제는 로그인 필요
+    return (
+        pathname === '/survey' ||
+        pathname === '/survey/result' ||
+        pathname === '/courses' ||
+        pathname === '/courses/list' ||
+        pathname === '/courses/recommendations' ||
+        pathname.startsWith('/courses/recommendations/') ||
+        pathname === '/map-course' ||
+        pathname.startsWith('/mypage') ||
+        pathname === '/chatbot' ||
+        pathname.startsWith('/payment') ||
+        pathname === '/reviews/write' ||
+        (pathname.startsWith('/reviews/') && pathname.endsWith('/edit'))
+    );
+}
+
+function Router() {
+    const { pathname } = window.location;
+
+    // 주소를 직접 입력해도 로그인 필요한 페이지는 막습니다.
+    // 로그인 없이 볼 수 있는 건 테마 코스와 후기 목록/상세입니다.
+    if (isProtectedPath(pathname) && !isLoggedIn()) {
+        requireLogin();
+        return null;
+    }
+
+    // 정적 경로는 객체에서 바로 찾습니다.
+    const routes = {
+        '/': <Home />,
+
+        '/login': <LoginPage />,
+        '/signup': <SignupPage />,
+        '/find-password': <FindPasswordPage />,
+
+        '/survey': <SurveyPage />,
+        '/survey/result': <SurveyResultPage />,
+
+        '/courses': <CourseRecommendPage />,
+        '/courses/list': <CourseListPage />,
+        '/courses/recommendations': <CourseRecommendPage />,
+        '/courses/themes': <CourseListPage />,
+
+        '/map-course': <MapCourseBuilderPage />,
+
+        '/reviews': <ReviewListPage />,
+        '/reviews/write': <ReviewWritePage />,
+
+        '/mypage': <MyPage />,
+        '/mypage/travel-type': <MyTravelTypePage />,
+        '/mypage/courses': <MyCoursesPage />,
+        '/mypage/favorites': <MyFavoritesPage />,
+        '/mypage/reviews': <MyReviewsPage />,
+
+        '/chatbot': <ChatbotPage />,
+
+        '/payment': <PaymentPage />,
+        '/payment/success': <PaymentSuccessPage />,
+        '/payment/fail': <PaymentFailPage />,
+    };
+
+    if (routes[pathname]) {
+        return routes[pathname];
+    }
+
+    // /courses/recommendations/1 같은 추천받은 코스 상세 페이지
+    if (pathname.startsWith('/courses/recommendations/')) {
+        return <CourseDetailPage />;
+    }
+
+    // /courses/themes/sunset 같은 테마별 추천 코스 목록 페이지
+    if (pathname.startsWith('/courses/themes/')) {
+        return <CourseListPage />;
+    }
+
+    // /courses/1 같은 일반 코스 상세 페이지 경로 처리
+    if (pathname.startsWith('/courses/')) {
+        return <CourseDetailPage />;
+    }
+
+    // /reviews/1/edit 또는 /reviews/1 같은 후기 상세/수정 경로 처리
+    if (pathname.startsWith('/reviews/') && pathname.endsWith('/edit')) {
+        return <ReviewEditPage />;
+    }
+
+    if (pathname.startsWith('/reviews/')) {
+        return <ReviewDetailPage />;
+    }
+
+    return <NotFoundPage />;
+}
+
+export default Router;

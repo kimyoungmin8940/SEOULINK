@@ -1,0 +1,119 @@
+/*
+  page.css
+  - 아직 실제 구현 전인 서브 페이지들의 공통 임시 화면 스타일
+*/
+
+.page {
+  width: 100%;
+  min-height: 100vh;
+  background: var(--soft-blue);
+  display: flex;
+  flex-direction: column;
+  padding-top: 18px;
+}
+
+/* 임시 페이지에서는 헤더 바깥 영역과 본문 배경을 같은 색으로 맞춰 구분선을 없앰 */
+/* 메인페이지는 영향 없고, 연결된 서브페이지 헤더만 살짝 위로 올림 */
+.page .header {
+  top: 17px;
+  background: transparent;
+  border-bottom: none;
+  box-shadow: none;
+}
+
+/* Header.jsx에서 simple-header 클래스가 같이 붙어 있을 경우를 대비 */
+.page .header.simple-header {
+  top: 12px;
+}
+
+.page .header-glass {
+  box-shadow: var(--shadow-soft);
+}
+
+.page-shell {
+  width: min(1160px, calc(100% - 96px));
+  flex: 1;
+  min-height: 520px;
+  margin: 0 auto;
+  padding: 56px 0 92px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.page-card {
+  width: 100%;
+  max-width: 760px;
+  padding: 56px 54px;
+  border-radius: 24px;
+  background: #ffffff;
+  border: 1px solid var(--line-soft);
+  box-shadow: var(--shadow-card-light);
+  text-align: center;
+}
+
+.page-eyebrow {
+  margin: 0 0 14px;
+  color: var(--primary-blue);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.page-card h1 {
+  margin: 0 0 16px;
+  color: var(--text-dark);
+  font-size: 34px;
+  font-weight: 850;
+  letter-spacing: -1px;
+}
+
+.page-card > p:not(.page-eyebrow) {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+.page-actions {
+  margin-top: 30px;
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.page-link-btn {
+  height: 42px;
+  padding: 0 18px;
+  border-radius: 999px;
+  background: var(--primary-blue);
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 750;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: 0.18s ease;
+}
+
+.page-link-btn:hover {
+  transform: translateY(-2px);
+  background: var(--primary-blue-dark);
+  box-shadow: 0 14px 30px rgba(var(--primary-blue-rgb), 0.24);
+}
+
+@media (max-width: 760px) {
+  .page-shell {
+    width: calc(100% - 36px);
+    padding: 48px 0 64px;
+  }
+
+  .page-card {
+    padding: 42px 24px;
+  }
+
+  .page-card h1 {
+    font-size: 28px;
+  }
+}

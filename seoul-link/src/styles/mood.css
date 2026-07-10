@@ -1,0 +1,243 @@
+/*
+  mood.css
+  - 무드별 서울 카드 섹션 스타일
+  - MoodSection.jsx의 카드, 오버레이, 좌우 버튼, 반응형 배치를 담당
+*/
+
+/* 무드 섹션의 아래 여백 */
+.mood-section {
+  margin-bottom: 72px;
+}
+
+/* 무드 카드들을 감싸는 흰색 라운드 박스 */
+.mood-shell {
+  position: relative;
+  padding: 30px 28px 32px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.86) 0%, rgba(255, 255, 255, 0.96) 100%);
+  border: 1px solid rgba(220, 235, 250, 0.92);
+  border-radius: 28px;
+  box-shadow: var(--shadow-card-light);
+}
+
+/* 무드 섹션 제목과 전체 보기 버튼 영역 */
+.mood-header {
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+/* 제목과 설명을 한 줄에 배치하는 그룹 */
+.mood-title-group {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 28px;
+}
+
+/* 무드 섹션 제목 텍스트 */
+.mood-title-group h2 {
+  margin: 0;
+  color: var(--text-dark);
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -0.5px;
+  white-space: nowrap;
+}
+
+/* 무드 섹션 설명 텍스트 */
+.mood-title-group p {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* 무드 섹션 전체 보기 버튼 */
+.mood-more-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  background: transparent;
+  color: var(--primary-blue);
+  font-size: 14px;
+  font-weight: 700;
+  flex: 0 0 auto;
+}
+
+.mood-more-btn svg {
+  color: var(--primary-blue);
+  stroke: currentColor;
+}
+
+/* 좌우 화살표 버튼 위치 기준이 되는 컨테이너 */
+.mood-carousel {
+  position: relative;
+}
+
+/* 무드 카드를 6열 그리드로 배치 */
+.mood-list {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 16px;
+}
+
+/* 각 무드 카드의 크기, 라운드, 그림자 스타일 */
+.mood-card {
+  cursor: pointer;
+  display: block;
+  width: 100%;
+  height: 270px;
+  min-width: 0;
+  padding: 0;
+  border-radius: 20px;
+  overflow: hidden;
+  position: relative;
+  background: #d8e5ef;
+  border: 1px solid rgba(220, 235, 250, 0.7);
+  box-shadow: 0 10px 20px rgba(21, 48, 71, 0.08);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+/* 무드 이미지를 카드 영역에 꽉 채움 */
+.mood-card img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+/* 이미지 위에 어두운 그라데이션과 텍스트를 올리는 영역 */
+.mood-overlay {
+  position: absolute;
+  inset: 0;
+  padding: 24px 12px 30px;
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.02) 0%, rgba(0, 0, 0, 0.12) 34%, rgba(0, 0, 0, 0.72) 100%);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  text-align: center;
+  text-shadow: 0 3px 12px rgba(0, 0, 0, 0.35);
+}
+
+/* 무드 카드 위 아이콘의 흰색/그림자 스타일 */
+.mood-icon {
+  color: #fff;
+  filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.3));
+}
+
+/* 무드 카드 제목 텍스트 */
+.mood-overlay strong {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-size: 19px;
+  font-weight: 800;
+  line-height: 1.32;
+  letter-spacing: -0.5px;
+}
+
+/* 무드 카드 hover 효과 */
+.mood-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-hover);
+}
+
+/* 화면 폭이 줄어들 때 무드 박스 좌우 여백과 화살표 위치를 조정 */
+@media (max-width: 1280px) {
+/* 무드 카드들을 감싸는 흰색 라운드 박스 */
+  .mood-shell {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+
+/* 왼쪽 화살표 버튼 위치 */
+  .mood-nav-left {
+    left: -20px;
+  }
+
+/* 오른쪽 화살표 버튼 위치 */
+  .mood-nav-right {
+    right: -20px;
+  }
+}
+
+/* 태블릿에서는 제목을 세로 배치하고 카드 3열로 변경 */
+@media (max-width: 1100px) {
+  .mood-header,
+/* 제목과 설명을 한 줄에 배치하는 그룹 */
+  .mood-title-group {
+    align-items: flex-start;
+  }
+
+/* 제목과 설명을 한 줄에 배치하는 그룹*/
+  .mood-title-group {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .mood-title-group h2,
+/* 무드 섹션 설명 텍스트 */
+  .mood-title-group p {
+    white-space: normal;
+  }
+
+/* 무드 카드를 6열 그리드로 배치 */
+  .mood-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* 모바일에서는 카드 2열, 화살표 숨김으로 변경 */
+@media (max-width: 720px) {
+/* 무드 섹션의 아래 여백 */
+  .mood-section {
+    width: calc(100% - 36px);
+  }
+
+/* 무드 카드들을 감싸는 흰색 라운드 박스 */
+  .mood-shell {
+    padding: 24px 18px;
+    border-radius: 22px;
+  }
+
+/* 무드 섹션 제목과 전체 보기 버튼 영역 */
+  .mood-header {
+    margin-bottom: 18px;
+  }
+
+/* 무드 섹션 제목 텍스트 */
+  .mood-title-group h2 {
+    font-size: 24px;
+  }
+
+/* 카드 양옆 원형 화살표 버튼의 공통 스타일 */
+  .mood-nav {
+    display: none;
+  }
+
+/* 무드 카드를 6열 그리드로 배치 */
+  .mood-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+/* 각 무드 카드의 크기, 라운드, 그림자 스타일 */
+  .mood-card {
+  cursor: pointer;
+    height: 214px;
+  }
+
+/* 무드 카드 제목 텍스트 */
+  .mood-overlay strong {
+    font-size: 18px;
+  }
+}
