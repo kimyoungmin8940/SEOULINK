@@ -10,7 +10,7 @@
   background-size: cover;
   background-position: center center;
   position: relative;
-  padding: 120px 70px 90px;
+  padding: 120px 0 90px;
 }
 
 /* 배경 이미지 위에 파란색/어두운 그라데이션 필터를 얹음 */
@@ -35,9 +35,13 @@
 
 /* hero 문구와 버튼을 배경 위에 올리는 텍스트 영역 */
 .hero-content {
+  width: min(85vw, 1440px);
+  margin: 0 auto;
+
   position: relative;
   z-index: 1;
-  transform: translate(65px, 45px);
+
+  transform: translateY(45px);
 }
 
 /* hero 제목의 공통 글자 스타일 */
