@@ -7,7 +7,7 @@
 /* 추천 코스 제목 영역 */
 /* 추천 코스 섹션 상단 제목/더보기 버튼 영역 */
 .course-heading {
-  margin-bottom: 24px;
+  margin-bottom: clamp(24px, 1.6vw, 30px);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -17,7 +17,7 @@
 .course-heading-left {
   display: flex;
   align-items: center;
-  gap: 28px;
+  gap: clamp(28px, 2vw, 38px);
 }
 
 /* 반짝이 아이콘과 제목을 한 줄로 묶음*/
@@ -37,7 +37,7 @@
 /* 추천 코스 제목 텍스트 */
 .course-heading h2 {
   margin: 0;
-  font-size: 24px;
+  font-size: clamp(24px, 1.5vw, 28px);
   font-weight: 800;
   letter-spacing: -0.5px;
   color: var(--text-dark);
@@ -47,7 +47,7 @@
 /* 추천 코스 설명 문구 */
 .course-heading p {
   margin: 0;
-  font-size: 14px;
+  font-size: clamp(14px, 0.85vw, 16px);
   color: var(--text-muted);
   white-space: nowrap;
 }
@@ -60,7 +60,7 @@
   padding: 0;
   background: transparent;
   color: var(--primary-blue);
-  font-size: 14px;
+  font-size: clamp(14px, 0.85vw, 16px);
   font-weight: 700;
 }
 
@@ -78,8 +78,8 @@
 /* 추천 코스 카드를 4열 그리드로 배치*/
 .course-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 22px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(22px, 1.5vw, 28px);
 }
 
 /* 코스 카드의 흰색 박스, 테두리, 그림자 스타일 */
@@ -95,7 +95,7 @@
 
 /* 카드 상단 이미지와 찜 버튼이 들어가는 영역 */
 .course-img-wrap {
-  height: 190px;
+  height: clamp(190px, 12vw, 235px);
   position: relative;
   overflow: hidden;
   background: #d9d9d9;
@@ -160,13 +160,13 @@
 
 /* 카드 하단 텍스트 정보 영역*/
 .course-info {
-  padding: 18px;
+  padding: clamp(18px, 1.25vw, 23px);
 }
 
 /* 코스 카드 제목*/
 .course-info h3 {
   margin: 0 0 10px;
-  font-size: 17px;
+  font-size: clamp(17px, 1.05vw, 20px);
   font-weight: 800;
   color: var(--text-dark);
 }
@@ -174,7 +174,7 @@
 /* 코스 카드 설명*/
 .course-info p {
   margin: 0 0 16px;
-  font-size: 14px;
+  font-size: clamp(14px, 0.88vw, 16px);
   color: var(--text-muted);
   line-height: 1.5;
   min-height: 42px;
@@ -186,7 +186,7 @@
   align-items: center;
   gap: 16px;
   margin-bottom: 14px;
-  font-size: 13px;
+  font-size: clamp(13px, 0.8vw, 15px);
   color: #526070;
 }
 
@@ -215,7 +215,7 @@
   padding: 7px 10px;
   border-radius: 999px;
   background: var(--sub-blue);
-  font-size: 12px;
+  font-size: clamp(12px, 0.74vw, 14px);
   color: #6b7685;
   line-height: 1;
 }
@@ -227,4 +227,41 @@
 
 .course-more-btn:hover {
   color: var(--primary-blue);
+}
+
+/* 태블릿에서는 카드가 너무 좁아지지 않도록 2열로 전환 */
+@media (max-width: 1100px) {
+  .course-heading,
+  .course-heading-left {
+    align-items: flex-start;
+  }
+
+  .course-heading-left {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .course-heading h2,
+  .course-heading p {
+    white-space: normal;
+  }
+
+  .course-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* 모바일에서는 코스 카드를 1열로 표시 */
+@media (max-width: 720px) {
+  .course-heading {
+    gap: 16px;
+  }
+
+  .course-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .course-img-wrap {
+    height: 220px;
+  }
 }

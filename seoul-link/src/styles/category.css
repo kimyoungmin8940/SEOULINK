@@ -6,11 +6,10 @@
 
 /* hero 아래에 겹쳐 올라오는 카테고리 박스 */
 .category-box {
-  width: min(1160px, calc(100% - 96px));
   box-sizing: border-box;
-  max-width: none;
-  margin: -54px auto 58px;
-  padding: 18px 66px 17px;
+  margin-top: -54px;
+  margin-bottom: clamp(58px, 4vw, 72px);
+  padding: clamp(18px, 1.25vw, 23px) clamp(30px, 4vw, 66px);
 
   background: rgba(255, 255, 255, 0.95);
   border: 1px solid rgba(227, 237, 245, 0.96);
@@ -22,9 +21,10 @@
   position: relative;
   z-index: 2;
 
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(56px, 0.8fr) 1px repeat(8, minmax(64px, 1fr));
   align-items: center;
-  gap: 66px;
+  column-gap: clamp(18px, 2.6vw, 50px);
 }
 
 /* 각 카테고리 버튼의 기본 정렬*/
@@ -43,9 +43,9 @@
 
 /* 아이콘을 담는 둥근 사각형 배경*/
 .category-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 15px;
+  width: clamp(48px, 3vw, 56px);
+  height: clamp(48px, 3vw, 56px);
+  border-radius: clamp(15px, 1vw, 18px);
 
   display: flex;
   align-items: center;
@@ -57,8 +57,8 @@
 
 /* SVG 아이콘 선 스타일을 통일*/
 .category-icon svg {
-  width: 27px;
-  height: 27px;
+  width: clamp(27px, 1.7vw, 32px);
+  height: clamp(27px, 1.7vw, 32px);
   stroke: currentColor;
   stroke-width: 1.75;
   stroke-linecap: round;
@@ -67,7 +67,7 @@
 
 /* 카테고리 이름 텍스트 스타일*/
 .category-title {
-  font-size: 13px;
+  font-size: clamp(13px, 0.82vw, 15px);
   font-weight: 750;
   color: #40576B;
   letter-spacing: -0.3px;
@@ -133,8 +133,8 @@
 /* 지도 메뉴와 나머지 메뉴 사이의 세로 구분선*/
 .category-divider {
   width: 1px;
-  height: 44px;
-  flex: 0 0 1px;
+  height: clamp(44px, 2.8vw, 52px);
+  justify-self: stretch;
 
   border-radius: 999px;
   background: rgba(95, 124, 148, 0.24);
@@ -151,4 +151,32 @@
 /* 카테고리 hover 시 텍스트 색상을 메인 블루로 변경*/
 .category-item:hover .category-title {
   color: #2F6FAF;
+}
+
+/*
+  화면이 좁아지면 한 줄 레이아웃을 유지한 채 좌우로 스크롤할 수 있게 처리
+  카테고리가 찌그러지거나 두 줄로 어색하게 갈라지는 것을 방지함
+*/
+@media (max-width: 980px) {
+  .category-box {
+    display: flex;
+    gap: 28px;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scrollbar-width: none;
+    padding-left: 26px;
+    padding-right: 26px;
+  }
+
+  .category-box::-webkit-scrollbar {
+    display: none;
+  }
+
+  .category-item {
+    flex: 0 0 auto;
+  }
+
+  .category-divider {
+    flex: 0 0 1px;
+  }
 }

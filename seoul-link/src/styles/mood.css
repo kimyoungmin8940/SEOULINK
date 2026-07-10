@@ -6,13 +6,13 @@
 
 /* 무드 섹션의 아래 여백 */
 .mood-section {
-  margin-bottom: 72px;
+  margin-bottom: clamp(72px, 4.5vw, 86px);
 }
 
 /* 무드 카드들을 감싸는 흰색 라운드 박스 */
 .mood-shell {
   position: relative;
-  padding: 30px 28px 32px;
+  padding: clamp(30px, 2vw, 38px) clamp(28px, 2vw, 38px) clamp(32px, 2.2vw, 42px);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.86) 0%, rgba(255, 255, 255, 0.96) 100%);
   border: 1px solid rgba(220, 235, 250, 0.92);
   border-radius: 28px;
@@ -21,7 +21,7 @@
 
 /* 무드 섹션 제목과 전체 보기 버튼 영역 */
 .mood-header {
-  margin-bottom: 24px;
+  margin-bottom: clamp(24px, 1.6vw, 30px);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -33,14 +33,14 @@
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 28px;
+  gap: clamp(28px, 2vw, 38px);
 }
 
 /* 무드 섹션 제목 텍스트 */
 .mood-title-group h2 {
   margin: 0;
   color: var(--text-dark);
-  font-size: 24px;
+  font-size: clamp(24px, 1.5vw, 28px);
   font-weight: 800;
   line-height: 1.2;
   letter-spacing: -0.5px;
@@ -50,7 +50,7 @@
 /* 무드 섹션 설명 텍스트 */
 .mood-title-group p {
   margin: 0;
-  font-size: 14px;
+  font-size: clamp(14px, 0.85vw, 16px);
   color: var(--text-muted);
   white-space: nowrap;
 }
@@ -63,7 +63,7 @@
   padding: 0;
   background: transparent;
   color: var(--primary-blue);
-  font-size: 14px;
+  font-size: clamp(14px, 0.85vw, 16px);
   font-weight: 700;
   flex: 0 0 auto;
 }
@@ -82,7 +82,7 @@
 .mood-list {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 16px;
+  gap: clamp(16px, 1.15vw, 22px);
 }
 
 /* 각 무드 카드의 크기, 라운드, 그림자 스타일 */
@@ -90,7 +90,7 @@
   cursor: pointer;
   display: block;
   width: 100%;
-  height: 270px;
+  height: clamp(270px, 17vw, 330px);
   min-width: 0;
   padding: 0;
   border-radius: 20px;
@@ -139,7 +139,7 @@
   flex-direction: column;
   align-items: center;
   gap: 2px;
-  font-size: 19px;
+  font-size: clamp(19px, 1.15vw, 22px);
   font-weight: 800;
   line-height: 1.32;
   letter-spacing: -0.5px;
