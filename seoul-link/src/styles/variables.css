@@ -48,4 +48,13 @@
   /* 이미지 위 흰 글자가 잘 보이도록 하는 텍스트 그림자 */
   --shadow-text: 0 3px 14px rgba(0, 0, 0, 0.24);
   --shadow-text-soft: 0 2px 10px rgba(0, 0, 0, 0.18);
+
+  /*
+    메인페이지 본문 반응형 너비
+    - 1366px 안팎의 노트북에서는 기존 1160px 디자인을 유지
+    - 큰 데스크탑에서는 화면 폭에 맞춰 최대 1500px까지 자연스럽게 확장
+    - 양옆 여백은 작은 화면에서 36px, 일반 화면에서 최대 96px까지 사용
+  */
+  --home-content-max-width: clamp(1160px, 78vw, 1500px);
+  --home-horizontal-space: clamp(36px, 6vw, 96px);
 }

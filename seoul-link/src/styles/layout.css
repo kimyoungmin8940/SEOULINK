@@ -8,13 +8,13 @@
 .category-box,
 .section,
 .cta {
-  width: calc(100% - 96px);
-  max-width: 1160px;
+  width: calc(100% - var(--home-horizontal-space));
+  max-width: var(--home-content-max-width);
   margin-left: auto;
   margin-right: auto;
 }
 
 /* 각 본문 섹션 사이의 아래 여백 */
 .section {
-  margin-bottom: 70px;
+  margin-bottom: clamp(70px, 4.5vw, 86px);
 }
