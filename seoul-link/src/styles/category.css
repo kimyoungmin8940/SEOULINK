@@ -6,9 +6,11 @@
 
 /* hero 아래에 겹쳐 올라오는 카테고리 박스 */
 .category-box {
+  width: min(85vw, 1440px);
+  max-width: none;
   box-sizing: border-box;
-  margin-top: -54px;
-  margin-bottom: clamp(58px, 4vw, 72px);
+
+  margin: -54px auto clamp(58px, 4vw, 72px);
   padding: clamp(18px, 1.25vw, 23px) clamp(30px, 4vw, 66px);
 
   background: rgba(255, 255, 255, 0.95);

@@ -43,6 +43,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  position: relative;
 
   border-radius: 25px;
   background: rgba(234, 244, 255, 0.92);
@@ -51,6 +52,47 @@
 
   border: none;
   box-shadow: var(--shadow-soft);
+}
+
+
+/* 로고와 오른쪽 사용자 영역 사이에 배치되는 주요 메뉴 4개 */
+.header-main-nav {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+
+  display: flex;
+  align-items: center;
+  gap: clamp(24px, 3vw, 50px);
+  white-space: nowrap;
+}
+
+/* 헤더 주요 메뉴는 별도 박스 없이 아이콘과 글자만 표시 */
+.header-main-nav-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+
+  /* 오른쪽 사용자 이름 버튼과 동일한 글자색 */
+  color: #40576B;
+  font-size: 14px;
+  font-weight: 750;
+  text-decoration: none;
+
+  transition: color 0.18s ease, transform 0.18s ease;
+}
+
+.header-main-nav-icon {
+  width: 19px;
+  height: 19px;
+  flex-shrink: 0;
+  color: currentColor;
+}
+
+.header-main-nav-item:hover {
+  color: var(--main-blue);
+  transform: translateY(-1px);
 }
 
 /* 로그인 버튼과 햄버거 버튼을 오른쪽에 나란히 배치 */
@@ -128,10 +170,6 @@
   height: 42px;
   border-radius: 50%;
   font-size: 20px;
-}
-
-/* 오른쪽 햄버거 메뉴 버튼 */
-.floating-menu-btn {
   background: var(--primary-blue);
   border: none;
   color: white;
@@ -140,7 +178,7 @@
 }
 
 .header-login-btn:hover,
-/* 햄버거 버튼에 마우스를 올렸을 때 살짝 떠오르는 효과 */
+  /* 햄버거 버튼에 마우스를 올렸을 때 살짝 떠오르는 효과 */
 .floating-menu-btn:hover {
   transform: translateY(-2px);
 }
@@ -314,37 +352,24 @@
   color: var(--main-blue);
 }
 
+
+/* 화면 폭이 좁아지면 기존 헤더 틀은 유지하고 가운데 주요 메뉴만 숨김 */
+@media (max-width: 1120px) {
+  .header-main-nav {
+    display: none;
+  }
+}
+
 @media (max-width: 768px) {
 
-/* hero 이미지 위에 얹히는 현재 메인페이지용 헤더 위치 */
+  /* hero 이미지 위에 얹히는 현재 메인페이지용 헤더 위치 */
   .simple-header {
     padding: 0 20px;
   }
 
-/* 오른쪽에서 열리는 사이드 메뉴 패널 */
+  /* 오른쪽에서 열리는 사이드 메뉴 패널 */
   .side-menu {
     top: 94px;
     right: 20px;
   }
-
-  /* 메뉴 배경 버튼 기본 스타일 제거 */
-  .menu-backdrop {
-    padding: 0;
-    border: 0;
-    cursor: default;
-  }
-
-  /* 메뉴 버튼 아이콘 중앙 정렬 */
-  .floating-menu-btn,
-  .side-close {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .floating-menu-btn svg,
-  .side-close svg {
-    display: block;
-  }
-
 }

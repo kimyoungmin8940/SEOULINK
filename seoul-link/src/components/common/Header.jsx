@@ -17,49 +17,23 @@ import { requireLogin } from "../../utils/authGuard";
 import logoSymbol from "../../assets/images/logo-symbol.png";
 import logoText from "../../assets/images/logo-text.png";
 
-const menuItems = [
-    {
-        href: "/courses",
-        label: "추천 코스",
-        Icon: Heart,
-        requiresLogin: true,
-    },
-    {
-        href: "/mypage/courses",
-        label: "내 코스 보기",
-        Icon: Route,
-        requiresLogin: true,
-    },
-    {
-        href: "/map-course",
-        label: "지도 코스 만들기",
-        Icon: MapPin,
-        requiresLogin: true,
-    },
-    {
-        href: "/reviews",
-        label: "방문 후기",
-        Icon: MessageSquareText,
-        requiresLogin: false,
-    },
-    {
-        href: "/mypage",
-        label: "마이페이지",
-        Icon: UserRound,
-        requiresLogin: true,
-    },
-    {
-        href: "/chatbot",
-        label: "AI 여행 챗봇",
-        Icon: Bot,
-        requiresLogin: true,
-    },
-    {
-        href: "/payment",
-        label: "이용권 / 결제",
-        Icon: CreditCard,
-        requiresLogin: true,
-    },
+// 헤더 가운데에 항상 노출하는 주요 기능 4개
+const headerMenuItems = [
+    { href: '/courses', label: '추천 코스', Icon: Heart, requiresLogin: true },
+    { href: '/map-course', label: '지도 코스 만들기', Icon: MapPin, requiresLogin: true },
+    { href: '/reviews', label: '방문 후기', Icon: MessageSquareText, requiresLogin: false },
+    { href: '/chatbot', label: 'AI 여행 챗봇', Icon: Bot, requiresLogin: true },
+];
+
+// 햄버거 메뉴에는 전체 메뉴 7개를 표시
+const sideMenuItems = [
+    { href: '/courses', label: '추천 코스', Icon: Heart, requiresLogin: true },
+    { href: '/mypage/courses', label: '내 코스 보기', Icon: Route, requiresLogin: true },
+    { href: '/map-course', label: '지도 코스 만들기', Icon: MapPin, requiresLogin: true },
+    { href: '/reviews', label: '방문 후기', Icon: MessageSquareText, requiresLogin: false },
+    { href: '/mypage', label: '마이페이지', Icon: UserRound, requiresLogin: true },
+    { href: '/chatbot', label: 'AI 여행 챗봇', Icon: Bot, requiresLogin: true },
+    { href: '/payment', label: '이용권 / 결제', Icon: CreditCard, requiresLogin: true },
 ];
 
 function getMemberDisplayName(member) {
@@ -117,6 +91,24 @@ function Header({ variant = "simple" }) {
         window.location.href = "/";
     };
 
+    // 로그인 필수 메뉴는 비로그인 상태에서 이동하지 않고 로그인 안내를 실행합니다.
+    const handleProtectedMenuClick = (event, requiresLogin, closeMenu = false) => {
+        if (requiresLogin && !isLoggedIn) {
+            event.preventDefault();
+
+            if (closeMenu) {
+                setIsOpen(false);
+            }
+
+            requireLogin();
+            return;
+        }
+
+        if (closeMenu) {
+            setIsOpen(false);
+        }
+    };
+
     return (
         <>
             <header className={headerClassName}>
@@ -139,6 +131,20 @@ function Header({ variant = "simple" }) {
                             alt="SEOULLINK"
                         />
                     </a>
+
+                    <nav className="header-main-nav" aria-label="주요 메뉴">
+                        {headerMenuItems.map(({ href, label, Icon, requiresLogin }) => (
+                            <a
+                                className="header-main-nav-item"
+                                href={href}
+                                key={href}
+                                onClick={(event) => handleProtectedMenuClick(event, requiresLogin)}
+                            >
+                                <Icon className="header-main-nav-icon" size={19} strokeWidth={2} />
+                                <span>{label}</span>
+                            </a>
+                        ))}
+                    </nav>
 
                     <div className="header-right">
                         {isLoggedIn ? (
@@ -227,34 +233,16 @@ function Header({ variant = "simple" }) {
                         </button>
 
                         <nav className="side-nav">
-                            {menuItems.map(
-                                ({
-                                     href,
-                                     label,
-                                     Icon,
-                                     requiresLogin,
-                                 }) => (
-                                    <a
-                                        href={href}
-                                        key={href}
-                                        onClick={(event) =>
-                                            handleMenuClick(
-                                                event,
-                                                requiresLogin,
-                                                href
-                                            )
-                                        }
-                                    >
-                                        <Icon
-                                            className="side-icon"
-                                            size={16}
-                                            strokeWidth={1.9}
-                                        />
-
-                                        <span>{label}</span>
-                                    </a>
-                                )
-                            )}
+                            {sideMenuItems.map(({ href, label, Icon, requiresLogin }) => (
+                                <a
+                                    href={href}
+                                    key={href}
+                                    onClick={(event) => handleMenuClick(event, requiresLogin, href)}
+                                >
+                                    <Icon className="side-icon" size={16} strokeWidth={1.9} />
+                                    <span>{label}</span>
+                                </a>
+                            ))}
 
                             {isLoggedIn && (
                                 <>

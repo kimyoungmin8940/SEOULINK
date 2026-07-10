@@ -55,6 +55,6 @@
     - 큰 데스크탑에서는 화면 폭에 맞춰 최대 1500px까지 자연스럽게 확장
     - 양옆 여백은 작은 화면에서 36px, 일반 화면에서 최대 96px까지 사용
   */
-  --home-content-max-width: clamp(1160px, 78vw, 1500px);
+  --home-content-max-width: clamp(1160px, calc(100vw - 206px), 1500px);
   --home-horizontal-space: clamp(36px, 6vw, 96px);
 }
