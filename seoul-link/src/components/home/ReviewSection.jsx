@@ -1,50 +1,13 @@
 // ReviewSection은 실제 여행자 후기 미리보기 영역
 // 현재는 화면 확인용 임시 후기 데이터를 사용하고 있음
-// 추후 백엔드에서 후기 목록을 받아오면 reviews 배열을 API 데이터로 대체하면 됨
+// API 응답 형태와 동일한 mockReviewListResponse.data를 사용하고 있음
 import { useState } from 'react';
 import { ChevronRight, Heart } from 'lucide-react';
 import { requireLogin } from '../../utils/authGuard';
 
-import rainyCafe from '../../assets/images/moods/mood-rainy-cafe.png';
-import walkingAlley from '../../assets/images/moods/mood-walking-alley.png';
-import hanokPhoto from '../../assets/images/moods/mood-hanok-photo.png';
-import sunsetSeoul from '../../assets/images/moods/mood-sunset-seoul.png';
-import localFood from '../../assets/images/moods/mood-local-food.png';
-import ctaNight from '../../assets/images/cta-seoul-night.jpg';
+import { mockReviewListResponse } from '../../mocks/homeMockData';
 
-// 후기 임시 데이터
-// reviewId: React key로 사용할 고유 값
-// nickname: 작성자 닉네임
-// rating: 별점 수. 5점 만점 기준으로 표시
-// content: 후기 내용
-// profileImageUrl: 작성자 프로필 이미지
-// imageUrls: 후기 하단에 보여줄 이미지 배열
-const reviews = [
-    {
-        reviewId: 1,
-        nickname: 'soyeon_79',
-        rating: 5,
-        content: '성수 코스 그대로 따라갔는데 하루 동선이 편하고 알찼어요!',
-        profileImageUrl: 'https://i.pravatar.cc/80?img=47',
-        imageUrls: [rainyCafe, hanokPhoto],
-    },
-    {
-        reviewId: 2,
-        nickname: 'travel_jaemin',
-        rating: 5,
-        content: '혼자 여행이었는데 장소 분위기가 정말 잘 맞았어요.',
-        profileImageUrl: 'https://i.pravatar.cc/80?img=12',
-        imageUrls: [walkingAlley, ctaNight],
-    },
-    {
-        reviewId: 3,
-        nickname: 'minzi_trip',
-        rating: 5,
-        content: '한강 노을 코스는 저장해두고 다시 가고 싶었어요!',
-        profileImageUrl: 'https://i.pravatar.cc/80?img=32',
-        imageUrls: [sunsetSeoul, localFood],
-    },
-];
+const reviews = mockReviewListResponse.data;
 
 // 별점을 그리기 위한 별 모양 SVG 컴포넌트
 // filled 값이 true면 채워진 별, false면 빈 별처럼 보이도록 CSS 클래스 is-empty를 붙임
@@ -62,7 +25,9 @@ function RoundedStarIcon({ filled }) {
 }
 
 function ReviewSection() {
-    const [likedReviewIds, setLikedReviewIds] = useState([]);
+    const [likedReviewIds, setLikedReviewIds] = useState(
+        reviews.filter((review) => review.liked).map((review) => review.reviewId),
+    );
 
     // 후기 카드 전체를 클릭하면 해당 후기 상세 임시 페이지로 이동
     const moveToReviewDetail = (reviewId) => {
@@ -162,7 +127,7 @@ function ReviewSection() {
 
                         {/* 후기 이미지 2장을 그리드 형태로 보여줌 */}
                         <div className="review-images">
-                            {review.imageUrls.map((url, index) => (
+                            {(review.imageUrls || []).map((url, index) => (
                                 <img key={index} src={url} alt="후기 이미지" />
                             ))}
                         </div>
