@@ -94,6 +94,10 @@ public class Payment {
     }
 
     public void useOneCount() {
+        // 포트원 기간권은 만료일까지 횟수 제한 없이 사용한다.
+        if ("PORTONE".equals(this.paymentProvider) || "DEMO".equals(this.paymentProvider)) {
+            return;
+        }
         if (this.remainCount == null || this.remainCount <= 0) {
             throw new IllegalStateException("남은 챗봇 이용권이 없습니다.");
         }

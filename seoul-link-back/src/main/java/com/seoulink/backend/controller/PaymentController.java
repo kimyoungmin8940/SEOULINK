@@ -29,7 +29,7 @@ public class PaymentController {
         return paymentService.readyPayment(request);
     }
 
-    @PostMapping("/confirm")
+    @PostMapping("/complete")
     public Payment confirmPayment(@Valid @RequestBody PaymentConfirmRequest request) {
         return paymentService.confirmPayment(request);
     }

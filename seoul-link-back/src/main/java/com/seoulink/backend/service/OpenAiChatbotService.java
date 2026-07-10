@@ -31,24 +31,23 @@ public class OpenAiChatbotService {
 
     public String generateCourseRecommendation(ChatbotRequest request) {
         String prompt = """
-                너는 서울 여행 코스 추천 전문가야.
+                당신은 서울 여행 전문 AI 플래너입니다.
+                사용자의 질문에 맞춰 실제로 이동 가능한 서울 여행 코스를 한국어로 제안하세요.
 
-                사용자의 여행 컨셉과 질문을 바탕으로 서울 여행 코스를 추천해줘.
+                답변 지침:
+                - 먼저 사용자의 조건을 이해했다는 짧고 친근한 안내를 작성합니다.
+                - 3~5개의 장소를 시간순으로 추천합니다.
+                - 각 장소는 방문 시간, 장소명, 추천 이유, 지역을 포함합니다.
+                - 장소 사이의 이동 순서가 자연스러워야 합니다.
+                - 예상 소요 시간과 대략적인 1인 비용을 마지막에 정리합니다.
+                - 운영시간이나 비용이 변동될 수 있음을 짧게 안내합니다.
+                - 과장하거나 존재하지 않는 장소를 만들지 않습니다.
 
-                조건:
-                - 한국어로 답변
-                - 장소명, 추천 이유, 이동 흐름 포함
-                - 하루 일정처럼 보기 좋게 작성
-                - 너무 장황하지 않게 작성
-
-                여행 컨셉: %s
+                여행 콘셉트: %s
                 사용자 질문: %s
                 """.formatted(request.getTravelConcept(), request.getQuestion());
 
-        Map<String, Object> body = Map.of(
-                "model", model,
-                "input", prompt
-        );
+        Map<String, Object> body = Map.of("model", model, "input", prompt);
 
         try {
             String responseBody = restClient.post()
@@ -56,31 +55,22 @@ public class OpenAiChatbotService {
                     .body(body)
                     .retrieve()
                     .body(String.class);
-
             return extractText(responseBody);
         } catch (RestClientResponseException e) {
-            throw new IllegalStateException("OpenAI API 호출 실패: " + e.getResponseBodyAsString(), e);
+            throw new IllegalStateException("OpenAI API 호출에 실패했습니다: " + e.getResponseBodyAsString(), e);
         }
     }
 
     private String extractText(String responseBody) {
         try {
-            JsonNode root = objectMapper.readTree(responseBody);
-            JsonNode output = root.path("output");
-
+            JsonNode output = objectMapper.readTree(responseBody).path("output");
             for (JsonNode outputItem : output) {
-                JsonNode content = outputItem.path("content");
-
-                for (JsonNode contentItem : content) {
+                for (JsonNode contentItem : outputItem.path("content")) {
                     String text = contentItem.path("text").asText();
-
-                    if (!text.isBlank()) {
-                        return text;
-                    }
+                    if (!text.isBlank()) return text;
                 }
             }
-
-            throw new IllegalStateException("OpenAI 응답에서 답변 텍스트를 찾을 수 없습니다.");
+            throw new IllegalStateException("OpenAI 응답에서 답변을 찾을 수 없습니다.");
         } catch (Exception e) {
             throw new IllegalStateException("OpenAI 응답 처리 중 오류가 발생했습니다.", e);
         }
