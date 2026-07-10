@@ -1,15 +1,3 @@
-<<<<<<< HEAD
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import './index.css'
-import App from './App.jsx'
-
-createRoot(document.getElementById('root')).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
-=======
 // React 애플리케이션의 시작점(entry point)
 // Vite가 index.html을 읽은 뒤, 여기에서 App 컴포넌트를 #root 영역에 렌더링
 import { StrictMode } from 'react';
@@ -29,4 +17,3 @@ createRoot(document.getElementById('root')).render(
         <App />
     </StrictMode>,
 );
->>>>>>> origin/goeun

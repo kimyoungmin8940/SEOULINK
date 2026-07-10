@@ -1,25 +1,29 @@
+import { useState } from "react";
 import {
     Compass,
     Eye,
+    EyeOff,
     Heart,
     LockKeyhole,
     Map,
     UserRound,
 } from "lucide-react";
+import { login } from "../api/authApi";
+import { authStore } from "../store/authStore";
 import "../styles/LoginPage.css";
 
 function SeoulLinkLogo() {
     return (
-        <div className="login-logo" aria-label="SEOULLINK">
+        <a href="/" className="login-logo" aria-label="SEOULLINK 메인페이지">
             <div className="login-logo-mark">
                 <div className="logo-skyline" />
                 <div className="logo-river" />
             </div>
 
             <span className="logo-text">
-        SEOUL<span>LINK</span>
-      </span>
-        </div>
+                SEOUL<span>LINK</span>
+            </span>
+        </a>
     );
 }
 
@@ -29,6 +33,7 @@ function FeatureItem({ icon: Icon, title, description }) {
             <div className="feature-icon">
                 <Icon size={34} strokeWidth={1.8} />
             </div>
+
             <strong>{title}</strong>
             <p>{description}</p>
         </div>
@@ -36,6 +41,61 @@ function FeatureItem({ icon: Icon, title, description }) {
 }
 
 export default function LoginPage() {
+    const [loginId, setLoginId] = useState("");
+    const [password, setPassword] = useState("");
+    const [showPassword, setShowPassword] = useState(false);
+    const [keepLogin, setKeepLogin] = useState(false);
+    const [message, setMessage] = useState("");
+    const [loading, setLoading] = useState(false);
+
+    const submitLogin = async (event) => {
+        event.preventDefault();
+
+        if (!loginId.trim()) {
+            setMessage("아이디를 입력해주세요.");
+            return;
+        }
+
+        if (!password) {
+            setMessage("비밀번호를 입력해주세요.");
+            return;
+        }
+
+        try {
+            setLoading(true);
+            setMessage("");
+
+            const member = await login({
+                loginId: loginId.trim(),
+                password,
+            });
+
+            authStore.setMember(member);
+
+            if (keepLogin) {
+                localStorage.setItem("keepLogin", "true");
+            } else {
+                localStorage.removeItem("keepLogin");
+            }
+
+            const returnUrl =
+                sessionStorage.getItem("loginReturnUrl") || "/";
+
+            sessionStorage.removeItem("loginReturnUrl");
+            window.location.href = returnUrl;
+        } catch (error) {
+            setMessage(error.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const showSocialNotice = (provider) => {
+        window.alert(
+            `${provider} 로그인은 백엔드 OAuth 구현 후 연결될 예정입니다.`
+        );
+    };
+
     return (
         <main className="login-page">
             <div className="login-background" />
@@ -80,19 +140,35 @@ export default function LoginPage() {
                         </div>
                     </section>
 
-                    <section className="login-card" aria-label="로그인">
+                    <section
+                        className="login-card"
+                        aria-label="로그인"
+                    >
                         <div className="login-card-header">
                             <h2>로그인</h2>
                             <p>SEOULLINK 계정으로 로그인하세요</p>
                         </div>
 
-                        <form className="login-form">
+                        <form
+                            className="login-form"
+                            onSubmit={submitLogin}
+                        >
                             <label className="input-group">
                                 <span>아이디</span>
 
                                 <div className="input-box">
                                     <UserRound size={21} />
-                                    <input type="text" placeholder="아이디를 입력하세요" />
+
+                                    <input
+                                        type="text"
+                                        value={loginId}
+                                        onChange={(event) =>
+                                            setLoginId(event.target.value)
+                                        }
+                                        placeholder="아이디를 입력하세요"
+                                        autoComplete="username"
+                                        disabled={loading}
+                                    />
                                 </div>
                             </label>
 
@@ -101,20 +177,76 @@ export default function LoginPage() {
 
                                 <div className="input-box">
                                     <LockKeyhole size={20} />
-                                    <input type="password" placeholder="비밀번호를 입력하세요" />
+
+                                    <input
+                                        type={
+                                            showPassword
+                                                ? "text"
+                                                : "password"
+                                        }
+                                        value={password}
+                                        onChange={(event) =>
+                                            setPassword(event.target.value)
+                                        }
+                                        placeholder="비밀번호를 입력하세요"
+                                        autoComplete="current-password"
+                                        disabled={loading}
+                                    />
 
                                     <button
                                         type="button"
                                         className="icon-button"
-                                        aria-label="비밀번호 보기"
+                                        aria-label={
+                                            showPassword
+                                                ? "비밀번호 숨기기"
+                                                : "비밀번호 보기"
+                                        }
+                                        onClick={() =>
+                                            setShowPassword(
+                                                (previous) => !previous
+                                            )
+                                        }
                                     >
-                                        <Eye size={21} />
+                                        {showPassword ? (
+                                            <EyeOff size={21} />
+                                        ) : (
+                                            <Eye size={21} />
+                                        )}
                                     </button>
                                 </div>
                             </label>
 
-                            <button type="submit" className="login-button">
-                                로그인
+                            <div className="login-option-row">
+                                <label className="keep-login">
+                                    <input
+                                        type="checkbox"
+                                        checked={keepLogin}
+                                        onChange={(event) =>
+                                            setKeepLogin(
+                                                event.target.checked
+                                            )
+                                        }
+                                    />
+                                    로그인 상태 유지
+                                </label>
+
+                                <a href="/find-password">
+                                    비밀번호 찾기
+                                </a>
+                            </div>
+
+                            {message && (
+                                <p className="login-error" role="alert">
+                                    {message}
+                                </p>
+                            )}
+
+                            <button
+                                type="submit"
+                                className="login-button"
+                                disabled={loading}
+                            >
+                                {loading ? "로그인 중..." : "로그인"}
                             </button>
 
                             <div className="divider">
@@ -123,9 +255,42 @@ export default function LoginPage() {
                                 <span />
                             </div>
 
-                            <button type="button" className="join-button">
-                                회원가입
-                            </button>
+                            <div className="social-login-list">
+                                <button
+                                    type="button"
+                                    className="social-login kakao"
+                                    onClick={() =>
+                                        showSocialNotice("카카오")
+                                    }
+                                >
+                                    카카오 로그인
+                                </button>
+
+                                <button
+                                    type="button"
+                                    className="social-login naver"
+                                    onClick={() =>
+                                        showSocialNotice("네이버")
+                                    }
+                                >
+                                    네이버 로그인
+                                </button>
+
+                                <button
+                                    type="button"
+                                    className="social-login google"
+                                    onClick={() =>
+                                        showSocialNotice("Google")
+                                    }
+                                >
+                                    Google 로그인
+                                </button>
+                            </div>
+
+                            <div className="login-signup-guide">
+                                <span>계정이 없으신가요?</span>
+                                <a href="/signup">회원가입</a>
+                            </div>
                         </form>
                     </section>
                 </section>

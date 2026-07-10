@@ -326,4 +326,25 @@
     top: 94px;
     right: 20px;
   }
+
+  /* 메뉴 배경 버튼 기본 스타일 제거 */
+  .menu-backdrop {
+    padding: 0;
+    border: 0;
+    cursor: default;
+  }
+
+  /* 메뉴 버튼 아이콘 중앙 정렬 */
+  .floating-menu-btn,
+  .side-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .floating-menu-btn svg,
+  .side-close svg {
+    display: block;
+  }
+
 }

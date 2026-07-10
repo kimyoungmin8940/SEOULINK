@@ -437,4 +437,92 @@ input {
     .login-card-header h2 {
         font-size: 28px;
     }
+
+    .login-logo {
+        text-decoration: none;
+        color: inherit;
+    }
+
+    .login-option-row {
+        margin-top: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .keep-login {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        color: #728098;
+        font-size: 13px;
+        cursor: pointer;
+    }
+
+    .keep-login input {
+        width: 14px;
+        height: 14px;
+        margin: 0;
+        accent-color: #0789ff;
+    }
+
+    .login-option-row > a {
+        color: #0789ff;
+        font-size: 13px;
+        font-weight: 700;
+        text-decoration: none;
+    }
+
+    .login-button:disabled {
+        opacity: 0.65;
+        cursor: wait;
+    }
+
+    .social-login-list {
+        display: grid;
+        gap: 11px;
+    }
+
+    .social-login {
+        width: 100%;
+        height: 52px;
+        border-radius: 10px;
+        font-size: 15px;
+        font-weight: 800;
+        cursor: pointer;
+    }
+
+    .social-login.kakao {
+        border: 0;
+        color: #191919;
+        background: #fee500;
+    }
+
+    .social-login.naver {
+        border: 0;
+        color: #ffffff;
+        background: #03c75a;
+    }
+
+    .social-login.google {
+        border: 1px solid #ccd6e4;
+        color: #202124;
+        background: #ffffff;
+    }
+
+    .login-signup-guide {
+        margin-top: 25px;
+        display: flex;
+        justify-content: center;
+        gap: 7px;
+        color: #8a96aa;
+        font-size: 13px;
+    }
+
+    .login-signup-guide a {
+        color: #0577ed;
+        font-weight: 800;
+        text-decoration: none;
+    }
+
 }

@@ -5,9 +5,9 @@
 
 import Home from '../pages/home/Home';
 
-import LoginPage from '../pages/auth/LoginPage';
-import SignupPage from '../pages/auth/SignupPage';
-import FindPasswordPage from '../pages/auth/FindPasswordPage';
+import LoginPage from "../pages/LoginPage";
+import SignupPage from "../pages/auth/SignupPage";
+import FindPasswordPage from "../pages/auth/FindPasswordPage";
 
 import SurveyPage from '../pages/survey/SurveyPage';
 import SurveyResultPage from '../pages/survey/SurveyResultPage';
