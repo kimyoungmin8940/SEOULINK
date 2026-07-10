@@ -40,7 +40,6 @@ function HeroSection() {
                     <a
                         className="primary-btn"
                         href="/survey"
-                        onClick={(event) => handleProtectedLinkClick(event)}
                     >
                         <Sparkles className="btn-icon primary-icon" size={22} strokeWidth={2.2} />
                         <span className="btn-text">취향 검사 시작</span>

@@ -57,6 +57,8 @@ function isProtectedPath(pathname) {
         pathname === '/login' ||
         pathname === '/signup' ||
         pathname === '/find-password' ||
+        pathname === '/survey' ||
+        pathname === '/survey/result' ||
         pathname === '/reviews' ||
         pathname === '/courses/themes' ||
         pathname.startsWith('/courses/themes/') ||
@@ -66,10 +68,9 @@ function isProtectedPath(pathname) {
         return false;
     }
 
-    // 후기 작성/수정, 취향 검사, 추천 코스, 지도, 마이페이지, 챗봇, 결제는 로그인 필요
+    // 추천 코스 생성/조회, 후기 작성/수정, 지도, 마이페이지, 챗봇, 결제는 로그인 필요
+    // 취향 검사와 검사 결과 확인은 비로그인 사용자도 접근할 수 있습니다.
     return (
-        pathname === '/survey' ||
-        pathname === '/survey/result' ||
         pathname === '/courses' ||
         pathname === '/courses/list' ||
         pathname === '/courses/recommendations' ||
@@ -87,7 +88,7 @@ function Router() {
     const { pathname } = window.location;
 
     // 주소를 직접 입력해도 로그인 필요한 페이지는 막습니다.
-    // 로그인 없이 볼 수 있는 건 테마 코스와 후기 목록/상세입니다.
+    // 취향 검사/결과, 테마 코스, 후기 목록/상세는 로그인 없이 볼 수 있습니다.
     if (isProtectedPath(pathname) && !isLoggedIn()) {
         requireLogin();
         return null;

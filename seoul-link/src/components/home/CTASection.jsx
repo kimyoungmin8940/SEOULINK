@@ -1,7 +1,6 @@
 // CTASection은 페이지 하단에서 사용자의 다음 행동을 유도하는 배너
 // CTA는 Call To Action의 약자로, 여기서는 "취향 검사 시작하기" 버튼을 강조
 import { ArrowRight, Sparkles } from 'lucide-react';
-import { handleProtectedLinkClick } from '../../utils/authGuard';
 import ctaImg from '../../assets/images/cta-seoul-night.jpg';
 
 function CTASection() {
@@ -28,7 +27,6 @@ function CTASection() {
             <a
                 className="cta-button"
                 href="/survey"
-                onClick={(event) => handleProtectedLinkClick(event)}
             >
                 <Sparkles className="cta-button-icon" size={20} strokeWidth={2.2} />
                 <span>취향 검사 시작하기</span>
