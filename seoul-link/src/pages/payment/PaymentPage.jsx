@@ -1,146 +1,89 @@
-import { useMemo, useState } from 'react';
-import * as PortOne from '@portone/browser-sdk/v2';
-import { CalendarDays, Check, Clock3, CreditCard, LockKeyhole, MapPinned, Plane, RefreshCw } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { loadTossPayments } from '@tosspayments/tosspayments-sdk';
+import { CalendarDays, Check, Clock3, LockKeyhole, MapPinned, RefreshCw, Sparkles, Ticket, Utensils, CarFront, MessageCircle } from 'lucide-react';
 import Header from '../../components/common/Header';
-import { confirmPayment, requestPayment as createPaymentOrder } from '../../api/paymentApi';
+import { requestPayment as createPaymentOrder } from '../../api/paymentApi';
 import { authStore } from '../../store/authStore';
 import heroSeoul from '../../assets/images/hero-seoul-main.png';
+import hanokImage from '../../assets/images/moods/mood-hanok-photo.png';
+import cafeImage from '../../assets/images/moods/mood-rainy-cafe.png';
 
 const passes = [
-  { id: 'day', eyebrow: 'SEOUL DAY PASS', name: '서울 하루권', days: 1, price: 2900 },
-  { id: 'week', eyebrow: 'SEOUL WEEK PASS', name: '서울 일주일권', days: 7, price: 7900, popular: true },
-  { id: 'month', eyebrow: 'SEOUL MONTH PASS', name: '서울 한달권', days: 30, price: 19900 },
-];
-
-const paymentMethods = [
-  { id: 'CARD', label: '신용 / 체크카드', active: true },
-  { id: 'KAKAO', label: '카카오페이' },
-  { id: 'NAVER', label: '네이버페이' },
-  { id: 'TOSS', label: '토스페이' },
+  { id: 'day', eyebrow: 'SEOUL DAY PASS', name: '하루 패스', days: 1, price: 9900 },
+  { id: 'week', eyebrow: 'SEOUL WEEK PASS', name: '위클리 패스', days: 7, price: 29900 },
+  { id: 'month', eyebrow: 'SEOUL TRAVEL PASS', name: '트래블 패스', days: 30, price: 69900, popular: true },
 ];
 
 const pad = (value) => String(value).padStart(2, '0');
 const toInputDate = (date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-const formatDate = (date) => `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())} (${['일','월','화','수','목','금','토'][date.getDay()]})`;
+const formatDate = (date) => `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())}`;
 
 function PaymentPage() {
-  const [selected, setSelected] = useState(passes[1]);
-  const [startDate, setStartDate] = useState(toInputDate(new Date()));
-  const [method, setMethod] = useState('CARD');
+  const [selected, setSelected] = useState(passes[2]);
+  const [startDate] = useState(toInputDate(new Date()));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-
+  const [widgets, setWidgets] = useState(null);
+  const paymentWidgetRef = useRef(null);
+  const agreementWidgetRef = useRef(null);
   const start = useMemo(() => new Date(`${startDate}T00:00:00`), [startDate]);
-  const end = useMemo(() => {
-    const value = new Date(start);
-    value.setDate(value.getDate() + selected.days - 1);
-    return value;
-  }, [start, selected.days]);
+  const end = useMemo(() => new Date(start.getFullYear(), start.getMonth(), start.getDate() + selected.days - 1), [start, selected.days]);
+
+  useEffect(() => {
+    const member = authStore.getMember();
+    const clientKey = import.meta.env.VITE_TOSS_CLIENT_KEY;
+    if (!member?.memberId || !clientKey) {
+      setError('VITE_TOSS_CLIENT_KEY를 설정하면 토스 결제수단이 표시됩니다.');
+      return undefined;
+    }
+    let active = true;
+    (async () => {
+      try {
+        const tossPayments = await loadTossPayments(clientKey);
+        const customerKeyStorage = `toss-customer-key:${member.memberId}`;
+        let customerKey = localStorage.getItem(customerKeyStorage);
+        if (!customerKey) {
+          customerKey = crypto.randomUUID();
+          localStorage.setItem(customerKeyStorage, customerKey);
+        }
+        const nextWidgets = tossPayments.widgets({ customerKey });
+        await nextWidgets.setAmount({ currency: 'KRW', value: selected.price });
+        paymentWidgetRef.current = await nextWidgets.renderPaymentMethods({ selector: '#toss-payment-methods', variantKey: 'DEFAULT' });
+        agreementWidgetRef.current = await nextWidgets.renderAgreement({ selector: '#toss-payment-agreement', variantKey: 'AGREEMENT' });
+        if (active) setWidgets(nextWidgets);
+      } catch {
+        if (active) setError('토스 결제위젯을 불러오지 못했습니다. 클라이언트 키를 확인해 주세요.');
+      }
+    })();
+    return () => { active = false; paymentWidgetRef.current?.destroy(); agreementWidgetRef.current?.destroy(); };
+  }, []);
+
+  useEffect(() => { widgets?.setAmount({ currency: 'KRW', value: selected.price }); }, [selected.price, widgets]);
 
   const handlePayment = async () => {
     const member = authStore.getMember();
-    if (!member?.memberId) return setError('로그인 후 구매할 수 있습니다.');
-    if (!import.meta.env.VITE_PORTONE_CHANNEL_KEY) return setError('포트원 테스트 채널 키를 설정해 주세요.');
-
-    const paymentId = `SEOULLINK_${crypto.randomUUID()}`;
-    setLoading(true);
-    setError('');
-
+    if (!member?.memberId) return setError('로그인 후 이용권을 구매할 수 있습니다.');
+    if (!widgets) return setError('결제수단을 준비 중입니다. 잠시 후 다시 시도해 주세요.');
+    const orderId = `SEOULLINK_${crypto.randomUUID()}`;
+    setLoading(true); setError('');
     try {
-      await createPaymentOrder({
-        memberId: member.memberId,
-        productName: `${selected.name} · ${selected.days}일`,
-        amount: selected.price,
-        paymentMethod: method,
-        paymentProvider: 'PORTONE',
-        orderId: paymentId,
-      });
-
-      const response = await PortOne.requestPayment({
-        storeId: import.meta.env.VITE_PORTONE_STORE_ID,
-        channelKey: import.meta.env.VITE_PORTONE_CHANNEL_KEY,
-        paymentId,
-        orderName: `${selected.name} · ${selected.days}일`,
-        totalAmount: selected.price,
-        currency: 'KRW',
-        payMethod: 'CARD',
-        customer: {
-          customerId: String(member.memberId),
-          fullName: member.name,
-          email: member.email,
-        },
-      });
-
-      if (response?.code != null) throw new Error(response.message || '결제가 취소되었거나 실패했습니다.');
-      await confirmPayment(paymentId);
-      window.location.assign('/payment/success');
+      await createPaymentOrder({ memberId: member.memberId, productName: `${selected.name} (${selected.days}일)`, amount: selected.price, paymentMethod: 'TOSS_WIDGET', paymentProvider: 'TOSS', orderId });
+      await widgets.requestPayment({ orderId, orderName: `${selected.name} (${selected.days}일)`, customerEmail: member.email, customerName: member.nickname || member.name, successUrl: `${window.location.origin}/payment/success`, failUrl: `${window.location.origin}/payment/fail` });
     } catch (e) {
-      setError(e?.message || '결제 처리 중 문제가 발생했습니다.');
-    } finally {
+      setError(e?.message || '결제를 시작하지 못했습니다.');
       setLoading(false);
     }
   };
 
-  return (
-    <main className="pass-payment-page" style={{ '--seoul-hero': `url(${heroSeoul})` }}>
-      <Header variant="simple" />
-      <div className="pass-payment-overlay" />
-      <section className="pass-payment-layout">
-        <div className="pass-content">
-          <div className="pass-intro">
-            <span>AI 여행 플래너</span>
-            <h1>서울 AI 챗봇과 함께<br />나만의 여행을 완성하세요</h1>
-            <p>여행 기간을 선택하고 AI 챗봇으로<br />맞춤 코스부터 일정 관리까지 편리하게 이용해 보세요.</p>
-          </div>
-
-          <div className="pass-ticket-grid">
-            {passes.map((pass) => (
-              <button type="button" key={pass.id} className={`pass-ticket ${selected.id === pass.id ? 'selected' : ''}`} onClick={() => setSelected(pass)}>
-                {selected.id === pass.id && <span className="ticket-check"><Check size={18} /></span>}
-                <small>{pass.eyebrow}</small>
-                <strong>{pass.name} · {pass.days}일</strong>
-                <div className="ticket-divider" />
-                <span>이용 기간</span>
-                <p>{formatDate(start)}<br />~ {formatDate(new Date(new Date(start).setDate(start.getDate() + pass.days - 1)))}</p>
-                <footer><i /><b>{pass.price.toLocaleString()}<em>원</em></b></footer>
-              </button>
-            ))}
-          </div>
-
-          <div className="pass-benefits">
-            <h2>AI 챗봇 이용<br />포함 기능</h2>
-            <div><span><MapPinned /></span><p><b>맞춤 코스</b><small>관심사와 여행 스타일에 맞는<br />나만의 코스를 추천받아요.</small></p></div>
-            <div><span><RefreshCw /></span><p><b>실시간 일정 수정</b><small>여행 중에도 AI와 함께<br />일정을 자유롭게 조정해요.</small></p></div>
-            <div><span><CalendarDays /></span><p><b>지도 저장</b><small>내 여행 정보를 지도에 저장하고<br />언제든지 다시 확인해요.</small></p></div>
-            <p className="benefit-notice"><Clock3 size={14} /> AI 챗봇은 이용 기간 동안 자유롭게 이용하실 수 있습니다.</p>
-          </div>
-        </div>
-
-        <aside className="pass-order-panel">
-          <div className="panel-title"><h2>주문 정보</h2><span><Plane /></span></div>
-          <label className="date-label" htmlFor="pass-start-date">이용 시작일 · 결제 완료일 기준</label>
-          <input id="pass-start-date" className="date-input" type="date" value={startDate} disabled onChange={(event) => setStartDate(event.target.value)} />
-          <div className="date-summary"><span>이용 종료일</span><b>{formatDate(end)}</b></div>
-          <div className="date-summary"><span>선택한 기간</span><b>{selected.days}일</b></div>
-          <div className="order-total"><span>최종 결제 금액</span><strong>{selected.price.toLocaleString()}<em>원</em></strong></div>
-
-          <h3 className="method-title">결제 수단 선택</h3>
-          <div className="pass-method-grid">
-            {paymentMethods.map((item) => (
-              <button type="button" key={item.id} disabled={!item.active} className={method === item.id ? 'selected' : ''} onClick={() => setMethod(item.id)}>
-                <span>{item.id === 'CARD' ? <CreditCard size={18} /> : item.label.slice(0, 1)}</span>{item.label}
-                {!item.active && <small>준비 중</small>}
-              </button>
-            ))}
-          </div>
-
-          <button type="button" className="pass-purchase-button" disabled={loading} onClick={handlePayment}>{loading ? '결제 확인 중...' : '구매하기'}</button>
-          {error && <p className="pass-payment-error">{error}</p>}
-          <p className="pass-secure"><LockKeyhole size={13} /> 안전하고 암호화된 결제 환경을 제공합니다.</p>
-        </aside>
-      </section>
-    </main>
-  );
+  return <main className="pass-payment-page payment-reference-page" style={{ '--seoul-hero': `url(${heroSeoul})` }}>
+    <Header variant="simple" /><div className="pass-payment-overlay" />
+    <section className="payment-reference-shell">
+      <header className="payment-reference-heading"><h1>여행 기간에 맞는 AI 이용권을 선택하세요</h1><p>AI가 나만의 서울 여행을 계획하고 실시간으로 도와드려요.</p></header>
+      <div className="payment-reference-plans">{passes.map((pass) => <button type="button" key={pass.id} className={`payment-reference-plan ${selected.id === pass.id ? 'selected' : ''}`} onClick={() => setSelected(pass)}>
+        {pass.popular && <b className="payment-reference-badge">BEST VALUE <Sparkles /></b>}<span className="payment-reference-radio">{selected.id === pass.id && <Check />}</span><h2>{pass.name} ({pass.days}일)</h2><p className="payment-reference-subtitle">{pass.days === 1 ? '짧고 알찬 하루 여행에 추천' : pass.days === 7 ? '여유로운 일정의 여행에 추천' : '한 달 서울 여행의 든든한 동반자'}</p><img src={pass.days === 1 ? hanokImage : pass.days === 7 ? cafeImage : heroSeoul} alt="" /><b className="payment-reference-recommend">이런 분께 추천해요</b><p className="payment-reference-copy">{pass.days === 1 ? '당일치기 일정으로 핵심 명소만 알차게 둘러보고 싶어요.' : pass.days === 7 ? '서울을 여유롭게 둘러보고 다양한 동네를 경험하고 싶어요.' : '한 달 동안 서울을 깊이 있게 경험하고 나만의 속도로 여행하고 싶어요.'}</p><div className="payment-reference-divider" /><b className="payment-reference-includes">포함 AI 기능</b><ul><li><MapPinned /> AI 맞춤 여행 일정 추천</li><li><CarFront /> 실시간 동선 & 교통 추천</li><li><Utensils /> 명소·맛집·체험 정보 안내</li><li><MessageCircle /> 여행 중 실시간 AI 챗봇</li></ul><footer><span>이용 기간<b>{pass.days}일</b></span><span>가격<b>{pass.price.toLocaleString()}원</b></span></footer>
+      </button>)}</div>
+      <section className="payment-reference-order"><div className="payment-reference-product"><small>선택한 이용권</small><img src={selected.days === 1 ? hanokImage : selected.days === 7 ? cafeImage : heroSeoul} alt="" /><div><b>{selected.name} ({selected.days}일)</b><p>{selected.days === 30 ? '한 달 서울 여행의 든든한 동반자' : 'AI와 함께 만드는 나만의 서울 여행'}</p><strong>{selected.price.toLocaleString()}원</strong></div></div><div className="payment-reference-dates"><small>이용 기간</small><b>{formatDate(start)} <i>~</i> {formatDate(end)}</b><p>결제 즉시 이용이 시작됩니다.</p></div><div className="payment-reference-widget"><small>결제 수단</small><div id="toss-payment-methods" className="toss-payment-methods" /></div><div className="payment-reference-agreement"><small>약관 동의</small><div id="toss-payment-agreement" className="toss-payment-agreement" /></div><div className="payment-reference-action"><button type="button" disabled={loading || !widgets} onClick={handlePayment}><LockKeyhole /> {loading ? '결제창을 여는 중...' : `${selected.price.toLocaleString()}원 결제하고 이용 시작하기`}</button>{error && <p className="pass-payment-error">{error}</p>}<small>결제 즉시 이용이 시작되며, 이용 기간 종료 전 알림을 보내드려요.</small></div></section>
+    </section></main>;
 }
 
 export default PaymentPage;
