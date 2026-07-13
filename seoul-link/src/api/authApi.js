@@ -8,12 +8,6 @@ export function signup(data) {
     return apiClient.post("/members/signup", data);
 }
 
-export function checkLoginId(loginId) {
-    return apiClient.get(
-        `/members/check-login-id?loginId=${encodeURIComponent(loginId)}`
-    );
-}
-
 export function checkEmail(email) {
     return apiClient.get(
         `/members/check-email?email=${encodeURIComponent(email)}`

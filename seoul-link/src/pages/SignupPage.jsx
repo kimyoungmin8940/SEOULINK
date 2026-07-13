@@ -1,5 +1,5 @@
 import { useState } from "react";
-import Header from "../component/Header";
+import Header from "../components/common/Header";
 import PageBackground from "../component/PageBackground";
 import { apiPost } from "../api/client";
 import "../styles/SignupPage.css";
@@ -63,9 +63,9 @@ export default function SignupPage() {
     };
 
     return (
-        <PageBackground>
+        <>
             <Header />
-
+            <PageBackground>
             <main className="signup-container">
                 <section className="signup-card">
                     <p className="signup-small">회원가입</p>
@@ -155,10 +155,11 @@ export default function SignupPage() {
 
                     <p className="login-link">
                         이미 계정이 있으신가요?
-                        <span onClick={() => navigate("/login")}>로그인</span>
+                        <span onClick={() => window.location.assign("/login")}>로그인</span>
                     </p>
                 </section>
             </main>
-        </PageBackground>
+            </PageBackground>
+        </>
     );
 }

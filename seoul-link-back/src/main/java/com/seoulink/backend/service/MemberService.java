@@ -2,6 +2,7 @@ package com.seoulink.backend.service;
 
 import com.seoulink.backend.dto.request.MemberLoginRequest;
 import com.seoulink.backend.dto.request.MemberSignupRequest;
+import com.seoulink.backend.dto.LoginResponseDto;
 import com.seoulink.backend.dto.response.MemberLoginResponse;
 import com.seoulink.backend.entity.Member;
 import com.seoulink.backend.entity.Payment;
@@ -16,17 +17,13 @@ import java.time.LocalDateTime;
 
 @Service
 public class MemberService {
-
     private final MemberRepository memberRepository;
     private final PaymentRepository paymentRepository;
     private final boolean demoSignupPassEnabled;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
-    public MemberService(
-            MemberRepository memberRepository,
-            PaymentRepository paymentRepository,
-            @Value("${app.demo-signup-pass-enabled:false}") boolean demoSignupPassEnabled
-    ) {
+    public MemberService(MemberRepository memberRepository, PaymentRepository paymentRepository,
+                         @Value("${app.demo-signup-pass-enabled:false}") boolean demoSignupPassEnabled) {
         this.memberRepository = memberRepository;
         this.paymentRepository = paymentRepository;
         this.demoSignupPassEnabled = demoSignupPassEnabled;
@@ -34,25 +31,16 @@ public class MemberService {
 
     @Transactional
     public MemberLoginResponse signup(MemberSignupRequest request) {
-        if (!request.getPassword().equals(request.getPasswordConfirm())) {
-            throw new IllegalArgumentException("비밀번호와 비밀번호 확인이 일치하지 않습니다.");
-        }
-        if (memberRepository.existsByLoginId(request.getLoginId())) {
-            throw new IllegalArgumentException("이미 사용 중인 아이디입니다.");
-        }
         if (memberRepository.existsByEmail(request.getEmail())) {
-            throw new IllegalArgumentException("이미 사용 중인 이메일입니다.");
+            throw new IllegalArgumentException("This email is already registered.");
         }
         if (request.getNickname() != null && !request.getNickname().isBlank()
                 && memberRepository.existsByNickname(request.getNickname())) {
-            throw new IllegalArgumentException("이미 사용 중인 닉네임입니다.");
+            throw new IllegalArgumentException("This nickname is already in use.");
         }
 
-        Member member = new Member(
-                request.getLoginId(), request.getEmail(),
-                passwordEncoder.encode(request.getPassword()),
-                request.getName(), request.getNickname()
-        );
+        Member member = new Member(request.getEmail(), passwordEncoder.encode(request.getPassword()),
+                request.getName(), request.getNickname());
         member.setPhone(request.getPhone());
         Member savedMember = memberRepository.save(member);
         if (demoSignupPassEnabled) grantDemoPass(savedMember);
@@ -60,34 +48,48 @@ public class MemberService {
     }
 
     public MemberLoginResponse login(MemberLoginRequest request) {
-        if ((request.getLoginId() == null || request.getLoginId().isBlank())
-                && (request.getEmail() == null || request.getEmail().isBlank())) {
-            throw new IllegalArgumentException("아이디 또는 이메일을 입력해 주세요.");
-        }
-        Member member = (request.getEmail() != null && !request.getEmail().isBlank()
-                ? memberRepository.findByEmail(request.getEmail())
-                : memberRepository.findByLoginId(request.getLoginId()))
-                .orElseThrow(() -> new IllegalArgumentException("아이디 또는 비밀번호가 올바르지 않습니다."));
+        Member member = memberRepository.findByEmail(request.getEmail())
+                .orElseThrow(() -> new IllegalArgumentException("Email or password is incorrect."));
         if (!"LOCAL".equals(member.getLoginType())) {
-            throw new IllegalArgumentException("소셜 로그인으로 가입된 계정입니다.");
+            throw new IllegalArgumentException("Please use the social login method for this account.");
         }
         if (!passwordEncoder.matches(request.getPassword(), member.getPassword())) {
-            throw new IllegalArgumentException("아이디 또는 비밀번호가 올바르지 않습니다.");
+            throw new IllegalArgumentException("Email or password is incorrect.");
         }
         if (!"ACTIVE".equals(member.getStatus())) {
-            throw new IllegalArgumentException("사용할 수 없는 계정입니다.");
+            throw new IllegalArgumentException("This account is inactive.");
         }
         return toLoginResponse(member);
     }
 
-    public boolean checkLoginId(String loginId) { return !memberRepository.existsByLoginId(loginId); }
     public boolean checkEmail(String email) { return !memberRepository.existsByEmail(email); }
     public boolean checkNickname(String nickname) { return !memberRepository.existsByNickname(nickname); }
+
+    @Transactional
+    public LoginResponseDto socialLogin(String provider, String email, String name) {
+        if (email == null || email.isBlank()) {
+            throw new IllegalArgumentException("The OAuth provider did not provide an email address.");
+        }
+        Member member = memberRepository.findByEmail(email).orElseGet(() -> {
+            Member socialMember = new Member();
+            socialMember.setEmail(email);
+            socialMember.setName(name == null || name.isBlank() ? provider + " user" : name);
+            socialMember.setStatus("ACTIVE");
+            socialMember.setLoginType("SOCIAL");
+            socialMember.setSocialProvider(provider.toUpperCase());
+            socialMember.setSocialId(email);
+            return memberRepository.save(socialMember);
+        });
+        if (!"ACTIVE".equals(member.getStatus())) {
+            throw new IllegalArgumentException("This account is inactive.");
+        }
+        return new LoginResponseDto(member.getMemberId(), member.getEmail(), member.getName(), member.getLoginType());
+    }
 
     private void grantDemoPass(Member member) {
         Payment payment = new Payment();
         payment.setMemberId(member.getMemberId());
-        payment.setProductName("개발용 AI 챗봇 7일 체험권");
+        payment.setProductName("Development AI chatbot seven-day pass");
         payment.setAmount(0);
         payment.setPaymentMethod("DEMO");
         payment.setPaymentProvider("DEMO");
@@ -97,9 +99,6 @@ public class MemberService {
     }
 
     private MemberLoginResponse toLoginResponse(Member member) {
-        return new MemberLoginResponse(
-                member.getMemberId(), member.getLoginId(), member.getEmail(),
-                member.getName(), member.getNickname()
-        );
+        return new MemberLoginResponse(member.getMemberId(), member.getEmail(), member.getName(), member.getNickname());
     }
 }

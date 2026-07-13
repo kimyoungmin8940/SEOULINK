@@ -19,9 +19,6 @@ public class Member {
     @Column(name = "MEMBER_ID")
     private Long memberId;
 
-    @Column(name = "LOGIN_ID", nullable = false, unique = true, length = 50)
-    private String loginId;
-
     @Column(name = "EMAIL", nullable = false, unique = true, length = 100)
     private String email;
 
@@ -55,8 +52,7 @@ public class Member {
     @Column(name = "UPDATED_AT", nullable = false)
     private LocalDateTime updatedAt = LocalDateTime.now();
 
-    public Member(String loginId, String email, String password, String name, String nickname) {
-        this.loginId = loginId;
+    public Member(String email, String password, String name, String nickname) {
         this.email = email;
         this.password = password;
         this.name = name;

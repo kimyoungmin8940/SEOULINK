@@ -3,10 +3,12 @@
 // 현재 주소(pathname)에 맞는 페이지 컴포넌트를 보여주는 가벼운 라우터를 사용합니다.
 // 나중에 react-router-dom을 설치하면 이 파일만 Routes/Route 구조로 바꾸면 됩니다.
 
+import { useEffect } from 'react';
 import Home from '../pages/home/Home';
 
 import LoginPage from "../pages/LoginPage";
 import SignupPage from "../pages/SignupPage";
+import OAuthSuccessPage from "../pages/OAuthSuccessPage";
 import FindPasswordPage from "../pages/auth/FindPasswordPage";
 
 import SurveyPage from '../pages/survey/SurveyPage';
@@ -36,7 +38,7 @@ import PaymentSuccessPage from '../pages/payment/PaymentSuccessPage';
 import PaymentFailPage from '../pages/payment/PaymentFailPage';
 
 import NotFoundPage from '../pages/NotFoundPage';
-import { isLoggedIn, requireLogin } from '../utils/authGuard';
+import { isLoggedIn } from '../utils/authGuard';
 
 
 function isProtectedPath(pathname) {
@@ -55,6 +57,7 @@ function isProtectedPath(pathname) {
     if (
         pathname === '/' ||
         pathname === '/login' ||
+        pathname === '/oauth-success' ||
         pathname === '/signup' ||
         pathname === '/find-password' ||
         pathname === '/reviews' ||
@@ -83,14 +86,31 @@ function isProtectedPath(pathname) {
     );
 }
 
+function LoginRedirect() {
+    useEffect(() => {
+        const returnUrl =
+            window.location.pathname +
+            window.location.search +
+            window.location.hash;
+
+        sessionStorage.setItem("loginReturnUrl", returnUrl);
+        window.location.replace("/login");
+    }, []);
+
+    return (
+        <main style={{ minHeight: "100vh", display: "grid", placeItems: "center", color: "#123160" }}>
+            로그인 화면으로 이동하고 있습니다.
+        </main>
+    );
+}
+
 function Router() {
     const { pathname } = window.location;
 
     // 주소를 직접 입력해도 로그인 필요한 페이지는 막습니다.
     // 로그인 없이 볼 수 있는 건 테마 코스와 후기 목록/상세입니다.
     if (isProtectedPath(pathname) && !isLoggedIn()) {
-        requireLogin();
-        return null;
+        return <LoginRedirect />;
     }
 
     // 정적 경로는 객체에서 바로 찾습니다.
@@ -98,6 +118,7 @@ function Router() {
         '/': <Home />,
 
         '/login': <LoginPage />,
+        '/oauth-success': <OAuthSuccessPage />,
         '/signup': <SignupPage />,
         '/find-password': <FindPasswordPage />,
 

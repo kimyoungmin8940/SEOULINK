@@ -16,6 +16,7 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
     implementation 'org.springframework.security:spring-security-crypto'
+    implementation 'org.springframework.boot:spring-boot-starter-oauth2-client'
     implementation('com.openai:openai-java-spring-boot-starter:4.41.0')
     implementation 'com.fasterxml.jackson.core:jackson-databind'
     compileOnly 'org.projectlombok:lombok'

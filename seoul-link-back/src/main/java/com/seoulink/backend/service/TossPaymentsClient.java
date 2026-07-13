@@ -16,9 +16,14 @@ public class TossPaymentsClient {
     private final String authorization;
     public TossPaymentsClient(RestClient.Builder builder, @Value("${toss.secret-key}") String secretKey) {
         restClient = builder.baseUrl("https://api.tosspayments.com").build();
-        authorization = "Basic " + Base64.getEncoder().encodeToString((secretKey + ":").getBytes(StandardCharsets.UTF_8));
+        authorization = secretKey == null || secretKey.isBlank()
+                ? null
+                : "Basic " + Base64.getEncoder().encodeToString((secretKey + ":").getBytes(StandardCharsets.UTF_8));
     }
     public JsonNode confirm(String paymentKey, String orderId, int amount) {
+        if (authorization == null) {
+            throw new IllegalStateException("TOSS_SECRET_KEY is not configured. Set the payment-widget sandbox secret key before confirming a payment.");
+        }
         return restClient.post().uri("/v1/payments/confirm").header(HttpHeaders.AUTHORIZATION, authorization).contentType(MediaType.APPLICATION_JSON).body(Map.of("paymentKey", paymentKey, "orderId", orderId, "amount", amount)).retrieve().body(JsonNode.class);
     }
 }

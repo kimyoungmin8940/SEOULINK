@@ -4,15 +4,13 @@ import lombok.Getter;
 
 @Getter
 public class MemberLoginResponse {
-    private Long memberId;
-    private String loginId;
-    private String email;
-    private String name;
-    private String nickname;
+    private final Long memberId;
+    private final String email;
+    private final String name;
+    private final String nickname;
 
-    public MemberLoginResponse(Long memberId, String loginId, String email, String name, String nickname) {
+    public MemberLoginResponse(Long memberId, String email, String name, String nickname) {
         this.memberId = memberId;
-        this.loginId = loginId;
         this.email = email;
         this.name = name;
         this.nickname = nickname;

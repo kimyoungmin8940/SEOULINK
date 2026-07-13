@@ -1,8 +1,9 @@
 import { useState } from "react";
 import "../styles/LoginPage.css";
-import Header from "../component/Header";
+import Header from "../components/common/Header";
 import PageBackground from "../component/PageBackground";
 import { apiPost } from "../api/client";
+import { authStore } from "../store/authStore";
 
 export default function Login() {
 
@@ -36,19 +37,21 @@ export default function Login() {
                 password: form.password,
             });
 
-            localStorage.setItem("member", JSON.stringify(member));
+            authStore.setMember(member);
 
             alert("로그인되었습니다.");
-            window.location.assign("/");
+            const returnUrl = sessionStorage.getItem("loginReturnUrl") || "/";
+            sessionStorage.removeItem("loginReturnUrl");
+            window.location.assign(returnUrl);
         } catch (err) {
             setError("이메일 또는 비밀번호가 올바르지 않습니다.");
         }
     };
 
     return (
-        <PageBackground>
+        <>
             <Header />
-
+            <PageBackground>
             <main className="login-container">
                 <section className="login-card">
                     <p className="login-small">로그인</p>
@@ -111,15 +114,15 @@ export default function Login() {
                         <span>또는</span>
                     </div>
 
-                    <button className="social-btn kakao" type="button">
+                    <button className="social-btn kakao" type="button" onClick={() => window.location.assign("http://localhost:8080/oauth2/authorization/kakao")}>
                         카카오 로그인
                     </button>
 
-                    <button className="social-btn naver" type="button">
+                    <button className="social-btn naver" type="button" onClick={() => window.location.assign("http://localhost:8080/oauth2/authorization/naver")}>
                         네이버 로그인
                     </button>
 
-                    <button className="social-btn google" type="button">
+                    <button className="social-btn google" type="button" onClick={() => window.location.assign("http://localhost:8080/oauth2/authorization/google")}>
                         Google 로그인
                     </button>
 
@@ -131,6 +134,7 @@ export default function Login() {
                     </p>
                 </section>
             </main>
-        </PageBackground>
+            </PageBackground>
+        </>
     );
 }
