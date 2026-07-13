@@ -41,4 +41,7 @@ public class MemberSignupRequest {
     @Email(message = "이메일 형식이 올바르지 않습니다.")
     @Size(max = 100)
     private String email;
+
+    @Size(max = 20)
+    private String phone;
 }

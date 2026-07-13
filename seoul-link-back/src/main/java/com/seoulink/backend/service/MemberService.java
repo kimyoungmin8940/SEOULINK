@@ -53,13 +53,20 @@ public class MemberService {
                 passwordEncoder.encode(request.getPassword()),
                 request.getName(), request.getNickname()
         );
+        member.setPhone(request.getPhone());
         Member savedMember = memberRepository.save(member);
         if (demoSignupPassEnabled) grantDemoPass(savedMember);
         return toLoginResponse(savedMember);
     }
 
     public MemberLoginResponse login(MemberLoginRequest request) {
-        Member member = memberRepository.findByLoginId(request.getLoginId())
+        if ((request.getLoginId() == null || request.getLoginId().isBlank())
+                && (request.getEmail() == null || request.getEmail().isBlank())) {
+            throw new IllegalArgumentException("아이디 또는 이메일을 입력해 주세요.");
+        }
+        Member member = (request.getEmail() != null && !request.getEmail().isBlank()
+                ? memberRepository.findByEmail(request.getEmail())
+                : memberRepository.findByLoginId(request.getLoginId()))
                 .orElseThrow(() -> new IllegalArgumentException("아이디 또는 비밀번호가 올바르지 않습니다."));
         if (!"LOCAL".equals(member.getLoginType())) {
             throw new IllegalArgumentException("소셜 로그인으로 가입된 계정입니다.");

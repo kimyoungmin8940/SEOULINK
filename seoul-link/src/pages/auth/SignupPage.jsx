@@ -4,7 +4,7 @@ import { signup } from '../../api/authApi';
 import { authStore } from '../../store/authStore';
 import heroSeoul from '../../assets/images/hero-seoul-main.png';
 
-const initialForm = { loginId: '', password: '', passwordConfirm: '', name: '', nickname: '', email: '' };
+const initialForm = { loginId: '', password: '', passwordConfirm: '', name: '', nickname: '', email: '', phone: '' };
 
 function SignupPage() {
   const [form, setForm] = useState(initialForm);
