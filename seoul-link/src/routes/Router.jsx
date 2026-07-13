@@ -6,7 +6,7 @@
 import Home from '../pages/home/Home';
 
 import LoginPage from "../pages/LoginPage";
-import SignupPage from "../pages/auth/SignupPage";
+import SignupPage from "../pages/SignupPage";
 import FindPasswordPage from "../pages/auth/FindPasswordPage";
 
 import SurveyPage from '../pages/survey/SurveyPage';
@@ -23,7 +23,7 @@ import ReviewDetailPage from '../pages/review/ReviewDetailPage';
 import ReviewWritePage from '../pages/review/ReviewWritePage';
 import ReviewEditPage from '../pages/review/ReviewEditPage';
 
-import MyPage from '../pages/mypage/MyPage';
+import MyPage from '../pages/MyPage';
 import MyTravelTypePage from '../pages/mypage/MyTravelTypePage';
 import MyCoursesPage from '../pages/mypage/MyCoursesPage';
 import MyFavoritesPage from '../pages/mypage/MyFavoritesPage';
