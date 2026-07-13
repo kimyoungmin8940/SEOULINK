@@ -1,13 +1,8 @@
-import PagePlaceholder from '../../components/common/PagePlaceholder';
+import { useEffect, useState } from 'react';
+import { Bookmark, CreditCard, Map, MessageCircle, Route, Star, User } from 'lucide-react';
+import Header from '../../components/common/Header';
+import { getMyCourses, getMyFavorites, getMyReviews } from '../../api/mypageApi';
+import { authStore } from '../../store/authStore';
+import '../../styles/member-pages.css';
 
-function MyPage() {
-    return (
-        <PagePlaceholder
-            title="마이페이지"
-            description="내 여행 유형, 저장한 코스, 찜, 후기 기록을 모아보는 공간입니다."
-            links={[{ href: '/mypage/travel-type', label: '내 여행 유형' }, { href: '/mypage/courses', label: '내 코스' }, { href: '/mypage/favorites', label: '찜 목록' }, { href: '/mypage/reviews', label: '내 후기' }]}
-        />
-    );
-}
-
-export default MyPage;
+export default function MyPage() { const member=authStore.getMember(); const [data,setData]=useState({courses:[],favorites:[],reviews:[]}); useEffect(()=>{Promise.all([getMyCourses(),getMyFavorites(),getMyReviews()]).then(([courses,favorites,reviews])=>setData({courses:courses||[],favorites:favorites||[],reviews:reviews||[]})).catch(()=>{});},[]); return <main className="mypage-new"><Header variant="simple"/><section className="mypage-shell"><aside><h2>마이페이지</h2><a className="active" href="/mypage"><User/> 내 정보</a><a href="/mypage/travel-type"><Map/> 여행 유형</a><a href="/mypage/courses"><Bookmark/> 저장 코스</a><a href="/map-course"><Route/> 직접 만든 코스</a><a href="/chatbot"><MessageCircle/> 챗봇 내역</a><a href="/payment"><CreditCard/> 결제 내역</a></aside><section className="mypage-main"><p className="member-kicker">MY SEOULINK</p><h1>{member?.nickname || member?.name || '여행자'}님의 여행 기록</h1><p>서울에서 만든 나만의 순간과 활동을 한 곳에서 관리하세요.</p><div className="mypage-stats"><article><Bookmark/><b>{data.courses.length}</b><span>저장한 코스</span></article><article><Star/><b>{data.reviews.length}</b><span>작성한 후기</span></article><article><MessageCircle/><b>{data.favorites.length}</b><span>찜한 장소</span></article></div><section className="mypage-reviews"><h2>최근 활동</h2>{data.reviews.length ? data.reviews.slice(0,4).map((r,i)=><article key={r.reviewId||i}><b>{r.title||'서울 여행 후기'}</b><span>{r.createdAt||'최근 작성'}</span></article>):<p>아직 기록된 활동이 없습니다. 첫 서울 여행을 시작해 보세요.</p>}</section></section></section></main>; }

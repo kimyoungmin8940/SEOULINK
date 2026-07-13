@@ -1,52 +1,7 @@
 import { useState } from 'react';
-import { CheckCircle2, LockKeyhole, Mail, Sparkles, UserRound } from 'lucide-react';
 import { signup } from '../../api/authApi';
 import { authStore } from '../../store/authStore';
-import heroSeoul from '../../assets/images/hero-seoul-main.png';
+import '../../styles/member-pages.css';
 
-const initialForm = { loginId: '', password: '', passwordConfirm: '', name: '', nickname: '', email: '', phone: '' };
-
-function SignupPage() {
-  const [form, setForm] = useState(initialForm);
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState('');
-
-  const update = (event) => setForm((prev) => ({ ...prev, [event.target.name]: event.target.value }));
-
-  const submit = async (event) => {
-    event.preventDefault();
-    if (form.password !== form.passwordConfirm) return setMessage('비밀번호 확인이 일치하지 않습니다.');
-    try {
-      setLoading(true); setMessage('');
-      const member = await signup(form);
-      authStore.setMember(member);
-      window.location.assign('/chatbot');
-    } catch (error) {
-      setMessage(error.message || '회원가입에 실패했습니다.');
-    } finally { setLoading(false); }
-  };
-
-  return (
-    <main className="demo-signup-page" style={{ '--signup-bg': `url(${heroSeoul})` }}>
-      <section className="signup-copy">
-        <a href="/" className="signup-brand"><span>SL</span> SEOULLINK</a>
-        <div><small><Sparkles size={15} /> PROJECT DEMO ACCOUNT</small><h1>서울 여행을 위한<br />임시 체험 계정을 만들어보세요</h1><p>회원가입이 완료되면 7일 AI 챗봇 체험권이 자동으로 지급되어 결제 전에도 구현된 기능을 확인할 수 있습니다.</p>
-          <ul><li><CheckCircle2 /> AI 서울 여행 코스 추천</li><li><CheckCircle2 /> 대화 및 추천 코스 자동 저장</li><li><CheckCircle2 /> 7일 개발용 체험 이용권</li></ul>
-        </div>
-      </section>
-      <section className="signup-card"><header><h2>임시 회원가입</h2><p>테스트에 사용할 계정 정보를 입력하세요.</p></header>
-        <form onSubmit={submit}>
-          <label>아이디<div><UserRound /><input name="loginId" value={form.loginId} onChange={update} placeholder="영문·숫자 4자 이상" minLength="4" required /></div></label>
-          <div className="signup-two"><label>이름<input name="name" value={form.name} onChange={update} required /></label><label>닉네임<input name="nickname" value={form.nickname} onChange={update} /></label></div>
-          <label>이메일<div><Mail /><input name="email" type="email" value={form.email} onChange={update} placeholder="demo@seoulink.com" required /></div></label>
-          <div className="signup-two"><label>비밀번호<div><LockKeyhole /><input name="password" type="password" value={form.password} onChange={update} placeholder="영문+숫자 8자 이상" minLength="8" required /></div></label><label>비밀번호 확인<input name="passwordConfirm" type="password" value={form.passwordConfirm} onChange={update} required /></label></div>
-          {message && <p className="signup-error">{message}</p>}
-          <button type="submit" disabled={loading}>{loading ? '계정 생성 중...' : '체험 계정 만들기'}</button>
-          <p className="signup-login-link">이미 계정이 있나요? <a href="/login">로그인</a></p>
-        </form>
-      </section>
-    </main>
-  );
-}
-
-export default SignupPage;
+const empty = { loginId:'', password:'', passwordConfirm:'', name:'', nickname:'', email:'', phone:'' };
+export default function SignupPage() { const [form,setForm]=useState(empty); const [error,setError]=useState(''); const [loading,setLoading]=useState(false); const change=(e)=>setForm({...form,[e.target.name]:e.target.value}); const submit=async(e)=>{e.preventDefault(); if(form.password!==form.passwordConfirm)return setError('비밀번호가 일치하지 않습니다.'); setLoading(true);setError('');try{const member=await signup(form);authStore.setMember(member);window.location.assign('/');}catch(err){setError(err.message||'회원가입에 실패했습니다.');}finally{setLoading(false);}}; return <main className="member-page"><section className="member-card signup"><p className="member-kicker">회원가입</p><h1>서울 여행을 함께할<br />계정을 만들어 보세요</h1><form onSubmit={submit}><label>아이디<input name="loginId" value={form.loginId} onChange={change} required /></label><div className="member-grid"><label>이름<input name="name" value={form.name} onChange={change} required /></label><label>닉네임<input name="nickname" value={form.nickname} onChange={change} /></label></div><label>이메일<input name="email" type="email" value={form.email} onChange={change} required /></label><label>전화번호<input name="phone" value={form.phone} onChange={change} placeholder="010-0000-0000" /></label><div className="member-grid"><label>비밀번호<input name="password" type="password" value={form.password} onChange={change} required /></label><label>비밀번호 확인<input name="passwordConfirm" type="password" value={form.passwordConfirm} onChange={change} required /></label></div>{error&&<p className="member-error">{error}</p>}<button disabled={loading}>{loading?'계정 생성 중...':'회원가입'}</button></form><p className="member-link">이미 계정이 있으신가요? <a href="/login">로그인</a></p></section></main>; }
