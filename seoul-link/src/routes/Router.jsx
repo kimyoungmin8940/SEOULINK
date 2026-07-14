@@ -9,6 +9,7 @@ import LoginPage from '../pages/auth/LoginPage';
 import SignupPage from '../pages/auth/SignupPage';
 import FindPasswordPage from '../pages/auth/FindPasswordPage';
 
+import TravelInfoPage from '../pages/survey/TravelInfoPage';
 import SurveyPage from '../pages/survey/SurveyPage';
 import SurveyResultPage from '../pages/survey/SurveyResultPage';
 
@@ -57,6 +58,7 @@ function isProtectedPath(pathname) {
         pathname === '/login' ||
         pathname === '/signup' ||
         pathname === '/find-password' ||
+        pathname === '/travel-info' ||
         pathname === '/survey' ||
         pathname === '/survey/result' ||
         pathname === '/reviews' ||
@@ -102,6 +104,7 @@ function Router() {
         '/signup': <SignupPage />,
         '/find-password': <FindPasswordPage />,
 
+        '/travel-info': <TravelInfoPage />,
         '/survey': <SurveyPage />,
         '/survey/result': <SurveyResultPage />,
 

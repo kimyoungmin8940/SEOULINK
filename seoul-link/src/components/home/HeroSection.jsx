@@ -39,7 +39,7 @@ function HeroSection() {
                 <div className="hero-buttons">
                     <a
                         className="primary-btn"
-                        href="/survey"
+                        href="/travel-info"
                     >
                         <Sparkles className="btn-icon primary-icon" size={22} strokeWidth={2.2} />
                         <span className="btn-text">취향 검사 시작</span>

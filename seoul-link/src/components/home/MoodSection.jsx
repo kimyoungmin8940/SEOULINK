@@ -33,7 +33,7 @@ const moods = [
 
 function MoodSection() {
     const moveToThemeCourses = (themeCode) => {
-        window.location.href = `/courses/themes/${themeCode}`;
+        window.location.assign(`/courses/themes/${themeCode}`);
     };
 
     return (

@@ -20,13 +20,10 @@ function CTASection() {
                 <p>오늘의 기분에 맞는 서울 여행을 시작해보세요.</p>
             </div>
 
-            {/*
-                CTA 버튼
-                현재는 화면용 버튼만 만들어두었고, 나중에 취향 검사 페이지로 이동하도록 연결하면 됨
-            */}
+            {/* 취향 검사 전에 여행 기본 정보 입력 화면으로 이동하는 CTA 버튼 */}
             <a
                 className="cta-button"
-                href="/survey"
+                href="/travel-info"
             >
                 <Sparkles className="cta-button-icon" size={20} strokeWidth={2.2} />
                 <span>취향 검사 시작하기</span>

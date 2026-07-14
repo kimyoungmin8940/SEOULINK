@@ -31,7 +31,7 @@ function ReviewSection() {
 
     // 후기 카드 전체를 클릭하면 해당 후기 상세 임시 페이지로 이동
     const moveToReviewDetail = (reviewId) => {
-        window.location.href = `/reviews/${reviewId}`;
+        window.location.assign(`/reviews/${reviewId}`);
     };
 
     // 키보드 접근성: Enter 또는 Space로도 상세 페이지 이동
