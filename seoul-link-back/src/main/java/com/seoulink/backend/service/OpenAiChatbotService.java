@@ -14,6 +14,7 @@ import java.util.Map;
 public class OpenAiChatbotService {
 
     private final RestClient restClient;
+    private final String apiKey;
     private final String model;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -21,15 +22,23 @@ public class OpenAiChatbotService {
             @Value("${openai.api-key}") String apiKey,
             @Value("${openai.model}") String model
     ) {
+        this.apiKey = apiKey == null ? "" : apiKey.trim();
         this.model = model;
-        this.restClient = RestClient.builder()
+        RestClient.Builder builder = RestClient.builder()
                 .baseUrl("https://api.openai.com/v1")
-                .defaultHeader("Authorization", "Bearer " + apiKey)
-                .defaultHeader("Content-Type", "application/json")
-                .build();
+                .defaultHeader("Content-Type", "application/json");
+        if (!this.apiKey.isBlank()) {
+            builder.defaultHeader("Authorization", "Bearer " + this.apiKey);
+        }
+        this.restClient = builder.build();
     }
 
     public String generateCourseRecommendation(ChatbotRequest request) {
+        if (apiKey.isBlank()) {
+            throw new IllegalStateException(
+                    "OPENAI_API_KEY가 설정되지 않았습니다. 결제 기능은 사용할 수 있지만 챗봇 답변 생성에는 OpenAI API 키가 필요합니다."
+            );
+        }
         String prompt = """
                 당신은 서울 여행 전문 AI 플래너입니다.
                 사용자의 질문에 맞춰 실제로 이동 가능한 서울 여행 코스를 한국어로 제안하세요.

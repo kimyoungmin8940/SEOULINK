@@ -73,11 +73,11 @@ public class MemberService {
         Member member = memberRepository.findByEmail(email).orElseGet(() -> {
             Member socialMember = new Member();
             socialMember.setEmail(email);
+            socialMember.setPassword(passwordEncoder.encode(java.util.UUID.randomUUID().toString()));
             socialMember.setName(name == null || name.isBlank() ? provider + " user" : name);
             socialMember.setStatus("ACTIVE");
             socialMember.setLoginType("SOCIAL");
-            socialMember.setSocialProvider(provider.toUpperCase());
-            socialMember.setSocialId(email);
+
             return memberRepository.save(socialMember);
         });
         if (!"ACTIVE".equals(member.getStatus())) {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CheckCircle2, LoaderCircle } from 'lucide-react';
 import Header from '../../components/common/Header';
 import { confirmPayment } from '../../api/paymentApi';
@@ -6,7 +6,10 @@ import { confirmPayment } from '../../api/paymentApi';
 function PaymentSuccessPage() {
   const [state, setState] = useState('loading');
   const [message, setMessage] = useState('결제를 확인하고 이용권을 활성화하고 있습니다.');
+  const confirmationStarted = useRef(false);
   useEffect(() => {
+    if (confirmationStarted.current) return;
+    confirmationStarted.current = true;
     const params = new URLSearchParams(window.location.search);
     const paymentKey = params.get('paymentKey'); const orderId = params.get('orderId'); const amount = Number(params.get('amount'));
     if (!paymentKey || !orderId || !Number.isFinite(amount)) { setState('error'); setMessage('결제 결과 정보가 올바르지 않습니다.'); return; }

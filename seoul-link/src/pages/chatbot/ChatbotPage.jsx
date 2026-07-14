@@ -28,6 +28,8 @@ function ChatbotPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [histories, setHistories] = useState([]);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [activeHistoryIndex, setActiveHistoryIndex] = useState(null);
   const bottomRef = useRef(null);
   const scrollAreaRef = useRef(null);
 
@@ -45,8 +47,8 @@ function ChatbotPage() {
     }
   }, [messages, loading, error]);
 
-  const historyTitles = useMemo(
-    () => (histories.length ? histories.slice(0, 5).map((item) => item.question) : fallbackHistory),
+  const historyItems = useMemo(
+    () => (histories.length ? histories.slice(0, 5) : fallbackHistory.map((question) => ({ question }))),
     [histories],
   );
 
@@ -79,6 +81,21 @@ function ChatbotPage() {
     setMessages(initialMessages);
     setInput('');
     setError('');
+    setActiveHistoryIndex(null);
+  };
+
+  const openHistory = (item, index) => {
+    setActiveHistoryIndex(index);
+    if (item?.answer || item?.courseSummary) {
+      setMessages([
+        { role: 'user', text: item.question || '', time: formatTime(item.createdAt) },
+        { role: 'bot', text: item.answer || item.courseSummary, time: formatTime(item.createdAt) },
+      ]);
+      setError('');
+    } else {
+      resetConversation();
+    }
+    setIsHistoryOpen(false);
   };
 
   return (
@@ -87,20 +104,20 @@ function ChatbotPage() {
       <div className="chatbot-page-overlay" />
 
       <section className="chatbot-workspace">
-        <aside className="chatbot-sidebar">
+        <aside className={`chatbot-sidebar ${isHistoryOpen ? 'history-open' : ''}`}>
           <div className="chatbot-brand-block">
             <span className="chatbot-brand-icon"><Bot /></span>
             <div><strong>AI 여행 플래너</strong><p>나만의 서울 여행을<br />간결하게 계획해 보세요.</p></div>
           </div>
 
-          <button className="chatbot-new-button" type="button" onClick={resetConversation}><Plus /> 새 대화 만들기</button>
+          <button className="chatbot-new-button" type="button" onClick={() => { resetConversation(); setIsHistoryOpen(false); }}><Plus /> 새 대화 만들기</button>
 
           <section className="chatbot-history-section">
             <header><span>최근 대화</span><small>{histories.length ? `${histories.length}개` : '최근'}</small></header>
             <div className="chatbot-history-list">
-              {historyTitles.map((title, index) => (
-                <button key={`${title}-${index}`} type="button" className={index === 0 ? 'active' : ''} onClick={() => index === 0 && resetConversation()}>
-                  <MessageCircle /><span>{title}</span>
+              {historyItems.map((item, index) => (
+                <button key={`${item.question}-${index}`} type="button" className={activeHistoryIndex === index ? 'active' : ''} onClick={() => openHistory(item, index)}>
+                  <MessageCircle /><span>{item.question}</span>
                 </button>
               ))}
             </div>
@@ -116,7 +133,7 @@ function ChatbotPage() {
         <section className="chatbot-room">
           <header className="chatbot-room-header">
             <div className="chatbot-room-title"><span><Bot /></span><div><strong>AI 여행 플래너</strong><small><i /> 언제든 여행을 물어보세요</small></div></div>
-            <span className="chatbot-member"><UserRound /> {member?.nickname || member?.name || '여행자'}</span>
+            <div className="chatbot-room-actions"><button className="chatbot-history-toggle" type="button" onClick={() => setIsHistoryOpen((open) => !open)} aria-expanded={isHistoryOpen}><MessageCircle /> 최근 대화</button><span className="chatbot-member"><UserRound /> {member?.nickname || member?.name || '여행자'}</span></div>
           </header>
 
           <div className="chatbot-scroll-area" ref={scrollAreaRef}>
