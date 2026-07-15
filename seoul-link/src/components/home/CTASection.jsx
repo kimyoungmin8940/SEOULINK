@@ -6,7 +6,7 @@ import ctaImg from '../../assets/images/cta-seoul-night.jpg';
 function CTASection() {
     return (
         <section
-            className="cta"
+            className="cta photo-background-filter"
             // CSS 변수 --cta-image에 배경 이미지를 전달
             // cta.css에서는 background-image: var(--cta-image) 형태로 이 값을 사용
             style={{ '--cta-image': `url(${ctaImg})` }}

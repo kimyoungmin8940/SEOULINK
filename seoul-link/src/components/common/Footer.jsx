@@ -38,8 +38,8 @@ function Footer() {
         <footer className="footer">
             {/* 하단 로고. 클릭하면 메인페이지로 이동 */}
             <a href="/" className="footer-logo" aria-label="메인페이지로 이동">
-                <img className="footer-logo-symbol" src={logoSymbol} alt="SEOULINK 로고" />
-                <img className="footer-logo-text" src={logoText} alt="SEOULINK" />
+                <img className="footer-logo-symbol" src={logoSymbol} alt="SEOULINK 로고" data-photo-filter="off" />
+                <img className="footer-logo-text" src={logoText} alt="SEOULINK" data-photo-filter="off" />
             </a>
 
             {/* 서비스 안내 링크 */}

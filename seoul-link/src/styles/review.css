@@ -24,6 +24,23 @@
   gap: clamp(28px, 2vw, 38px);
 }
 
+/* 후기 소제목의 아이콘과 제목을 추천 코스 제목과 같은 위치로 정렬 */
+.review-heading-title {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* 후기 소제목 왼쪽 이야기 아이콘 */
+.review-heading-icon {
+  width: 21px;
+  height: 21px;
+  flex: 0 0 21px;
+  color: var(--primary-blue);
+  stroke: currentColor;
+}
+
 /* 후기 섹션 제목 */
 .review-heading h2 {
   margin: 0;

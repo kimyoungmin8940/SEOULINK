@@ -27,7 +27,8 @@
 }
 
 .page .header-glass {
-  box-shadow: var(--shadow-soft);
+  /* 서브페이지에서도 메인과 같은 Liquid Glass 깊이감을 유지 */
+  box-shadow: var(--header-glass-shadow);
 }
 
 .page-shell {

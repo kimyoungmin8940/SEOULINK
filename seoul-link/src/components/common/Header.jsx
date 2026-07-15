@@ -10,6 +10,7 @@ import {
     CreditCard,
     LogOut,
     Route,
+    Menu,
 } from 'lucide-react';
 
 import { isLoggedIn as checkIsLoggedIn, requireLogin } from '../../utils/authGuard';
@@ -164,7 +165,7 @@ function Header({ variant = 'simple' }) {
                             aria-expanded={isOpen}
                             onClick={() => setIsOpen((prev) => !prev)}
                         >
-                            ☰
+                            <Menu className="floating-menu-icon" aria-hidden="true" />
                         </button>
                     </div>
                 </div>

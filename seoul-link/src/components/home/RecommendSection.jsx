@@ -57,8 +57,8 @@ function RecommendSection() {
             {/* 섹션 상단 제목/설명/더보기 버튼 영역 */}
             <div className="course-heading">
                 <div className="course-heading-left">
-                    <div className="course-heading-title">
-                        <Sparkles className="course-heading-icon" size={21} strokeWidth={2.2} />
+                    <div className="course-heading-title section-heading-title">
+                        <Sparkles className="course-heading-icon section-heading-icon" size={21} strokeWidth={2.2} />
                         <h2>{sectionTitle}</h2>
                     </div>
 
