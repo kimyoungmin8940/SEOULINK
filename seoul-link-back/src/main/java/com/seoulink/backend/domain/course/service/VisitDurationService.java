@@ -33,9 +33,10 @@ public class VisitDurationService {
         String normalizedCategory = category.trim().toLowerCase(Locale.ROOT);
 
         return switch (normalizedCategory) {
-            case "관광지", "attraction", "tourist_attraction" -> ATTRACTION_MINUTES;
-            case "식당", "음식점", "restaurant" -> RESTAURANT_MINUTES;
-            case "카페", "cafe", "café" -> CAFE_MINUTES;
+            case "tour", "관광지", "attraction", "tourist_attraction" ->
+                    ATTRACTION_MINUTES;
+            case "restaurant", "식당", "음식점" -> RESTAURANT_MINUTES;
+            case "cafe", "café", "카페" -> CAFE_MINUTES;
             case "숙소", "호텔", "accommodation", "lodging", "hotel" ->
                     ACCOMMODATION_MINUTES;
             default -> DEFAULT_MINUTES;

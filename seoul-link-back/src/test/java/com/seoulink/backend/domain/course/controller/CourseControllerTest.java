@@ -1,8 +1,11 @@
 package com.seoulink.backend.domain.course.controller;
 
+import com.seoulink.backend.domain.course.dto.response.CourseDetailResponse;
+import com.seoulink.backend.domain.course.dto.response.CoursePlaceResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseSaveResponse;
 import com.seoulink.backend.domain.course.service.CourseOptimizationService;
 import com.seoulink.backend.domain.course.service.CourseSaveService;
+import com.seoulink.backend.domain.course.service.CourseService;
 import com.seoulink.backend.domain.course.service.DistanceService;
 import com.seoulink.backend.domain.course.service.VisitDurationService;
 import org.junit.jupiter.api.BeforeEach;
@@ -11,9 +14,12 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.List;
+
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -23,6 +29,7 @@ class CourseControllerTest {
 
     private MockMvc mockMvc;
     private CourseSaveService courseSaveService;
+    private CourseService courseService;
 
     @BeforeEach
     void setUp() {
@@ -33,10 +40,12 @@ class CourseControllerTest {
                         new VisitDurationService()
                 );
         courseSaveService = mock(CourseSaveService.class);
+        courseService = mock(CourseService.class);
 
         mockMvc = standaloneSetup(new CourseController(
                         optimizationService,
-                        courseSaveService
+                        courseSaveService,
+                        courseService
                 ))
                 .build();
     }
@@ -166,5 +175,35 @@ class CourseControllerTest {
                 .andExpect(jsonPath("$.totalTravelTimeMinutes").value(31.67))
                 .andExpect(jsonPath("$.totalVisitTimeMinutes").value(270))
                 .andExpect(jsonPath("$.totalCourseTimeMinutes").value(301.67));
+    }
+
+    @Test
+    @DisplayName("저장된 코스 상세정보를 조회한다")
+    void getCourse() throws Exception {
+        when(courseService.getCourse(10L))
+                .thenReturn(CourseDetailResponse.builder()
+                        .courseId(10L)
+                        .title("서울 궁궐 코스")
+                        .region("서울 종로구")
+                        .publicCourse(true)
+                        .placeCount(1)
+                        .dayCount(1)
+                        .places(List.of(CoursePlaceResponse.builder()
+                                .detailId(100L)
+                                .placeId(1L)
+                                .dayNo(1)
+                                .visitOrder(1)
+                                .expectedVisitMinutes(90)
+                                .build()))
+                        .build());
+
+        mockMvc.perform(get("/api/courses/10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.courseId").value(10))
+                .andExpect(jsonPath("$.title").value("서울 궁궐 코스"))
+                .andExpect(jsonPath("$.placeCount").value(1))
+                .andExpect(jsonPath("$.dayCount").value(1))
+                .andExpect(jsonPath("$.places[0].placeId").value(1))
+                .andExpect(jsonPath("$.places[0].visitOrder").value(1));
     }
 }
