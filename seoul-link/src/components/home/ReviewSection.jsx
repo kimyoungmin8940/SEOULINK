@@ -2,7 +2,7 @@
 // 현재는 화면 확인용 임시 후기 데이터를 사용하고 있음
 // API 응답 형태와 동일한 mockReviewListResponse.data를 사용하고 있음
 import { useState } from 'react';
-import { ChevronRight, Heart } from 'lucide-react';
+import { ChevronRight, Heart, MessageSquareText } from 'lucide-react';
 import { requireLogin } from '../../utils/authGuard';
 
 import { mockReviewListResponse } from '../../mocks/homeMockData';
@@ -65,7 +65,10 @@ function ReviewSection() {
             {/* 섹션 제목과 전체 보기 버튼 영역*/}
             <div className="review-heading">
                 <div className="review-heading-left">
-                    <h2>실제 여행자들의 이야기</h2>
+                    <div className="review-heading-title">
+                        <MessageSquareText className="review-heading-icon" size={21} strokeWidth={2.2} />
+                        <h2>실제 여행자들의 이야기</h2>
+                    </div>
                     <p>SEOULINK와 함께한 여행자들의 생생한 후기</p>
                 </div>
 

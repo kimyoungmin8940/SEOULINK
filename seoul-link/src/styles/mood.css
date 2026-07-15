@@ -36,6 +36,23 @@
   gap: clamp(28px, 2vw, 38px);
 }
 
+/* 무드 소제목의 아이콘과 제목을 추천 코스 제목과 같은 위치로 정렬 */
+.mood-heading-title {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* 무드 소제목 왼쪽 팔레트 아이콘 */
+.mood-heading-icon {
+  width: 21px;
+  height: 21px;
+  flex: 0 0 21px;
+  color: var(--primary-blue);
+  stroke: currentColor;
+}
+
 /* 무드 섹션 제목 텍스트 */
 .mood-title-group h2 {
   margin: 0;
@@ -73,23 +90,40 @@
   stroke: currentColor;
 }
 
-/* 좌우 화살표 버튼 위치 기준이 되는 컨테이너 */
+/* 좌우 화살표와 카드 슬라이드의 위치 기준 */
 .mood-carousel {
   position: relative;
 }
 
-/* 무드 카드를 6열 그리드로 배치 */
-.mood-list {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: clamp(16px, 1.15vw, 22px);
+/* 카드 바깥은 잘라내되 양끝 미리보기 카드가 보일 공간은 내부에 확보 */
+.mood-viewport {
+  --mood-gap: clamp(14px, 1vw, 18px);
+  --mood-side-peek: clamp(42px, 3.6vw, 58px);
+  width: 100%;
+  overflow: hidden;
+  border-radius: 24px;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
 }
 
-/* 각 무드 카드의 크기, 라운드, 그림자 스타일 */
+.mood-viewport::-webkit-scrollbar {
+  display: none;
+}
+
+/* 동일한 카드 묶음 3개를 한 줄로 이어 무한 순환에 사용 */
+.mood-list {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 14px var(--mood-side-peek) 16px;
+  display: flex;
+  gap: var(--mood-gap);
+}
+
+/* 가운데 카드가 정확히 5개 보이도록 기존 6열 카드보다 가로 폭을 넓힘 */
 .mood-card {
+  flex: 0 0 calc((100% - (4 * var(--mood-gap))) / 5);
   cursor: pointer;
   display: block;
-  width: 100%;
   height: clamp(270px, 17vw, 330px);
   min-width: 0;
   padding: 0;
@@ -99,7 +133,15 @@
   background: #d8e5ef;
   border: 1px solid rgba(220, 235, 250, 0.7);
   box-shadow: 0 10px 20px rgba(21, 48, 71, 0.08);
-  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  opacity: 1;
+  transform: scale(1);
+  filter: none;
+  will-change: transform, opacity, filter;
+  transition:
+          transform 0.38s cubic-bezier(0.22, 1, 0.36, 1),
+          opacity 0.32s ease,
+          filter 0.32s ease,
+          box-shadow 0.22s ease;
 }
 
 /* 무드 이미지를 카드 영역에 꽉 채움 */
@@ -116,7 +158,7 @@
   inset: 0;
   padding: 24px 12px 30px;
   background:
-    linear-gradient(180deg, rgba(0, 0, 0, 0.02) 0%, rgba(0, 0, 0, 0.12) 34%, rgba(0, 0, 0, 0.72) 100%);
+          linear-gradient(180deg, rgba(0, 0, 0, 0.02) 0%, rgba(0, 0, 0, 0.12) 34%, rgba(0, 0, 0, 0.72) 100%);
   color: #fff;
   display: flex;
   flex-direction: column;
@@ -145,99 +187,180 @@
   letter-spacing: -0.5px;
 }
 
-/* 무드 카드 hover 효과 */
-.mood-card:hover {
-  transform: translateY(-3px);
+/* 가운데 5개 카드에만 hover 효과 적용 */
+.mood-card--active:hover {
+  transform: translateY(-4px);
   box-shadow: var(--shadow-hover);
 }
 
-/* 화면 폭이 줄어들 때 무드 박스 좌우 여백과 화살표 위치를 조정 */
+/* 양끝에 걸쳐 보이는 이전/다음 카드는 카드 자체만 작고 흐리게 처리 */
+.mood-card--preview {
+  z-index: 1;
+  cursor: default;
+  opacity: 0.42;
+  filter: blur(0.9px) saturate(0.78);
+  box-shadow: 0 7px 15px rgba(21, 48, 71, 0.06);
+  pointer-events: none;
+}
+
+.mood-card--preview-left {
+  transform: scale(0.86);
+  transform-origin: right center;
+}
+
+.mood-card--preview-right {
+  transform: scale(0.86);
+  transform-origin: left center;
+}
+
+/* 현재 화면에서 멀리 떨어진 복제 카드는 이동 중에도 노출되지 않게 숨김 */
+.mood-card--offstage {
+  opacity: 0;
+  transform: scale(0.82);
+  pointer-events: none;
+}
+
+/* 카드 양옆 원형 화살표 버튼 */
+.mood-nav {
+  position: absolute;
+  top: 50%;
+  z-index: 5;
+  width: 46px;
+  height: 46px;
+  padding: 0;
+  border: 1px solid rgba(var(--primary-blue-rgb), 0.2);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--primary-blue);
+  box-shadow: 0 10px 24px rgba(21, 48, 71, 0.16);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transform: translateY(-50%);
+  transition:
+          color 0.18s ease,
+          background-color 0.18s ease,
+          box-shadow 0.18s ease,
+          transform 0.18s ease;
+}
+
+.mood-nav:hover {
+  color: #fff;
+  background: var(--primary-blue);
+  box-shadow: var(--shadow-button);
+  transform: translateY(-50%) scale(1.06);
+}
+
+.mood-nav:active {
+  transform: translateY(-50%) scale(0.96);
+}
+
+.mood-nav:focus-visible {
+  outline: 3px solid rgba(var(--primary-blue-rgb), 0.25);
+  outline-offset: 3px;
+}
+
+.mood-nav-left {
+  left: 3px;
+}
+
+.mood-nav-right {
+  right: 3px;
+}
+
+/* 화면 폭이 줄어들 때 무드 박스 좌우 여백을 조정 */
 @media (max-width: 1280px) {
-/* 무드 카드들을 감싸는 흰색 라운드 박스 */
   .mood-shell {
     padding-left: 24px;
     padding-right: 24px;
   }
-
-/* 왼쪽 화살표 버튼 위치 */
-  .mood-nav-left {
-    left: -20px;
-  }
-
-/* 오른쪽 화살표 버튼 위치 */
-  .mood-nav-right {
-    right: -20px;
-  }
 }
 
-/* 태블릿에서는 제목을 세로 배치하고 카드 3열로 변경 */
+/* 태블릿에서는 제목을 세로 배치하고 가운데 카드를 3개 표시 */
 @media (max-width: 1100px) {
   .mood-header,
-/* 제목과 설명을 한 줄에 배치하는 그룹 */
   .mood-title-group {
     align-items: flex-start;
   }
 
-/* 제목과 설명을 한 줄에 배치하는 그룹*/
   .mood-title-group {
     flex-direction: column;
     gap: 8px;
   }
 
   .mood-title-group h2,
-/* 무드 섹션 설명 텍스트 */
   .mood-title-group p {
     white-space: normal;
   }
 
-/* 무드 카드를 6열 그리드로 배치 */
-  .mood-list {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+  .mood-viewport {
+    --mood-side-peek: clamp(38px, 5vw, 50px);
+  }
+
+  .mood-card {
+    flex-basis: calc((100% - (2 * var(--mood-gap))) / 3);
   }
 }
 
-/* 모바일에서는 카드 2열, 화살표 숨김으로 변경 */
+/* 모바일에서는 가운데 카드 1개와 양끝 미리보기 카드를 표시 */
 @media (max-width: 720px) {
-/* 무드 섹션의 아래 여백 */
   .mood-section {
     width: calc(100% - 36px);
   }
 
-/* 무드 카드들을 감싸는 흰색 라운드 박스 */
   .mood-shell {
     padding: 24px 18px;
     border-radius: 22px;
   }
 
-/* 무드 섹션 제목과 전체 보기 버튼 영역 */
   .mood-header {
     margin-bottom: 18px;
   }
 
-/* 무드 섹션 제목 텍스트 */
   .mood-title-group h2 {
     font-size: 24px;
   }
 
-/* 카드 양옆 원형 화살표 버튼의 공통 스타일 */
-  .mood-nav {
-    display: none;
+  .mood-more-btn {
+    align-self: flex-start;
   }
 
-/* 무드 카드를 6열 그리드로 배치 */
-  .mood-list {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
+  .mood-viewport {
+    --mood-gap: 12px;
+    --mood-side-peek: 38px;
+    border-radius: 20px;
   }
 
-/* 각 무드 카드의 크기, 라운드, 그림자 스타일 */
   .mood-card {
-  cursor: pointer;
-    height: 214px;
+    flex-basis: 100%;
+    height: 250px;
+    border-radius: 18px;
   }
 
-/* 무드 카드 제목 텍스트 */
   .mood-overlay strong {
     font-size: 18px;
+  }
+
+  .mood-nav {
+    width: 38px;
+    height: 38px;
+  }
+
+  .mood-nav-left {
+    left: 0;
+  }
+
+  .mood-nav-right {
+    right: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mood-card,
+  .mood-nav {
+    transition-duration: 0.01ms;
   }
 }

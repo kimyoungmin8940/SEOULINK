@@ -161,6 +161,8 @@
 /* 카드 하단 텍스트 정보 영역*/
 .course-info {
   padding: clamp(18px, 1.25vw, 23px);
+  /* 문장이 카드 오른쪽 끝에 붙지 않도록 오른쪽 안전 여백을 더 넓게 확보 */
+  padding-right: clamp(25px, 1.65vw, 31px);
 }
 
 /* 코스 카드 제목*/
@@ -169,6 +171,8 @@
   font-size: clamp(17px, 1.05vw, 20px);
   font-weight: 800;
   color: var(--text-dark);
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
 /* 코스 카드 설명*/
@@ -178,6 +182,10 @@
   color: var(--text-muted);
   line-height: 1.5;
   min-height: 42px;
+
+  /* 한글 단어 내부가 아닌 띄어쓰기 위치를 우선해 줄바꿈 */
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
 /* 소요 시간과 지역 정보를 가로로 배치 */

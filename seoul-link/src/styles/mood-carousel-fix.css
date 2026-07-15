@@ -1,0 +1,16 @@
+/* 무드 캐러셀의 무한 순환 경계와 화살표 버튼 보정 */
+.mood-list--resetting .mood-card {
+    transition: none !important;
+}
+
+.mood-nav,
+.mood-nav:hover,
+.mood-nav:active,
+.mood-nav:focus,
+.mood-nav:focus-visible {
+    appearance: none;
+    -webkit-appearance: none;
+    border: 0 !important;
+    outline: 0 !important;
+    -webkit-tap-highlight-color: transparent;
+}
