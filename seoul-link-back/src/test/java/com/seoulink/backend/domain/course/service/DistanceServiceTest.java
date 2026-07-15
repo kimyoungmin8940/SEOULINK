@@ -96,7 +96,6 @@ class DistanceServiceTest {
                 .latitude(latitude)
                 .longitude(longitude)
                 .visitDate(LocalDate.of(2026, 7, 20))
-                .expectedVisitMinutes(60)
                 .build();
     }
 }
