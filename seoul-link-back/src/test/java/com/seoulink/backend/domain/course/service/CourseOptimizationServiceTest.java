@@ -21,7 +21,10 @@ class CourseOptimizationServiceTest {
 
     @BeforeEach
     void setUp() {
-        courseOptimizationService = new CourseOptimizationService(new DistanceService());
+        courseOptimizationService = new CourseOptimizationService(
+                new DistanceService(),
+                new VisitDurationService()
+        );
     }
 
     @Test
@@ -58,6 +61,10 @@ class CourseOptimizationServiceTest {
         assertEquals(0.0, result.get(4).getDistanceFromPreviousKm(), 0.000001);
         assertEquals(0.0, result.get(0).getTravelTimeFromPreviousMinutes(), 0.000001);
         assertEquals(0.0, result.get(4).getTravelTimeFromPreviousMinutes(), 0.000001);
+        assertEquals(
+                List.of(90, 90, 90, 90, 90, 60),
+                result.stream().map(OptimizedPlaceDto::getExpectedVisitMinutes).toList()
+        );
 
         double distanceSum = result.stream()
                 .mapToDouble(OptimizedPlaceDto::getDistanceFromPreviousKm)
@@ -68,6 +75,12 @@ class CourseOptimizationServiceTest {
 
         assertEquals(distanceSum, response.getTotalDistanceKm(), 0.000001);
         assertEquals(travelTimeSum, response.getTotalTravelTimeMinutes(), 0.000001);
+        assertEquals(510, response.getTotalVisitTimeMinutes());
+        assertEquals(
+                510.0 + travelTimeSum,
+                response.getTotalCourseTimeMinutes(),
+                0.000001
+        );
         assertTrue(response.getTotalDistanceKm() > 0.0);
         assertTrue(response.getTotalTravelTimeMinutes() > 0.0);
     }
@@ -82,6 +95,8 @@ class CourseOptimizationServiceTest {
         assertTrue(response.getOptimizedPlaces().isEmpty());
         assertEquals(0.0, response.getTotalDistanceKm(), 0.000001);
         assertEquals(0.0, response.getTotalTravelTimeMinutes(), 0.000001);
+        assertEquals(0, response.getTotalVisitTimeMinutes());
+        assertEquals(0.0, response.getTotalCourseTimeMinutes(), 0.000001);
     }
 
     @Test
@@ -94,7 +109,6 @@ class CourseOptimizationServiceTest {
                 .recommendationScore(90.0)
                 .latitude(37.5665)
                 .longitude(126.9780)
-                .expectedVisitMinutes(60)
                 .build();
 
         CourseOptimizeRequest request = CourseOptimizeRequest.builder()
@@ -124,7 +138,6 @@ class CourseOptimizationServiceTest {
                 .latitude(latitude)
                 .longitude(longitude)
                 .visitDate(visitDate)
-                .expectedVisitMinutes(60)
                 .build();
     }
 }

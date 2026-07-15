@@ -34,7 +34,8 @@ img:not([data-photo-filter="off"]) {
   isolation: isolate;
 }
 
-.photo-background-filter::after {
+/* 전용 필터가 있는 배경은 data-photo-filter="off"로 공통 필터에서 제외 */
+.photo-background-filter:not([data-photo-filter="off"])::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -53,7 +54,16 @@ img:not([data-photo-filter="off"]) {
 }
 
 /* 배경 사진 위의 문구와 버튼은 색상 오버레이보다 위에 표시 */
-.photo-background-filter > * {
+.photo-background-filter:not([data-photo-filter="off"]) > * {
   position: relative;
   z-index: 1;
+}
+
+/* 히어로는 hero.css의 기존 전용 ::before 필터만 유지 */
+.hero[data-photo-filter="off"] {
+  filter: none;
+}
+
+.hero[data-photo-filter="off"]::after {
+  content: none;
 }

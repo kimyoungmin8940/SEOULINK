@@ -18,7 +18,8 @@ import java.util.TreeMap;
  *
  * <p>각 날짜에서 추천 점수가 가장 높은 장소를 첫 장소로 선택한 뒤,
  * OpenRouteService 경로 행렬의 이동시간을 기준으로 다음 장소를 선택한다.
- * 외부 API를 사용할 수 없으면 {@link DistanceService}가 직선거리 방식으로 자동 대체한다.</p>
+ * 외부 API를 사용할 수 없으면 {@link DistanceService}가 직선거리 방식으로 자동 대체하고,
+ * 예상 방문 시간은 {@link VisitDurationService}가 카테고리에 따라 계산한다.</p>
  */
 @Service
 public class CourseOptimizationService {
@@ -26,9 +27,14 @@ public class CourseOptimizationService {
     private static final double ROUTE_TIE_EPSILON = 0.000000001;
 
     private final DistanceService distanceService;
+    private final VisitDurationService visitDurationService;
 
-    public CourseOptimizationService(DistanceService distanceService) {
+    public CourseOptimizationService(
+            DistanceService distanceService,
+            VisitDurationService visitDurationService
+    ) {
         this.distanceService = distanceService;
+        this.visitDurationService = visitDurationService;
     }
 
     /**
@@ -51,6 +57,8 @@ public class CourseOptimizationService {
                     .optimizedPlaces(new ArrayList<>())
                     .totalDistanceKm(0.0)
                     .totalTravelTimeMinutes(0.0)
+                    .totalVisitTimeMinutes(0)
+                    .totalCourseTimeMinutes(0.0)
                     .build();
         }
 
@@ -107,10 +115,18 @@ public class CourseOptimizationService {
             }
         }
 
+        int totalVisitTimeMinutes = optimizedPlaces.stream()
+                .mapToInt(OptimizedPlaceDto::getExpectedVisitMinutes)
+                .sum();
+        double totalCourseTimeMinutes =
+                totalVisitTimeMinutes + totalTravelTimeMinutes;
+
         return CourseOptimizeResponse.builder()
                 .optimizedPlaces(optimizedPlaces)
                 .totalDistanceKm(totalDistanceKm)
                 .totalTravelTimeMinutes(totalTravelTimeMinutes)
+                .totalVisitTimeMinutes(totalVisitTimeMinutes)
+                .totalCourseTimeMinutes(totalCourseTimeMinutes)
                 .build();
     }
 
@@ -201,7 +217,11 @@ public class CourseOptimizationService {
                 .latitude(candidate.getLatitude())
                 .longitude(candidate.getLongitude())
                 .visitDate(candidate.getVisitDate())
-                .expectedVisitMinutes(candidate.getExpectedVisitMinutes())
+                .expectedVisitMinutes(
+                        visitDurationService.calculateExpectedVisitMinutes(
+                                candidate.getCategory()
+                        )
+                )
                 .visitOrder(visitOrder)
                 .distanceFromPreviousKm(distanceFromPreviousKm)
                 .travelTimeFromPreviousMinutes(travelTimeFromPreviousMinutes)
@@ -230,10 +250,6 @@ public class CourseOptimizationService {
         }
         if (candidate.getVisitDate() == null) {
             throw new IllegalArgumentException("방문 날짜는 필수입니다.");
-        }
-        if (candidate.getExpectedVisitMinutes() == null
-                || candidate.getExpectedVisitMinutes() < 0) {
-            throw new IllegalArgumentException("예상 방문 시간은 0분 이상이어야 합니다.");
         }
 
         distanceService.calculateDistanceKm(

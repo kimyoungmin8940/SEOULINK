@@ -23,4 +23,6 @@ public class CourseOptimizeResponse {
     private List<OptimizedPlaceDto> optimizedPlaces = new ArrayList<>();
     private Double totalDistanceKm;
     private Double totalTravelTimeMinutes;
+    private Integer totalVisitTimeMinutes;
+    private Double totalCourseTimeMinutes;
 }

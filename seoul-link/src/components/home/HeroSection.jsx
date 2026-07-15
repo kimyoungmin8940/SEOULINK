@@ -8,8 +8,11 @@ function HeroSection() {
     return (
         <section
             className="hero"
+            // 히어로는 hero.css의 전용 그라데이션 필터를 이미 사용하므로
+            // 전체 사진 공통 10% 필터에서는 제외해 이중 적용을 방지
+            data-photo-filter="off"
             // React에서 배경 이미지를 동적으로 넣기 위해 inline style을 사용
-            // hero.css에서는 이 이미지 위에 파란 필터/어두운 오버레이를 ::before, ::after로 얹었음
+            // hero.css에서는 이 이미지 위에 기존 파란 필터/어두운 오버레이를 ::before로 얹음
             style={{ backgroundImage: `url(${heroImg})` }}
         >
             {/* hero-content는 문구와 버튼을 감싸는 텍스트 박스*/}
