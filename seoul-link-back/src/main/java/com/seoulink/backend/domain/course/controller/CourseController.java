@@ -1,8 +1,11 @@
 package com.seoulink.backend.domain.course.controller;
 
 import com.seoulink.backend.domain.course.dto.request.CourseOptimizeRequest;
+import com.seoulink.backend.domain.course.dto.request.CourseSaveRequest;
 import com.seoulink.backend.domain.course.dto.response.CourseOptimizeResponse;
+import com.seoulink.backend.domain.course.dto.response.CourseSaveResponse;
 import com.seoulink.backend.domain.course.service.CourseOptimizationService;
+import com.seoulink.backend.domain.course.service.CourseSaveService;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -19,9 +22,14 @@ import org.springframework.web.bind.annotation.RestController;
 public class CourseController {
 
     private final CourseOptimizationService courseOptimizationService;
+    private final CourseSaveService courseSaveService;
 
-    public CourseController(CourseOptimizationService courseOptimizationService) {
+    public CourseController(
+            CourseOptimizationService courseOptimizationService,
+            CourseSaveService courseSaveService
+    ) {
         this.courseOptimizationService = courseOptimizationService;
+        this.courseSaveService = courseSaveService;
     }
 
     /**
@@ -35,6 +43,19 @@ public class CourseController {
             @RequestBody CourseOptimizeRequest request
     ) {
         return courseOptimizationService.optimize(request);
+    }
+
+    /**
+     * 사용자가 확정한 최적화 코스와 장소 순서를 저장한다.
+     * 인증 연동 후에는 요청의 memberId 대신 로그인 사용자 정보를 사용한다.
+     *
+     * @param request 저장할 코스와 장소별 방문 정보
+     * @return 저장된 코스 식별자와 합계 정보
+     */
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    public CourseSaveResponse saveCourse(@RequestBody CourseSaveRequest request) {
+        return courseSaveService.saveOptimizedCourse(request);
     }
 
     /**
