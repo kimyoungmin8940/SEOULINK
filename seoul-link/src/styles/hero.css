@@ -133,14 +133,15 @@
 .primary-btn {
   background: var(--primary-blue);
   color: white;
-  box-shadow: var(--shadow-button);
+  /* 두 hero 버튼은 같은 파란색 계열을 쓰고, 주 버튼만 더 진하게 표현 */
+  box-shadow: 0 10px 24px rgba(var(--hero-filter-blue-rgb), 0.22);
 }
 
 /* primary 버튼 hover 효과 */
 .primary-btn:hover {
   transform: translateY(-2px);
   background: var(--primary-blue-dark);
-  box-shadow: 0 14px 30px rgba(var(--primary-blue-rgb), 0.30);
+  box-shadow: 0 14px 30px rgba(var(--hero-filter-blue-rgb), 0.30);
 }
 
 /* 보조 버튼. 흰색 배경과 파란 테두리를 사용 */
@@ -148,7 +149,7 @@
   background: #ffffff;
   color: var(--primary-blue);
   border: 2px solid var(--primary-blue);
-  box-shadow: var(--shadow-button-light);
+  box-shadow: 0 10px 22px rgba(var(--hero-filter-blue-rgb), 0.12);
 }
 
 /* secondary 버튼 hover 효과 */
@@ -157,7 +158,7 @@
   background: var(--sub-blue);
   color: var(--primary-blue);
   border-color: var(--primary-blue);
-  box-shadow: 0 14px 28px rgba(var(--primary-blue-rgb), 0.14);
+  box-shadow: 0 14px 28px rgba(var(--hero-filter-blue-rgb), 0.14);
 }
 
 
