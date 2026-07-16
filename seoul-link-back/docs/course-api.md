@@ -1,8 +1,8 @@
 # 코스 추천·조회 API 계약
 
 이 문서는 프론트 추천 결과 화면과 상세 화면이 사용할 코스 API 계약을 고정한다.
-추천 결과(`POST /api/courses/recommend`)와 저장 상세(`GET /api/courses/{courseId}`)는
-모두 `days[].places[]` 구조를 사용한다. 최적화만 확인하는 개발용 API의
+추천 결과(`POST /api/courses/recommend`)는 `courseOptions[].days[].places[]`,
+저장 상세(`GET /api/courses/{courseId}`)는 `days[].places[]` 구조를 사용한다. 최적화만 확인하는 개발용 API의
 `optimizedPlaces` 구조는 그대로 유지한다.
 
 ## 공통 규칙
@@ -102,74 +102,86 @@ DB에 저장하지 않고 최근접 이웃과 2-opt로 방문 순서와 이동�
 }
 ```
 
-## 2. 추천 생성 및 저장
+## 2. 추천 코스 3개 생성
 
 `POST /api/courses/recommend`
 
-후보 최적화와 `SURVEY` 코스 저장을 하나의 트랜잭션으로 처리한다.
+날짜별 후보 풀에서 `targetPlaceCount`와 `categoryTargets`를 만족하는 조합을 만들고,
+취향 우선·이동 최소·균형 추천 세 가지 코스를 반환한다. 이 단계에서는 DB에 저장하지 않는다.
+사용자가 세 코스 중 하나만 선택하면 `POST /api/courses`, 두 개 이상 선택하면 `POST /api/courses/batch`로 저장한다.
 
 ### 요청 필드
 
 | 필드 | 타입 | 필수 | 설명 |
 |---|---|---:|---|
-| `memberId` | number | Y | 코스 소유 회원 ID. 인증 연동 후 본문에서 제거 예정 |
-| `resultId` | number | N | 설문 결과 ID |
-| `paymentId` | number | N | 결제 ID |
-| `title` | string | Y | 코스 제목, 최대 200자 |
-| `description` | string | N | 코스 설명 |
-| `travelCode` | string | N | 영문 5자리 여행 유형 코드 |
-| `region` | string | N | 대표 지역 |
-| `publicCourse` | boolean | N | 기본값 `false` |
-| `placeCandidates` | array | Y | 실제 코스에 배치할 후보 |
-| `alternativeCandidates` | array | N | 먼 장소 교체용 예비 후보 |
+| `resultId` | number | Y | 설문 결과 ID |
+| `dailyStartTime` | string | Y | 매일 일정 시작 시각, `HH:mm` |
+| `dailyPlans` | array | Y | 날짜별 후보 풀과 선발 목표 |
+| `dailyPlans[].visitDate` | string | Y | 방문 날짜 |
+| `dailyPlans[].targetPlaceCount` | number | Y | 해당 날짜에 최종 선발할 장소 수 |
+| `dailyPlans[].categoryTargets` | object | Y | TOUR·RESTAURANT·CAFE·HOTEL별 최종 개수 |
+| `dailyPlans[].placeCandidates` | array | Y | 최종 선발 전 후보 풀 |
+| `placeCandidates[].alternativeCandidates` | array | N | 해당 장소가 먼 구간일 때만 사용하는 전용 대체 후보 |
 
-`placeCandidates`와 `alternativeCandidates`의 장소 필드는 최적화 요청과 같다.
+`categoryTargets` 값의 합계는 `targetPlaceCount`와 같아야 하며, 후보 풀에는 각
+카테고리 목표를 충족할 수 있는 충분한 장소가 있어야 한다.
+전체 2일 요청 예시는 `docs/course-recommend-request-example.json`에서 바로 사용할 수 있다.
 
-### 성공 응답 `201 Created`
+### 성공 응답 `200 OK`
 
 ```json
 {
-  "courseId": 20,
-  "title": "서울 추천 코스",
-  "description": "서울 도심의 대표 관광지를 걷는 코스",
-  "travelCode": "ATLSR",
-  "courseType": "SURVEY",
-  "region": "서울 중구",
-  "publicCourse": false,
-  "placeCount": 2,
-  "dayCount": 1,
-  "totalDistanceKm": 0.267,
-  "totalTravelTimeMinutes": 3.56,
-  "totalVisitTimeMinutes": 180,
-  "totalCourseTimeMinutes": 183.56,
-  "days": [
+  "resultId": 101,
+  "dailyStartTime": "10:00",
+  "optionCount": 3,
+  "courseOptions": [
     {
-      "dayNo": 1,
-      "visitDate": "2026-07-20",
-      "places": [
+      "optionNo": 1,
+      "optionType": "PREFERENCE",
+      "optionName": "취향 집중 코스",
+      "placeCount": 8,
+      "dayCount": 2,
+      "totalDistanceKm": 6.214,
+      "totalTravelTimeMinutes": 82.85,
+      "totalVisitTimeMinutes": 600,
+      "totalCourseTimeMinutes": 682.85,
+      "days": [
         {
-          "detailId": null,
-          "placeId": 1,
-          "placeName": "서울시청",
-          "category": "TOUR",
-          "address": null,
-          "roadAddress": null,
-          "imageUrl": null,
-          "latitude": 37.5665,
-          "longitude": 126.978,
-          "recommendationScore": 100.0,
-          "visitOrder": 1,
-          "memo": null,
-          "visitTime": null,
-          "expectedVisitMinutes": 90,
-          "distanceFromPreviousKm": 0.0,
-          "travelTimeFromPreviousMinutes": 0.0
+          "dayNo": 1,
+          "visitDate": "2026-07-20",
+          "dailyDistanceKm": 2.731,
+          "dailyTravelTimeMinutes": 36.41,
+          "dailyVisitTimeMinutes": 300,
+          "dailyCourseTimeMinutes": 336.41,
+          "places": []
         }
       ]
+    },
+    {
+      "optionNo": 2,
+      "optionType": "MIN_DISTANCE",
+      "optionName": "이동 최소 코스",
+      "placeCount": 8,
+      "dayCount": 2,
+      "days": []
+    },
+    {
+      "optionNo": 3,
+      "optionType": "BALANCED",
+      "optionName": "균형 추천 코스",
+      "placeCount": 8,
+      "dayCount": 2,
+      "days": []
     }
   ]
 }
 ```
+
+- `PREFERENCE`: 카테고리 목표 안에서 추천 점수 합계가 높은 조합을 우선한다.
+- `MIN_DISTANCE`: 직선거리 기반 예상 이동시간과 거리가 짧은 조합을 우선한다.
+- `BALANCED`: 추천 점수 50%, 이동시간 30%, 거리 20%를 정규화해 균형을 맞춘다.
+- 가능한 조합이 3개 이상이면 서로 다른 장소 조합을 반환한다. 후보 풀이 부족하면
+  일부 옵션의 장소 구성이 겹칠 수 있다.
 
 ## 3. 저장 코스 상세 조회
 
@@ -230,12 +242,90 @@ DB에 저장하지 않고 최근접 이웃과 2-opt로 방문 순서와 이동�
 
 | 메서드 | 경로 | 성공 | 용도 |
 |---|---|---:|---|
-| `POST` | `/api/courses` | `201` | 사용자가 확정한 최적화 결과 저장 |
+| `POST` | `/api/courses` | `201` | 사용자가 확정한 코스 한 개 저장 |
+| `POST` | `/api/courses/batch` | `201` | 선택한 코스 1~3개를 단일 트랜잭션으로 일괄 저장 |
 | `GET` | `/api/courses/recommended?memberId={id}` | `200` | 회원의 `SURVEY` 추천 코스 카드 목록 |
 | `GET` | `/api/members/me/courses?memberId={id}` | `200` | 회원의 전체 코스 카드 목록 |
 
 목록 항목은 `courseId`, `title`, `description`, `coverImageUrl`, `regions`,
 `tags`, `placeCount`, `dayCount`, 네 가지 합계값, `liked`를 반환한다.
+
+
+### 복수 코스 저장 요청
+
+`POST /api/courses/batch`는 추천 옵션 중 사용자가 선택한 코스를 최대 3개까지 저장한다.
+모든 코스는 같은 `memberId`를 사용해야 하며, 하나라도 검증 또는 저장에 실패하면 전체가 롤백된다.
+
+```json
+{
+  "courses": [
+    {
+      "memberId": 1,
+      "resultId": 101,
+      "title": "취향 집중 코스",
+      "courseType": "SURVEY",
+      "places": [
+        {
+          "placeId": 10,
+          "visitDate": "2026-07-20",
+          "visitOrder": 1,
+          "visitTime": "10:00",
+          "expectedVisitMinutes": 90,
+          "distanceFromPreviousKm": 0.0,
+          "travelTimeFromPreviousMinutes": 0.0
+        }
+      ]
+    },
+    {
+      "memberId": 1,
+      "resultId": 101,
+      "title": "이동 최소 코스",
+      "courseType": "SURVEY",
+      "places": [
+        {
+          "placeId": 11,
+          "visitDate": "2026-07-20",
+          "visitOrder": 1,
+          "visitTime": "10:00",
+          "expectedVisitMinutes": 90,
+          "distanceFromPreviousKm": 0.0,
+          "travelTimeFromPreviousMinutes": 0.0
+        }
+      ]
+    }
+  ]
+}
+```
+
+성공 응답은 저장된 코스별 ID와 합계를 반환한다.
+
+```json
+{
+  "savedCount": 2,
+  "savedCourses": [
+    {
+      "courseId": 20,
+      "title": "취향 집중 코스",
+      "placeCount": 8,
+      "dayCount": 2
+    },
+    {
+      "courseId": 21,
+      "title": "이동 최소 코스",
+      "placeCount": 8,
+      "dayCount": 2
+    }
+  ]
+}
+```
+
+### 동일 장소 쌍 거리 캐시
+
+- 거리와 이동시간은 방향을 구분해 `A→B`, `B→A`를 별도 저장한다.
+- 장소 ID가 같아도 좌표가 변경되면 새 키로 계산한다.
+- OpenRouteService 결과와 Haversine 대체 결과 모두 캐시한다.
+- 기본 최대 크기는 20,000쌍, 기본 TTL은 1,440분(24시간)이다.
+- 환경변수 `COURSE_DISTANCE_CACHE_MAX_ENTRIES`, `COURSE_DISTANCE_CACHE_TTL_MINUTES`로 조정할 수 있다.
 
 ## 오류 응답
 

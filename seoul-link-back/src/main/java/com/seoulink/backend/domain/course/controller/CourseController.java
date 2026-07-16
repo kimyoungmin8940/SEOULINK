@@ -1,8 +1,10 @@
 package com.seoulink.backend.domain.course.controller;
 
+import com.seoulink.backend.domain.course.dto.request.CourseBatchSaveRequest;
 import com.seoulink.backend.domain.course.dto.request.CourseOptimizeRequest;
 import com.seoulink.backend.domain.course.dto.request.CourseRecommendRequest;
 import com.seoulink.backend.domain.course.dto.request.CourseSaveRequest;
+import com.seoulink.backend.domain.course.dto.response.CourseBatchSaveResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseDetailResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseErrorResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseOptimizeResponse;
@@ -65,7 +67,7 @@ public class CourseController {
         return courseOptimizationService.optimize(request);
     }
 
-    /** 확정된 날짜별 추천 후보를 최적화해 프론트 표시 구조로 반환한다. */
+    /** 날짜별 후보 풀에서 서로 다른 추천 코스 3개를 생성해 반환한다. */
     @PostMapping("/recommend")
     public CourseRecommendResponse recommendCourse(
             @RequestBody CourseRecommendRequest request
@@ -84,6 +86,15 @@ public class CourseController {
     @ResponseStatus(HttpStatus.CREATED)
     public CourseSaveResponse saveCourse(@RequestBody CourseSaveRequest request) {
         return courseSaveService.saveOptimizedCourse(request);
+    }
+
+    /** 선택한 추천 코스 여러 개를 하나의 트랜잭션으로 저장한다. */
+    @PostMapping("/batch")
+    @ResponseStatus(HttpStatus.CREATED)
+    public CourseBatchSaveResponse saveCourses(
+            @RequestBody CourseBatchSaveRequest request
+    ) {
+        return courseSaveService.saveOptimizedCourses(request);
     }
 
     /** 저장된 코스 기본정보와 날짜별 장소 순서를 조회한다. */

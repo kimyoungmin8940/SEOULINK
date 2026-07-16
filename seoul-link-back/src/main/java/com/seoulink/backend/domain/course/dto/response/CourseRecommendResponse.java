@@ -11,7 +11,7 @@ import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 
-/** 설문 추천 장소를 날짜별로 최적화한 결과를 반환한다. */
+/** 동일한 후보 풀에서 생성한 세 가지 추천 코스를 반환한다. */
 @Getter
 @Setter
 @Builder
@@ -21,18 +21,13 @@ public class CourseRecommendResponse {
 
     // 요청과 결과를 연결하는 설문 결과 식별자와 공통 일정 시작 시각이다.
     private Long resultId;
+
     @JsonFormat(pattern = "HH:mm")
     private LocalTime dailyStartTime;
 
-    // 최적화된 전체 장소 수·일수와 거리·시간 합계이다.
-    private Integer placeCount;
-    private Integer dayCount;
-    private Double totalDistanceKm;
-    private Double totalTravelTimeMinutes;
-    private Integer totalVisitTimeMinutes;
-    private Double totalCourseTimeMinutes;
+    // 기본적으로 취향 우선·이동 최소·균형 코스 세 가지를 반환한다.
+    private Integer optionCount;
 
-    // 날짜별 장소 순서와 날짜별 합계이다.
     @Builder.Default
-    private List<CourseDayResponse> days = new ArrayList<>();
+    private List<CourseOptionResponse> courseOptions = new ArrayList<>();
 }

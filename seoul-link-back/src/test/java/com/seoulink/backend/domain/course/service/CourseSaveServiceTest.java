@@ -1,7 +1,9 @@
 package com.seoulink.backend.domain.course.service;
 
+import com.seoulink.backend.domain.course.dto.request.CourseBatchSaveRequest;
 import com.seoulink.backend.domain.course.dto.request.CourseSavePlaceDto;
 import com.seoulink.backend.domain.course.dto.request.CourseSaveRequest;
+import com.seoulink.backend.domain.course.dto.response.CourseBatchSaveResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseSaveResponse;
 import com.seoulink.backend.domain.course.entity.CourseDetail;
 import com.seoulink.backend.domain.course.entity.TravelCourse;
@@ -15,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.StreamSupport;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -23,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -115,6 +119,91 @@ class CourseSaveServiceTest {
         assertEquals(3.56, response.getTotalTravelTimeMinutes(), 0.000001);
         assertEquals(240, response.getTotalVisitTimeMinutes());
         assertEquals(243.56, response.getTotalCourseTimeMinutes(), 0.000001);
+    }
+
+
+    @Test
+    @DisplayName("선택한 복수 코스를 하나의 요청으로 모두 저장한다")
+    void saveOptimizedCourses() {
+        LocalDate visitDate = LocalDate.of(2026, 7, 20);
+        CourseSaveRequest first = CourseSaveRequest.builder()
+                .memberId(1L)
+                .resultId(101L)
+                .title("취향 집중 코스")
+                .courseType("SURVEY")
+                .places(List.of(place(10L, visitDate, 1, 90, 0.0, 0.0)))
+                .build();
+        CourseSaveRequest second = CourseSaveRequest.builder()
+                .memberId(1L)
+                .resultId(101L)
+                .title("이동 최소 코스")
+                .courseType("SURVEY")
+                .places(List.of(place(11L, visitDate, 1, 90, 0.0, 0.0)))
+                .build();
+        AtomicLong sequence = new AtomicLong(20L);
+        when(travelCourseRepository.save(any(TravelCourse.class)))
+                .thenAnswer(invocation -> {
+                    TravelCourse course = invocation.getArgument(0);
+                    return TravelCourse.builder()
+                            .courseId(sequence.getAndIncrement())
+                            .title(course.getTitle())
+                            .build();
+                });
+
+        CourseBatchSaveResponse response = courseSaveService.saveOptimizedCourses(
+                CourseBatchSaveRequest.builder()
+                        .courses(List.of(first, second))
+                        .build()
+        );
+
+        assertEquals(2, response.getSavedCount());
+        assertEquals(List.of(20L, 21L), response.getSavedCourses().stream()
+                .map(CourseSaveResponse::getCourseId)
+                .toList());
+        verify(travelCourseRepository, times(2)).save(any(TravelCourse.class));
+        verify(courseDetailRepository, times(2)).saveAll(any());
+    }
+
+    @Test
+    @DisplayName("복수 저장 요청에 다른 회원의 코스가 섞이면 저장하지 않는다")
+    void rejectBatchWithDifferentMembers() {
+        LocalDate visitDate = LocalDate.of(2026, 7, 20);
+        CourseSaveRequest first = CourseSaveRequest.builder()
+                .memberId(1L)
+                .title("첫 번째 코스")
+                .places(List.of(place(10L, visitDate, 1, 90, 0.0, 0.0)))
+                .build();
+        CourseSaveRequest second = CourseSaveRequest.builder()
+                .memberId(2L)
+                .title("두 번째 코스")
+                .places(List.of(place(11L, visitDate, 1, 90, 0.0, 0.0)))
+                .build();
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> courseSaveService.saveOptimizedCourses(
+                        CourseBatchSaveRequest.builder()
+                                .courses(List.of(first, second))
+                                .build()
+                )
+        );
+
+        assertEquals(
+                "복수 저장 요청의 모든 코스는 같은 회원 ID여야 합니다.",
+                exception.getMessage()
+        );
+        verify(travelCourseRepository, never()).save(any());
+        verify(courseDetailRepository, never()).saveAll(any());
+    }
+
+    @Test
+    @DisplayName("복수 코스 저장 메서드도 하나의 트랜잭션으로 처리한다")
+    void batchSaveMethodIsTransactional() throws NoSuchMethodException {
+        boolean transactional = CourseSaveService.class
+                .getMethod("saveOptimizedCourses", CourseBatchSaveRequest.class)
+                .isAnnotationPresent(Transactional.class);
+
+        assertTrue(transactional);
     }
 
     @Test

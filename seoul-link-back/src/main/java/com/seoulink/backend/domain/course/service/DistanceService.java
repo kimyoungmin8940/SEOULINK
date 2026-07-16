@@ -1,6 +1,7 @@
 package com.seoulink.backend.domain.course.service;
 
 import com.seoulink.backend.domain.course.dto.request.PlaceCandidateDto;
+import com.seoulink.backend.domain.course.service.RoutePairCache.RoutePairValue;
 import com.seoulink.backend.infrastructure.external.openroute.OpenRouteServiceClient;
 import com.seoulink.backend.infrastructure.external.openroute.OpenRouteServiceClient.RouteCoordinate;
 import com.seoulink.backend.infrastructure.external.openroute.OpenRouteServiceClient.RouteMatrixResult;
@@ -10,40 +11,51 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * 장소 사이의 거리와 이동시간을 계산하는 서비스이다.
  *
- * <p>OpenRouteService 키가 설정되어 있으면 실제 도보 경로의 거리·시간 행렬을 사용한다.
- * 키가 없거나 외부 API 요청이 실패하면 기존 Haversine 직선거리와 평균 도보 속도로
- * 계산한 예상시간을 사용하므로 코스 추천 기능 자체는 중단되지 않는다.</p>
+ * <p>동일 장소 쌍은 메모리 캐시에서 우선 조회한다. 캐시에 없는 쌍이 있으면
+ * OpenRouteService의 실제 도보 경로 행렬을 사용하고, 키가 없거나 요청이 실패하면
+ * Haversine 직선거리와 평균 도보 속도로 계산한 값을 캐시에 저장해 재사용한다.</p>
  */
 @Service
 public class DistanceService {
 
-    // 외부 경로 API를 사용할 수 없을 때 Haversine 거리와 시속 4.5km로 예상시간을 계산한다.
     private static final Logger log = LoggerFactory.getLogger(DistanceService.class);
     private static final double EARTH_RADIUS_KM = 6371.0088;
     private static final double FALLBACK_WALKING_SPEED_KM_PER_HOUR = 4.5;
 
     private final OpenRouteServiceClient openRouteServiceClient;
+    private final RoutePairCache routePairCache;
 
-    /** Spring 실행 시 OpenRouteService 클라이언트를 주입한다. */
+    /** Spring 실행 시 외부 경로 클라이언트와 장소 쌍 캐시를 주입한다. */
     @Autowired
-    public DistanceService(OpenRouteServiceClient openRouteServiceClient) {
+    public DistanceService(
+            OpenRouteServiceClient openRouteServiceClient,
+            RoutePairCache routePairCache
+    ) {
         this.openRouteServiceClient = openRouteServiceClient;
+        this.routePairCache = routePairCache;
+    }
+
+    /** 기존 단위 테스트와 수동 생성 코드에서 사용하는 생성자이다. */
+    public DistanceService(OpenRouteServiceClient openRouteServiceClient) {
+        this(openRouteServiceClient, new RoutePairCache());
     }
 
     /** 외부 API 없이 실행하는 순수 단위 테스트에서 사용한다. */
     DistanceService() {
-        this.openRouteServiceClient = null;
+        this(null, new RoutePairCache());
     }
 
     /**
      * 하루 장소 전체의 경로 거리·시간 행렬을 계산한다.
      *
-     * @param candidates 같은 날짜에 방문할 장소 후보
-     * @return 장소 목록 인덱스와 동일한 순서의 거리·시간 행렬
+     * <p>캐시에 이미 있는 장소 쌍은 외부 API를 다시 호출하지 않는다. 일부 쌍만
+     * 누락된 경우 외부 행렬을 한 번 요청해 누락값만 채우며, 전체가 캐시 적중이면
+     * 외부 요청을 생략한다.</p>
      */
     public RouteMatrix calculateRouteMatrix(List<PlaceCandidateDto> candidates) {
         if (candidates == null) {
@@ -51,12 +63,24 @@ public class DistanceService {
         }
 
         validateCoordinates(candidates);
-        if (candidates.size() < 2) {
-            return createFallbackMatrix(candidates);
+        int size = candidates.size();
+        double[][] distancesKm = new double[size][size];
+        double[][] travelTimesMinutes = new double[size][size];
+        boolean[][] missingPairs = new boolean[size][size];
+        boolean hasMissingPair = loadCachedPairs(
+                candidates,
+                distancesKm,
+                travelTimesMinutes,
+                missingPairs
+        );
+
+        if (!hasMissingPair) {
+            return new RouteMatrix(distancesKm, travelTimesMinutes);
         }
 
-        // API 키가 있을 때만 실제 도보 경로 행렬을 요청한다.
-        if (openRouteServiceClient != null && openRouteServiceClient.isConfigured()) {
+        if (size >= 2
+                && openRouteServiceClient != null
+                && openRouteServiceClient.isConfigured()) {
             try {
                 List<RouteCoordinate> coordinates = candidates.stream()
                         .map(candidate -> new RouteCoordinate(
@@ -67,10 +91,14 @@ public class DistanceService {
 
                 RouteMatrixResult apiResult =
                         openRouteServiceClient.calculateMatrix(coordinates);
-                return new RouteMatrix(
-                        apiResult.distancesKm(),
-                        apiResult.travelTimesMinutes()
+                fillMissingPairsFromApi(
+                        candidates,
+                        apiResult,
+                        distancesKm,
+                        travelTimesMinutes,
+                        missingPairs
                 );
+                return new RouteMatrix(distancesKm, travelTimesMinutes);
             } catch (RuntimeException exception) {
                 log.warn(
                         "OpenRouteService 호출 실패로 직선거리 계산을 사용합니다: {}",
@@ -79,8 +107,132 @@ public class DistanceService {
             }
         }
 
-        // 키가 없거나 요청이 실패해도 추천 흐름은 중단하지 않고 직선거리로 대체한다.
-        return createFallbackMatrix(candidates);
+        fillMissingPairsWithFallback(
+                candidates,
+                distancesKm,
+                travelTimesMinutes,
+                missingPairs
+        );
+        return new RouteMatrix(distancesKm, travelTimesMinutes);
+    }
+
+    /** 캐시 적중값을 행렬에 채우고 하나라도 누락되었는지 반환한다. */
+    private boolean loadCachedPairs(
+            List<PlaceCandidateDto> candidates,
+            double[][] distancesKm,
+            double[][] travelTimesMinutes,
+            boolean[][] missingPairs
+    ) {
+        boolean hasMissingPair = false;
+        for (int fromIndex = 0; fromIndex < candidates.size(); fromIndex++) {
+            for (int toIndex = 0; toIndex < candidates.size(); toIndex++) {
+                if (fromIndex == toIndex) {
+                    distancesKm[fromIndex][toIndex] = 0.0;
+                    travelTimesMinutes[fromIndex][toIndex] = 0.0;
+                    continue;
+                }
+
+                Optional<RoutePairValue> cached = routePairCache.get(
+                        candidates.get(fromIndex),
+                        candidates.get(toIndex)
+                );
+                if (cached.isPresent()) {
+                    RoutePairValue value = cached.get();
+                    distancesKm[fromIndex][toIndex] = value.distanceKm();
+                    travelTimesMinutes[fromIndex][toIndex] = value.travelTimeMinutes();
+                } else {
+                    missingPairs[fromIndex][toIndex] = true;
+                    hasMissingPair = true;
+                }
+            }
+        }
+        return hasMissingPair;
+    }
+
+    /** 외부 API 행렬에서 캐시에 없던 장소 쌍만 채우고 캐시에 저장한다. */
+    private void fillMissingPairsFromApi(
+            List<PlaceCandidateDto> candidates,
+            RouteMatrixResult apiResult,
+            double[][] distancesKm,
+            double[][] travelTimesMinutes,
+            boolean[][] missingPairs
+    ) {
+        for (int fromIndex = 0; fromIndex < candidates.size(); fromIndex++) {
+            for (int toIndex = 0; toIndex < candidates.size(); toIndex++) {
+                if (!missingPairs[fromIndex][toIndex]) {
+                    continue;
+                }
+
+                double distanceKm = apiResult.getDistanceKm(fromIndex, toIndex);
+                double travelTimeMinutes =
+                        apiResult.getTravelTimeMinutes(fromIndex, toIndex);
+                storePair(
+                        candidates,
+                        fromIndex,
+                        toIndex,
+                        distanceKm,
+                        travelTimeMinutes,
+                        distancesKm,
+                        travelTimesMinutes
+                );
+            }
+        }
+    }
+
+    /** 누락된 장소 쌍을 Haversine과 평균 도보 속도로 계산해 캐시에 저장한다. */
+    private void fillMissingPairsWithFallback(
+            List<PlaceCandidateDto> candidates,
+            double[][] distancesKm,
+            double[][] travelTimesMinutes,
+            boolean[][] missingPairs
+    ) {
+        for (int fromIndex = 0; fromIndex < candidates.size(); fromIndex++) {
+            PlaceCandidateDto from = candidates.get(fromIndex);
+            for (int toIndex = 0; toIndex < candidates.size(); toIndex++) {
+                if (!missingPairs[fromIndex][toIndex]) {
+                    continue;
+                }
+
+                PlaceCandidateDto to = candidates.get(toIndex);
+                double distanceKm = calculateDistanceKm(
+                        from.getLatitude(),
+                        from.getLongitude(),
+                        to.getLatitude(),
+                        to.getLongitude()
+                );
+                double travelTimeMinutes =
+                        distanceKm / FALLBACK_WALKING_SPEED_KM_PER_HOUR * 60.0;
+                storePair(
+                        candidates,
+                        fromIndex,
+                        toIndex,
+                        distanceKm,
+                        travelTimeMinutes,
+                        distancesKm,
+                        travelTimesMinutes
+                );
+            }
+        }
+    }
+
+    /** 계산한 한 방향 장소 쌍 값을 반환 행렬과 장기 재사용 캐시에 함께 기록한다. */
+    private void storePair(
+            List<PlaceCandidateDto> candidates,
+            int fromIndex,
+            int toIndex,
+            double distanceKm,
+            double travelTimeMinutes,
+            double[][] distancesKm,
+            double[][] travelTimesMinutes
+    ) {
+        distancesKm[fromIndex][toIndex] = distanceKm;
+        travelTimesMinutes[fromIndex][toIndex] = travelTimeMinutes;
+        routePairCache.put(
+                candidates.get(fromIndex),
+                candidates.get(toIndex),
+                distanceKm,
+                travelTimeMinutes
+        );
     }
 
     /**
@@ -109,7 +261,6 @@ public class DistanceService {
                 * Math.cos(endLatitudeRadians)
                 * Math.pow(Math.sin(longitudeDifference / 2), 2);
 
-        // 부동소수점 오차로 값이 0~1 범위를 벗어나 제곱근이 NaN이 되는 것을 막는다.
         double normalizedHaversine = Math.max(0.0, Math.min(1.0, haversine));
         double centralAngle = 2 * Math.atan2(
                 Math.sqrt(normalizedHaversine),
@@ -117,33 +268,6 @@ public class DistanceService {
         );
 
         return EARTH_RADIUS_KM * centralAngle;
-    }
-
-    /** 모든 장소 쌍의 직선거리와 평균 도보 속도 기반 이동시간 행렬을 만든다. */
-    private RouteMatrix createFallbackMatrix(List<PlaceCandidateDto> candidates) {
-        int size = candidates.size();
-        double[][] distancesKm = new double[size][size];
-        double[][] travelTimesMinutes = new double[size][size];
-
-        for (int fromIndex = 0; fromIndex < size; fromIndex++) {
-            PlaceCandidateDto from = candidates.get(fromIndex);
-
-            for (int toIndex = 0; toIndex < size; toIndex++) {
-                PlaceCandidateDto to = candidates.get(toIndex);
-                double distanceKm = calculateDistanceKm(
-                        from.getLatitude(),
-                        from.getLongitude(),
-                        to.getLatitude(),
-                        to.getLongitude()
-                );
-
-                distancesKm[fromIndex][toIndex] = distanceKm;
-                travelTimesMinutes[fromIndex][toIndex] =
-                        distanceKm / FALLBACK_WALKING_SPEED_KM_PER_HOUR * 60.0;
-            }
-        }
-
-        return new RouteMatrix(distancesKm, travelTimesMinutes);
     }
 
     /** 행렬 계산 전에 모든 장소에 유효 범위의 위도·경도가 있는지 확인한다. */
@@ -194,7 +318,6 @@ public class DistanceService {
             return travelTimesMinutes[fromIndex][toIndex];
         }
 
-        /** 거리와 시간 배열이 같은 크기의 정사각 행렬인지 확인한다. */
         private static void validateMatrix(
                 double[][] distancesKm,
                 double[][] travelTimesMinutes

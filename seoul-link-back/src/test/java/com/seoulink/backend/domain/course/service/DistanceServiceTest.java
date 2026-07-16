@@ -6,6 +6,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -14,6 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -98,6 +100,38 @@ class DistanceServiceTest {
                 matrix.getTravelTimeMinutes(0, 1),
                 0.000001
         );
+    }
+
+
+    @Test
+    @DisplayName("동일 장소 쌍은 코스 옵션이 달라도 외부 API 결과를 캐시해 재사용한다")
+    void calculateRouteMatrixReusesCachedPlacePairs() {
+        OpenRouteServiceClient apiClient = mock(OpenRouteServiceClient.class);
+        RoutePairCache cache = new RoutePairCache(100, Duration.ofHours(1));
+        DistanceService cachedService = new DistanceService(apiClient, cache);
+        PlaceCandidateDto cityHall = place(1L, "서울시청", 37.5665, 126.9780);
+        PlaceCandidateDto palace = place(2L, "경복궁", 37.5796, 126.9770);
+
+        when(apiClient.isConfigured()).thenReturn(true);
+        when(apiClient.calculateMatrix(anyList())).thenReturn(
+                new OpenRouteServiceClient.RouteMatrixResult(
+                        new double[][]{{0.0, 1.2}, {1.4, 0.0}},
+                        new double[][]{{0.0, 16.0}, {18.0, 0.0}}
+                )
+        );
+
+        DistanceService.RouteMatrix first = cachedService.calculateRouteMatrix(
+                List.of(cityHall, palace)
+        );
+        DistanceService.RouteMatrix reversed = cachedService.calculateRouteMatrix(
+                List.of(palace, cityHall)
+        );
+
+        verify(apiClient, times(1)).calculateMatrix(anyList());
+        assertEquals(2, cache.size());
+        assertEquals(1.2, first.getDistanceKm(0, 1), 0.000001);
+        assertEquals(1.4, reversed.getDistanceKm(0, 1), 0.000001);
+        assertEquals(18.0, reversed.getTravelTimeMinutes(0, 1), 0.000001);
     }
 
     @Test

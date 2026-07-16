@@ -1,7 +1,9 @@
 package com.seoulink.backend.domain.course.service;
 
+import com.seoulink.backend.domain.course.dto.request.CourseBatchSaveRequest;
 import com.seoulink.backend.domain.course.dto.request.CourseSavePlaceDto;
 import com.seoulink.backend.domain.course.dto.request.CourseSaveRequest;
+import com.seoulink.backend.domain.course.dto.response.CourseBatchSaveResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseSaveResponse;
 import com.seoulink.backend.domain.course.entity.CourseDetail;
 import com.seoulink.backend.domain.course.entity.TravelCourse;
@@ -22,13 +24,13 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
-/** 최적화가 끝난 코스와 날짜별 장소 순서를 하나의 트랜잭션으로 저장한다. */
+/** 최적화가 끝난 코스와 날짜별 장소 순서를 트랜잭션으로 저장한다. */
 @Service
 public class CourseSaveService {
 
-    // DB와 API에서 공통으로 사용하는 코스 생성 출처 코드이다.
     private static final Set<String> ALLOWED_COURSE_TYPES =
             Set.of("CUSTOM", "SURVEY", "CHATBOT");
+    private static final int MAX_BATCH_COURSE_COUNT = 3;
 
     private final TravelCourseRepository travelCourseRepository;
     private final CourseDetailRepository courseDetailRepository;
@@ -41,15 +43,50 @@ public class CourseSaveService {
         this.courseDetailRepository = courseDetailRepository;
     }
 
-    /**
-     * 코스 기본 정보를 먼저 저장한 뒤 생성된 코스 ID로 상세 장소를 저장한다.
-     * 클라이언트가 합계값을 전달하지 않아도 장소별 계산값을 다시 합산한다.
-     */
+    /** 사용자가 확정한 코스 한 건과 상세 장소를 하나의 트랜잭션으로 저장한다. */
     @Transactional
     public CourseSaveResponse saveOptimizedCourse(CourseSaveRequest request) {
         ValidatedCourse validated = validateAndNormalize(request);
+        return saveValidatedCourse(request, validated);
+    }
 
-        // 클라이언트가 임의의 합계값을 보내지 못하도록 장소별 값으로 서버에서 다시 계산한다.
+    /**
+     * 사용자가 선택한 복수 코스를 한 번에 저장한다.
+     *
+     * <p>모든 요청을 먼저 검증한 뒤 저장하며, 코스 또는 상세 장소 중 하나라도
+     * 저장에 실패하면 메서드 전체가 롤백되어 일부 코스만 남지 않는다.</p>
+     */
+    @Transactional
+    public CourseBatchSaveResponse saveOptimizedCourses(
+            CourseBatchSaveRequest batchRequest
+    ) {
+        List<CourseSaveRequest> requests = validateBatchRequest(batchRequest);
+
+        // DB 쓰기 전에 전체 요청 검증을 끝내 부분 저장 가능성을 줄인다.
+        List<ValidatedCourse> validatedCourses = requests.stream()
+                .map(this::validateAndNormalize)
+                .toList();
+        validateSameMember(requests);
+
+        List<CourseSaveResponse> savedCourses = new ArrayList<>();
+        for (int index = 0; index < requests.size(); index++) {
+            savedCourses.add(saveValidatedCourse(
+                    requests.get(index),
+                    validatedCourses.get(index)
+            ));
+        }
+
+        return CourseBatchSaveResponse.builder()
+                .savedCount(savedCourses.size())
+                .savedCourses(savedCourses)
+                .build();
+    }
+
+    /** 검증이 끝난 코스 한 건의 기본 정보와 상세 장소를 저장하고 합계를 반환한다. */
+    private CourseSaveResponse saveValidatedCourse(
+            CourseSaveRequest request,
+            ValidatedCourse validated
+    ) {
         double totalDistanceKm = validated.places().stream()
                 .mapToDouble(CourseSavePlaceDto::getDistanceFromPreviousKm)
                 .sum();
@@ -60,7 +97,6 @@ public class CourseSaveService {
                 .mapToInt(CourseSavePlaceDto::getExpectedVisitMinutes)
                 .sum();
 
-        // DB와 API 응답의 소수 자릿수를 고정해 실행 환경에 따른 오차 노출을 줄인다.
         double storedTotalDistanceKm = round(totalDistanceKm, 3);
         double storedTotalTravelTimeMinutes = round(totalTravelTimeMinutes, 2);
         double storedTotalCourseTimeMinutes = round(
@@ -91,7 +127,6 @@ public class CourseSaveService {
             throw new IllegalStateException("저장된 코스 ID를 확인할 수 없습니다.");
         }
 
-        // 실제 날짜를 1일차·2일차 형식의 연속된 dayNo로 변환한다.
         Map<LocalDate, Integer> dayNumbers = createDayNumbers(validated.places());
         List<CourseDetail> details = validated.places().stream()
                 .map(place -> CourseDetail.builder()
@@ -127,6 +162,36 @@ public class CourseSaveService {
                 .build();
     }
 
+    /** 배치 요청의 null·빈 목록·최대 선택 개수를 검증한다. */
+    private List<CourseSaveRequest> validateBatchRequest(
+            CourseBatchSaveRequest batchRequest
+    ) {
+        if (batchRequest == null) {
+            throw new IllegalArgumentException("복수 코스 저장 요청은 null일 수 없습니다.");
+        }
+
+        List<CourseSaveRequest> courses = batchRequest.getCourses();
+        if (courses == null || courses.isEmpty()) {
+            throw new IllegalArgumentException("저장할 코스를 한 개 이상 선택해야 합니다.");
+        }
+        if (courses.size() > MAX_BATCH_COURSE_COUNT) {
+            throw new IllegalArgumentException("한 번에 저장할 수 있는 코스는 최대 3개입니다.");
+        }
+        return List.copyOf(courses);
+    }
+
+    /** 한 배치 요청이 다른 회원의 코스를 섞어 저장하지 못하도록 회원 ID를 통일한다. */
+    private void validateSameMember(List<CourseSaveRequest> requests) {
+        Long memberId = requests.get(0).getMemberId();
+        for (CourseSaveRequest request : requests) {
+            if (!memberId.equals(request.getMemberId())) {
+                throw new IllegalArgumentException(
+                        "복수 저장 요청의 모든 코스는 같은 회원 ID여야 합니다."
+                );
+            }
+        }
+    }
+
     /** 요청 전체를 검증하고 문자열·코스 유형·장소 정렬을 저장 가능한 형태로 정규화한다. */
     private ValidatedCourse validateAndNormalize(CourseSaveRequest request) {
         if (request == null) {
@@ -149,7 +214,6 @@ public class CourseSaveService {
             throw new IllegalArgumentException("저장할 코스 장소가 한 개 이상 필요합니다.");
         }
 
-        // 원본 요청 목록은 변경하지 않고 복사본에서 중복 검사와 정렬을 수행한다.
         List<CourseSavePlaceDto> sortedPlaces = new ArrayList<>(places);
         Set<Long> placeIds = new HashSet<>();
         for (CourseSavePlaceDto place : sortedPlaces) {
@@ -307,7 +371,6 @@ public class CourseSaveService {
                 .doubleValue();
     }
 
-    /** 검증과 정규화가 끝난 값만 이후 저장 단계로 전달하는 내부 결과 객체이다. */
     private record ValidatedCourse(
             String title,
             String courseType,

@@ -1,7 +1,9 @@
 package com.seoulink.backend.domain.course.controller;
 
+import com.seoulink.backend.domain.course.dto.response.CourseBatchSaveResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseDetailResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseDayResponse;
+import com.seoulink.backend.domain.course.dto.response.CourseOptionResponse;
 import com.seoulink.backend.domain.course.dto.response.CoursePlaceResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseRecommendResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseRecommendationResponse;
@@ -244,36 +246,106 @@ class CourseControllerTest {
                 .andExpect(jsonPath("$.totalCourseTimeMinutes").value(301.67));
     }
 
+
     @Test
-    @DisplayName("확정 날짜별 추천 JSON을 받아 최적화 결과를 반환한다")
+    @DisplayName("선택한 복수 코스를 배치 저장한다")
+    void saveCourses() throws Exception {
+        when(courseSaveService.saveOptimizedCourses(any()))
+                .thenReturn(CourseBatchSaveResponse.builder()
+                        .savedCount(2)
+                        .savedCourses(List.of(
+                                CourseSaveResponse.builder()
+                                        .courseId(20L)
+                                        .title("취향 집중 코스")
+                                        .placeCount(1)
+                                        .dayCount(1)
+                                        .build(),
+                                CourseSaveResponse.builder()
+                                        .courseId(21L)
+                                        .title("이동 최소 코스")
+                                        .placeCount(1)
+                                        .dayCount(1)
+                                        .build()
+                        ))
+                        .build());
+
+        mockMvc.perform(post("/api/courses/batch")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "courses": [
+                                    {
+                                      "memberId": 1,
+                                      "resultId": 101,
+                                      "title": "취향 집중 코스",
+                                      "courseType": "SURVEY",
+                                      "places": [
+                                        {
+                                          "placeId": 10,
+                                          "visitDate": "2026-07-20",
+                                          "visitOrder": 1,
+                                          "expectedVisitMinutes": 90,
+                                          "distanceFromPreviousKm": 0.0,
+                                          "travelTimeFromPreviousMinutes": 0.0
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "memberId": 1,
+                                      "resultId": 101,
+                                      "title": "이동 최소 코스",
+                                      "courseType": "SURVEY",
+                                      "places": [
+                                        {
+                                          "placeId": 11,
+                                          "visitDate": "2026-07-20",
+                                          "visitOrder": 1,
+                                          "expectedVisitMinutes": 90,
+                                          "distanceFromPreviousKm": 0.0,
+                                          "travelTimeFromPreviousMinutes": 0.0
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.savedCount").value(2))
+                .andExpect(jsonPath("$.savedCourses[0].courseId").value(20))
+                .andExpect(jsonPath("$.savedCourses[1].courseId").value(21));
+    }
+
+    @Test
+    @DisplayName("최종 후보 풀을 받아 추천 코스 3개를 반환한다")
     void recommendCourse() throws Exception {
+        CourseDayResponse day = CourseDayResponse.builder()
+                .dayNo(1)
+                .visitDate(java.time.LocalDate.of(2026, 7, 20))
+                .dailyDistanceKm(1.2)
+                .dailyTravelTimeMinutes(16.0)
+                .dailyVisitTimeMinutes(300)
+                .dailyCourseTimeMinutes(316.0)
+                .places(List.of(CoursePlaceResponse.builder()
+                        .placeId(10L)
+                        .placeName("경복궁")
+                        .category("TOUR")
+                        .recommendationScore(92.0)
+                        .themePalaceCultureYn("Y")
+                        .visitOrder(1)
+                        .visitTime("10:00")
+                        .expectedVisitMinutes(90)
+                        .build()))
+                .build();
         when(courseRecommendationService.recommend(any()))
                 .thenReturn(CourseRecommendResponse.builder()
                         .resultId(101L)
                         .dailyStartTime(java.time.LocalTime.of(10, 0))
-                        .placeCount(1)
-                        .dayCount(1)
-                        .totalDistanceKm(0.0)
-                        .totalTravelTimeMinutes(0.0)
-                        .totalVisitTimeMinutes(90)
-                        .totalCourseTimeMinutes(90.0)
-                        .days(List.of(CourseDayResponse.builder()
-                                .dayNo(1)
-                                .visitDate(java.time.LocalDate.of(2026, 7, 20))
-                                .dailyDistanceKm(0.0)
-                                .dailyTravelTimeMinutes(0.0)
-                                .dailyVisitTimeMinutes(90)
-                                .dailyCourseTimeMinutes(90.0)
-                                .places(List.of(CoursePlaceResponse.builder()
-                                        .placeId(10L)
-                                        .placeName("경복궁")
-                                        .recommendationScore(92.0)
-                                        .themePalaceCultureYn("Y")
-                                        .visitOrder(1)
-                                        .visitTime("10:00")
-                                        .expectedVisitMinutes(90)
-                                        .build()))
-                                .build()))
+                        .optionCount(3)
+                        .courseOptions(List.of(
+                                option(1, "PREFERENCE", "취향 집중 코스", day),
+                                option(2, "MIN_DISTANCE", "이동 최소 코스", day),
+                                option(3, "BALANCED", "균형 추천 코스", day)
+                        ))
                         .build());
 
         mockMvc.perform(post("/api/courses/recommend")
@@ -285,6 +357,13 @@ class CourseControllerTest {
                                   "dailyPlans": [
                                     {
                                       "visitDate": "2026-07-20",
+                                      "targetPlaceCount": 4,
+                                      "categoryTargets": {
+                                        "TOUR": 2,
+                                        "RESTAURANT": 1,
+                                        "CAFE": 1,
+                                        "HOTEL": 0
+                                      },
                                       "placeCandidates": [
                                         {
                                           "placeId": 10,
@@ -294,17 +373,52 @@ class CourseControllerTest {
                                           "latitude": 37.5796,
                                           "longitude": 126.9770,
                                           "themePalaceCultureYn": "Y",
-                                          "alternativeCandidates": [
-                                            {
-                                              "placeId": 20,
-                                              "placeName": "창덕궁",
-                                              "category": "TOUR",
-                                              "recommendationScore": 88.0,
-                                              "latitude": 37.5794,
-                                              "longitude": 126.9910,
-                                              "themePalaceCultureYn": "Y"
-                                            }
-                                          ]
+                                          "alternativeCandidates": []
+                                        },
+                                        {
+                                          "placeId": 11,
+                                          "placeName": "덕수궁",
+                                          "category": "TOUR",
+                                          "recommendationScore": 89.0,
+                                          "latitude": 37.5658,
+                                          "longitude": 126.9751,
+                                          "alternativeCandidates": []
+                                        },
+                                        {
+                                          "placeId": 12,
+                                          "placeName": "청계천",
+                                          "category": "TOUR",
+                                          "recommendationScore": 86.0,
+                                          "latitude": 37.5690,
+                                          "longitude": 126.9784,
+                                          "alternativeCandidates": []
+                                        },
+                                        {
+                                          "placeId": 40,
+                                          "placeName": "광화문 식당",
+                                          "category": "RESTAURANT",
+                                          "recommendationScore": 89.0,
+                                          "latitude": 37.5701,
+                                          "longitude": 126.9768,
+                                          "alternativeCandidates": []
+                                        },
+                                        {
+                                          "placeId": 42,
+                                          "placeName": "종로 맛집",
+                                          "category": "RESTAURANT",
+                                          "recommendationScore": 84.0,
+                                          "latitude": 37.5704,
+                                          "longitude": 126.9921,
+                                          "alternativeCandidates": []
+                                        },
+                                        {
+                                          "placeId": 50,
+                                          "placeName": "서촌 카페",
+                                          "category": "CAFE",
+                                          "recommendationScore": 87.0,
+                                          "latitude": 37.5792,
+                                          "longitude": 126.9693,
+                                          "alternativeCandidates": []
                                         }
                                       ]
                                     }
@@ -314,23 +428,37 @@ class CourseControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.resultId").value(101))
                 .andExpect(jsonPath("$.dailyStartTime").value("10:00"))
-                .andExpect(jsonPath("$.placeCount").value(1))
-                .andExpect(jsonPath("$.dayCount").value(1))
-                .andExpect(jsonPath("$.days.length()").value(1))
-                .andExpect(jsonPath("$.days[0].dayNo").value(1))
-                .andExpect(jsonPath("$.days[0].visitDate").value("2026-07-20"))
-                .andExpect(jsonPath("$.days[0].dailyDistanceKm").value(0.0))
-                .andExpect(jsonPath("$.days[0].dailyTravelTimeMinutes").value(0.0))
-                .andExpect(jsonPath("$.days[0].dailyVisitTimeMinutes").value(90))
-                .andExpect(jsonPath("$.days[0].dailyCourseTimeMinutes").value(90.0))
-                .andExpect(jsonPath("$.days[0].places[0].placeId").value(10))
-                .andExpect(jsonPath(
-                        "$.days[0].places[0].themePalaceCultureYn"
-                ).value("Y"))
-                .andExpect(jsonPath(
-                        "$.days[0].places[0].visitTime"
-                ).value("10:00"))
-                .andExpect(jsonPath("$.totalCourseTimeMinutes").value(90.0));
+                .andExpect(jsonPath("$.optionCount").value(3))
+                .andExpect(jsonPath("$.courseOptions.length()").value(3))
+                .andExpect(jsonPath("$.courseOptions[0].optionType").value("PREFERENCE"))
+                .andExpect(jsonPath("$.courseOptions[1].optionType").value("MIN_DISTANCE"))
+                .andExpect(jsonPath("$.courseOptions[2].optionType").value("BALANCED"))
+                .andExpect(jsonPath("$.courseOptions[0].days[0].visitDate")
+                        .value("2026-07-20"))
+                .andExpect(jsonPath("$.courseOptions[0].days[0].places[0].placeId")
+                        .value(10))
+                .andExpect(jsonPath("$.courseOptions[0].days[0].places[0].visitTime")
+                        .value("10:00"));
+    }
+
+    private CourseOptionResponse option(
+            int optionNo,
+            String optionType,
+            String optionName,
+            CourseDayResponse day
+    ) {
+        return CourseOptionResponse.builder()
+                .optionNo(optionNo)
+                .optionType(optionType)
+                .optionName(optionName)
+                .placeCount(4)
+                .dayCount(1)
+                .totalDistanceKm(1.2)
+                .totalTravelTimeMinutes(16.0)
+                .totalVisitTimeMinutes(300)
+                .totalCourseTimeMinutes(316.0)
+                .days(List.of(day))
+                .build();
     }
 
     @Test
