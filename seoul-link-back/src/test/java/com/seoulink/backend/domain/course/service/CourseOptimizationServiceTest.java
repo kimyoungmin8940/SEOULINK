@@ -18,7 +18,7 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-/** 날짜 분리, 중복 제거, 경로 선택 우선순위와 입력값 검증을 확인한다. */
+/** 날짜 분리, 중복 제거, 2-opt 경로 개선, 선택 우선순위와 입력값 검증을 확인한다. */
 class CourseOptimizationServiceTest {
 
     private CourseOptimizationService courseOptimizationService;
@@ -53,7 +53,7 @@ class CourseOptimizationServiceTest {
         List<OptimizedPlaceDto> result = response.getOptimizedPlaces();
 
         assertEquals(
-                List.of(1L, 2L, 3L, 4L, 5L, 6L),
+                List.of(1L, 3L, 2L, 4L, 5L, 6L),
                 result.stream().map(OptimizedPlaceDto::getPlaceId).toList()
         );
         assertEquals(
@@ -88,6 +88,110 @@ class CourseOptimizationServiceTest {
         );
         assertTrue(response.getTotalDistanceKm() > 0.0);
         assertTrue(response.getTotalTravelTimeMinutes() > 0.0);
+    }
+
+    @Test
+    @DisplayName("2-opt는 첫 장소를 유지하면서 최근접 이웃 경로의 총 이동시간을 줄인다")
+    void improveNearestNeighborRouteWithTwoOpt() {
+        double[][] travelTimes = {
+                {0.0, 1.0, 2.0, 8.0},
+                {1.0, 0.0, 1.0, 2.0},
+                {2.0, 1.0, 0.0, 10.0},
+                {8.0, 2.0, 10.0, 0.0}
+        };
+        double[][] distances = {
+                {0.0, 1.0, 2.0, 8.0},
+                {1.0, 0.0, 1.0, 2.0},
+                {2.0, 1.0, 0.0, 10.0},
+                {8.0, 2.0, 10.0, 0.0}
+        };
+        DistanceService mockedDistanceService = mock(DistanceService.class);
+        when(mockedDistanceService.calculateRouteMatrix(anyList()))
+                .thenReturn(new DistanceService.RouteMatrix(
+                        distances,
+                        travelTimes
+                ));
+        CourseOptimizationService service = new CourseOptimizationService(
+                mockedDistanceService,
+                new VisitDurationService()
+        );
+        LocalDate visitDate = LocalDate.of(2026, 7, 20);
+        CourseOptimizeRequest request = CourseOptimizeRequest.builder()
+                .placeCandidates(List.of(
+                        place(1L, "고정 출발", "TOUR", 100.0,
+                                37.5, 126.9, visitDate),
+                        place(2L, "두 번째 후보", "TOUR", 90.0,
+                                37.51, 126.91, visitDate),
+                        place(3L, "세 번째 후보", "TOUR", 80.0,
+                                37.52, 126.92, visitDate),
+                        place(4L, "네 번째 후보", "TOUR", 70.0,
+                                37.53, 126.93, visitDate)
+                ))
+                .build();
+
+        CourseOptimizeResponse response = service.optimize(request);
+
+        // 최근접 이웃 1-2-3-4(12분)를 1-3-2-4(5분)로 개선한다.
+        assertEquals(
+                List.of(1L, 3L, 2L, 4L),
+                response.getOptimizedPlaces().stream()
+                        .map(OptimizedPlaceDto::getPlaceId)
+                        .toList()
+        );
+        assertEquals(5.0, response.getTotalTravelTimeMinutes(), 0.000001);
+        assertEquals(5.0, response.getTotalDistanceKm(), 0.000001);
+        assertEquals(365.0, response.getTotalCourseTimeMinutes(), 0.000001);
+    }
+
+    @Test
+    @DisplayName("총 이동시간이 같으면 2-opt는 총 거리가 더 짧은 경로를 선택한다")
+    void useDistanceAsTwoOptTieBreaker() {
+        double[][] travelTimes = {
+                {0.0, 1.0, 1.0, 1.0},
+                {1.0, 0.0, 1.0, 1.0},
+                {1.0, 1.0, 0.0, 1.0},
+                {1.0, 1.0, 1.0, 0.0}
+        };
+        double[][] distances = {
+                {0.0, 1.0, 2.0, 8.0},
+                {1.0, 0.0, 1.0, 2.0},
+                {2.0, 1.0, 0.0, 10.0},
+                {8.0, 2.0, 10.0, 0.0}
+        };
+        DistanceService mockedDistanceService = mock(DistanceService.class);
+        when(mockedDistanceService.calculateRouteMatrix(anyList()))
+                .thenReturn(new DistanceService.RouteMatrix(
+                        distances,
+                        travelTimes
+                ));
+        CourseOptimizationService service = new CourseOptimizationService(
+                mockedDistanceService,
+                new VisitDurationService()
+        );
+        LocalDate visitDate = LocalDate.of(2026, 7, 20);
+        CourseOptimizeRequest request = CourseOptimizeRequest.builder()
+                .placeCandidates(List.of(
+                        place(1L, "고정 출발", "TOUR", 100.0,
+                                37.5, 126.9, visitDate),
+                        place(2L, "두 번째 후보", "TOUR", 90.0,
+                                37.51, 126.91, visitDate),
+                        place(3L, "세 번째 후보", "TOUR", 80.0,
+                                37.52, 126.92, visitDate),
+                        place(4L, "네 번째 후보", "TOUR", 70.0,
+                                37.53, 126.93, visitDate)
+                ))
+                .build();
+
+        CourseOptimizeResponse response = service.optimize(request);
+
+        assertEquals(
+                List.of(1L, 3L, 2L, 4L),
+                response.getOptimizedPlaces().stream()
+                        .map(OptimizedPlaceDto::getPlaceId)
+                        .toList()
+        );
+        assertEquals(3.0, response.getTotalTravelTimeMinutes(), 0.000001);
+        assertEquals(5.0, response.getTotalDistanceKm(), 0.000001);
     }
 
     @Test

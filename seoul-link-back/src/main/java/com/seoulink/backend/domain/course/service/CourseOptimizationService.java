@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -21,7 +22,8 @@ import java.util.TreeMap;
  * 추천 장소 후보를 날짜별로 나누고 실제 이동시간이 짧은 순서로 정렬하는 서비스이다.
  *
  * <p>중복 장소를 한 번만 남긴 뒤 각 날짜에서 추천 점수가 가장 높은 장소를 첫 장소로 선택하고,
- * OpenRouteService 경로 행렬의 이동시간을 기준으로 다음 장소를 선택한다.
+ * OpenRouteService 경로 행렬의 이동시간을 기준으로 최근접 이웃 초기 경로를 만든 뒤,
+ * 첫 장소를 고정한 2-opt로 총 이동시간과 거리를 한 번 더 줄인다.
  * 한 구간의 이동거리 또는 이동시간이 허용 기준을 넘으면 같은 날짜·카테고리의
  * 예비 후보 중 기준 안에 들어오는 가장 가까운 장소로 교체한 뒤 전체 경로를 다시 계산한다.
  * 외부 API를 사용할 수 없으면 {@link DistanceService}가 직선거리 방식으로 자동 대체하고,
@@ -135,47 +137,36 @@ public class CourseOptimizationService {
         double totalDistanceKm = 0.0;
         double totalTravelTimeMinutes = 0.0;
 
-        // 하루마다 이동 행렬을 한 번 계산하고 최근접 이웃 방식으로 경로를 만든다.
+        // 하루마다 이동 행렬을 한 번 계산하고 최근접 이웃 + 2-opt로 경로를 만든다.
         for (List<PlaceCandidateDto> dailyCandidates : candidatesByDate.values()) {
             RouteMatrix routeMatrix = distanceService.calculateRouteMatrix(dailyCandidates);
-            List<Integer> remainingIndexes = createIndexes(dailyCandidates.size());
-            int currentIndex = selectFirstPlaceIndex(dailyCandidates);
-            remainingIndexes.remove(Integer.valueOf(currentIndex));
+            List<Integer> routeIndexes = createNearestNeighborRoute(
+                    dailyCandidates,
+                    routeMatrix
+            );
+            routeIndexes = improveRouteWithTwoOpt(routeIndexes, routeMatrix);
 
-            // 첫 장소는 추천 점수가 가장 높은 후보이며 이전 장소 이동값은 0이다.
-            int visitOrder = 1;
-            optimizedPlaces.add(toOptimizedPlace(
-                    dailyCandidates.get(currentIndex),
-                    visitOrder,
-                    0.0,
-                    0.0
-            ));
+            // 2-opt가 끝난 최종 순서를 기준으로 장소별 이동값과 전체 합계를 계산한다.
+            for (int routePosition = 0; routePosition < routeIndexes.size(); routePosition++) {
+                int currentIndex = routeIndexes.get(routePosition);
+                double distanceFromPreviousKm = 0.0;
+                double travelTimeFromPreviousMinutes = 0.0;
+                if (routePosition > 0) {
+                    int previousIndex = routeIndexes.get(routePosition - 1);
+                    distanceFromPreviousKm =
+                            routeMatrix.getDistanceKm(previousIndex, currentIndex);
+                    travelTimeFromPreviousMinutes =
+                            routeMatrix.getTravelTimeMinutes(previousIndex, currentIndex);
+                }
 
-            // 현재 장소에서 이동시간이 가장 짧은 미방문 장소를 차례로 연결한다.
-            while (!remainingIndexes.isEmpty()) {
-                int nextIndex = selectNextPlaceIndex(
-                        currentIndex,
-                        remainingIndexes,
-                        dailyCandidates,
-                        routeMatrix
-                );
-                double distanceFromPreviousKm =
-                        routeMatrix.getDistanceKm(currentIndex, nextIndex);
-                double travelTimeFromPreviousMinutes =
-                        routeMatrix.getTravelTimeMinutes(currentIndex, nextIndex);
-
-                visitOrder++;
                 totalDistanceKm += distanceFromPreviousKm;
                 totalTravelTimeMinutes += travelTimeFromPreviousMinutes;
                 optimizedPlaces.add(toOptimizedPlace(
-                        dailyCandidates.get(nextIndex),
-                        visitOrder,
+                        dailyCandidates.get(currentIndex),
+                        routePosition + 1,
                         distanceFromPreviousKm,
                         travelTimeFromPreviousMinutes
                 ));
-
-                remainingIndexes.remove(Integer.valueOf(nextIndex));
-                currentIndex = nextIndex;
             }
         }
 
@@ -193,6 +184,126 @@ public class CourseOptimizationService {
                 .totalVisitTimeMinutes(totalVisitTimeMinutes)
                 .totalCourseTimeMinutes(totalCourseTimeMinutes)
                 .build();
+    }
+
+    /** 추천 점수가 가장 높은 첫 장소에서 시작하는 최근접 이웃 초기 경로를 만든다. */
+    private List<Integer> createNearestNeighborRoute(
+            List<PlaceCandidateDto> candidates,
+            RouteMatrix routeMatrix
+    ) {
+        List<Integer> remainingIndexes = createIndexes(candidates.size());
+        List<Integer> routeIndexes = new ArrayList<>(candidates.size());
+        int currentIndex = selectFirstPlaceIndex(candidates);
+        routeIndexes.add(currentIndex);
+        remainingIndexes.remove(Integer.valueOf(currentIndex));
+
+        while (!remainingIndexes.isEmpty()) {
+            int nextIndex = selectNextPlaceIndex(
+                    currentIndex,
+                    remainingIndexes,
+                    candidates,
+                    routeMatrix
+            );
+            routeIndexes.add(nextIndex);
+            remainingIndexes.remove(Integer.valueOf(nextIndex));
+            currentIndex = nextIndex;
+        }
+        return routeIndexes;
+    }
+
+    /**
+     * 첫 장소는 유지하고 이후 연속 구간을 뒤집어 더 짧은 열린 경로를 찾는다.
+     * 총 이동시간을 우선하며, 시간이 같을 때만 총 거리를 비교한다.
+     */
+    private List<Integer> improveRouteWithTwoOpt(
+            List<Integer> initialRoute,
+            RouteMatrix routeMatrix
+    ) {
+        if (initialRoute.size() < 3) {
+            return initialRoute;
+        }
+
+        List<Integer> bestRoute = new ArrayList<>(initialRoute);
+        RouteCost bestCost = calculateRouteCost(bestRoute, routeMatrix);
+
+        while (true) {
+            List<Integer> improvedRoute = null;
+            RouteCost improvedCost = bestCost;
+
+            // 0번 출발 장소는 추천 점수 정책을 지키기 위해 뒤집기 대상에서 제외한다.
+            for (int start = 1; start < bestRoute.size() - 1; start++) {
+                for (int end = start + 1; end < bestRoute.size(); end++) {
+                    List<Integer> candidateRoute = reverseSegment(
+                            bestRoute,
+                            start,
+                            end
+                    );
+                    RouteCost candidateCost = calculateRouteCost(
+                            candidateRoute,
+                            routeMatrix
+                    );
+
+                    if (isBetterRouteCost(candidateCost, improvedCost)) {
+                        improvedRoute = candidateRoute;
+                        improvedCost = candidateCost;
+                    }
+                }
+            }
+
+            if (improvedRoute == null) {
+                return bestRoute;
+            }
+            bestRoute = improvedRoute;
+            bestCost = improvedCost;
+        }
+    }
+
+    /** 원본 순서를 변경하지 않고 지정한 양 끝을 포함한 구간만 뒤집는다. */
+    private List<Integer> reverseSegment(
+            List<Integer> route,
+            int start,
+            int end
+    ) {
+        List<Integer> reversed = new ArrayList<>(route);
+        Collections.reverse(reversed.subList(start, end + 1));
+        return reversed;
+    }
+
+    /** 비대칭 경로 행렬도 정확히 비교할 수 있도록 경로 전체 비용을 다시 합산한다. */
+    private RouteCost calculateRouteCost(
+            List<Integer> route,
+            RouteMatrix routeMatrix
+    ) {
+        double totalTravelTimeMinutes = 0.0;
+        double totalDistanceKm = 0.0;
+
+        for (int index = 1; index < route.size(); index++) {
+            int previousIndex = route.get(index - 1);
+            int currentIndex = route.get(index);
+            totalTravelTimeMinutes += routeMatrix.getTravelTimeMinutes(
+                    previousIndex,
+                    currentIndex
+            );
+            totalDistanceKm += routeMatrix.getDistanceKm(
+                    previousIndex,
+                    currentIndex
+            );
+        }
+        return new RouteCost(totalTravelTimeMinutes, totalDistanceKm);
+    }
+
+    /** 이동시간을 우선 비교하고 동률일 때만 거리의 엄격한 개선을 허용한다. */
+    private boolean isBetterRouteCost(RouteCost candidate, RouteCost current) {
+        boolean faster = candidate.travelTimeMinutes()
+                < current.travelTimeMinutes() - ROUTE_TIE_EPSILON;
+        boolean sameTravelTime = Math.abs(
+                candidate.travelTimeMinutes() - current.travelTimeMinutes()
+        ) <= ROUTE_TIE_EPSILON;
+        boolean shorterAtSameTime = sameTravelTime
+                && candidate.distanceKm()
+                < current.distanceKm() - ROUTE_TIE_EPSILON;
+
+        return faster || shorterAtSameTime;
     }
 
     /** 현재 최적화 결과의 먼 구간을 앞에서부터 확인해 실제 사용할 첫 교체안을 찾는다. */
@@ -544,6 +655,13 @@ public class CourseOptimizationService {
                 candidate.getLatitude(),
                 candidate.getLongitude()
         );
+    }
+
+    /** 2-opt 후보 경로의 전체 이동시간과 거리를 함께 비교하는 값이다. */
+    private record RouteCost(
+            double travelTimeMinutes,
+            double distanceKm
+    ) {
     }
 
     /** 먼 구간에서 제거할 장소와 그 자리에 넣을 대체 후보이다. */

@@ -11,6 +11,8 @@
 - 거리 단위: km
 - 시간 단위: 분
 - `days`는 `dayNo` 오름차순, `places`는 `visitOrder` 오름차순이다.
+- 날짜별 첫 장소를 고정한 뒤 최근접 이웃 경로에 2-opt를 적용하며,
+  총 이동시간을 우선하고 동률이면 총 거리를 줄인다.
 - 날짜별 첫 장소의 `distanceFromPreviousKm`와
   `travelTimeFromPreviousMinutes`는 `0`이다.
 - `recommendationScore`는 추천 직후 응답에서는 채워진다. 저장 상세 조회에서는
@@ -21,7 +23,7 @@
 
 `POST /api/courses/optimize`
 
-DB에 저장하지 않고 방문 순서와 이동값만 계산한다.
+DB에 저장하지 않고 최근접 이웃과 2-opt로 방문 순서와 이동값을 계산한다.
 
 ### 요청
 
