@@ -1,11 +1,11 @@
 package com.seoulink.backend.domain.course.controller;
 
 import com.seoulink.backend.domain.course.dto.response.CourseDetailResponse;
+import com.seoulink.backend.domain.course.dto.response.CourseDayResponse;
 import com.seoulink.backend.domain.course.dto.response.CoursePlaceResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseRecommendResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseRecommendationResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseSaveResponse;
-import com.seoulink.backend.domain.course.dto.response.OptimizedPlaceDto;
 import com.seoulink.backend.domain.course.service.CourseOptimizationService;
 import com.seoulink.backend.domain.course.service.CourseRecommendationService;
 import com.seoulink.backend.domain.course.service.CourseSaveService;
@@ -19,6 +19,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
+import java.util.NoSuchElementException;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -118,6 +119,59 @@ class CourseControllerTest {
     }
 
     @Test
+    @DisplayName("HTTP 요청의 대체 후보로 먼 장소를 교체한 결과를 반환한다")
+    void optimizeCourseWithAlternativeCandidates() throws Exception {
+        mockMvc.perform(post("/api/courses/optimize")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "placeCandidates": [
+                                    {
+                                      "placeId": 1,
+                                      "placeName": "서울시청",
+                                      "category": "TOUR",
+                                      "recommendationScore": 100.0,
+                                      "latitude": 37.5665,
+                                      "longitude": 126.9780,
+                                      "visitDate": "2026-07-20"
+                                    },
+                                    {
+                                      "placeId": 2,
+                                      "placeName": "먼 관광지",
+                                      "category": "TOUR",
+                                      "recommendationScore": 90.0,
+                                      "latitude": 37.5854,
+                                      "longitude": 126.9780,
+                                      "visitDate": "2026-07-20"
+                                    }
+                                  ],
+                                  "alternativeCandidates": [
+                                    {
+                                      "placeId": 3,
+                                      "placeName": "덕수궁",
+                                      "category": "관광지",
+                                      "recommendationScore": 85.0,
+                                      "latitude": 37.5658,
+                                      "longitude": 126.9751,
+                                      "visitDate": "2026-07-20"
+                                    }
+                                  ]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.optimizedPlaces.length()").value(2))
+                .andExpect(jsonPath("$.optimizedPlaces[0].placeId").value(1))
+                .andExpect(jsonPath("$.optimizedPlaces[1].placeId").value(3))
+                .andExpect(jsonPath("$.optimizedPlaces[1].visitOrder").value(2))
+                .andExpect(jsonPath("$.totalDistanceKm").value(
+                        org.hamcrest.Matchers.lessThan(2.0)
+                ))
+                .andExpect(jsonPath("$.totalTravelTimeMinutes").value(
+                        org.hamcrest.Matchers.lessThan(30.0)
+                ));
+    }
+
+    @Test
     @DisplayName("필수 입력값이 없으면 400 응답을 반환한다")
     void rejectInvalidCourseRequest() throws Exception {
         mockMvc.perform(post("/api/courses/optimize")
@@ -137,6 +191,7 @@ class CourseControllerTest {
                                 }
                                 """))
                 .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
                 .andExpect(jsonPath("$.message").value("방문 날짜는 필수입니다."));
     }
 
@@ -196,17 +251,27 @@ class CourseControllerTest {
                 .thenReturn(CourseRecommendResponse.builder()
                         .courseId(20L)
                         .title("서울 추천 코스")
+                        .description("설문 기반 추천 코스")
+                        .travelCode("ATLSR")
+                        .courseType("SURVEY")
+                        .region("서울 종로구")
+                        .publicCourse(false)
                         .placeCount(1)
                         .dayCount(1)
                         .totalDistanceKm(0.0)
                         .totalTravelTimeMinutes(0.0)
                         .totalVisitTimeMinutes(90)
                         .totalCourseTimeMinutes(90.0)
-                        .optimizedPlaces(List.of(OptimizedPlaceDto.builder()
-                                .placeId(1L)
-                                .placeName("경복궁")
-                                .visitOrder(1)
-                                .expectedVisitMinutes(90)
+                        .days(List.of(CourseDayResponse.builder()
+                                .dayNo(1)
+                                .visitDate(java.time.LocalDate.of(2026, 7, 20))
+                                .places(List.of(CoursePlaceResponse.builder()
+                                        .placeId(1L)
+                                        .placeName("경복궁")
+                                        .recommendationScore(92.0)
+                                        .visitOrder(1)
+                                        .expectedVisitMinutes(90)
+                                        .build()))
                                 .build()))
                         .build());
 
@@ -233,8 +298,14 @@ class CourseControllerTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.courseId").value(20))
                 .andExpect(jsonPath("$.title").value("서울 추천 코스"))
-                .andExpect(jsonPath("$.optimizedPlaces.length()").value(1))
-                .andExpect(jsonPath("$.optimizedPlaces[0].placeId").value(1))
+                .andExpect(jsonPath("$.description").value("설문 기반 추천 코스"))
+                .andExpect(jsonPath("$.travelCode").value("ATLSR"))
+                .andExpect(jsonPath("$.courseType").value("SURVEY"))
+                .andExpect(jsonPath("$.days.length()").value(1))
+                .andExpect(jsonPath("$.days[0].dayNo").value(1))
+                .andExpect(jsonPath("$.days[0].visitDate").value("2026-07-20"))
+                .andExpect(jsonPath("$.days[0].places[0].placeId").value(1))
+                .andExpect(jsonPath("$.days[0].places[0].recommendationScore").value(92.0))
                 .andExpect(jsonPath("$.totalCourseTimeMinutes").value(90.0));
     }
 
@@ -249,12 +320,15 @@ class CourseControllerTest {
                         .publicCourse(true)
                         .placeCount(1)
                         .dayCount(1)
-                        .places(List.of(CoursePlaceResponse.builder()
-                                .detailId(100L)
-                                .placeId(1L)
+                        .days(List.of(CourseDayResponse.builder()
                                 .dayNo(1)
-                                .visitOrder(1)
-                                .expectedVisitMinutes(90)
+                                .visitDate(java.time.LocalDate.of(2026, 7, 20))
+                                .places(List.of(CoursePlaceResponse.builder()
+                                        .detailId(100L)
+                                        .placeId(1L)
+                                        .visitOrder(1)
+                                        .expectedVisitMinutes(90)
+                                        .build()))
                                 .build()))
                         .build());
 
@@ -264,8 +338,42 @@ class CourseControllerTest {
                 .andExpect(jsonPath("$.title").value("서울 궁궐 코스"))
                 .andExpect(jsonPath("$.placeCount").value(1))
                 .andExpect(jsonPath("$.dayCount").value(1))
-                .andExpect(jsonPath("$.places[0].placeId").value(1))
-                .andExpect(jsonPath("$.places[0].visitOrder").value(1));
+                .andExpect(jsonPath("$.days[0].dayNo").value(1))
+                .andExpect(jsonPath("$.days[0].visitDate").value("2026-07-20"))
+                .andExpect(jsonPath("$.days[0].places[0].placeId").value(1))
+                .andExpect(jsonPath("$.days[0].places[0].visitOrder").value(1));
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 코스는 코드가 포함된 404 응답을 반환한다")
+    void getUnknownCourse() throws Exception {
+        when(courseService.getCourse(999L))
+                .thenThrow(new NoSuchElementException(
+                        "코스를 찾을 수 없습니다. courseId=999"
+                ));
+
+        mockMvc.perform(get("/api/courses/999"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("COURSE_NOT_FOUND"))
+                .andExpect(jsonPath("$.message").value(
+                        "코스를 찾을 수 없습니다. courseId=999"
+                ));
+    }
+
+    @Test
+    @DisplayName("코스 내부 처리 실패는 상세 원인을 숨긴 500 응답을 반환한다")
+    void rejectCourseProcessingFailure() throws Exception {
+        when(courseRecommendationService.recommendAndSave(any()))
+                .thenThrow(new IllegalStateException("DB 상세 저장 실패"));
+
+        mockMvc.perform(post("/api/courses/recommend")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value("COURSE_PROCESSING_FAILED"))
+                .andExpect(jsonPath("$.message").value(
+                        "코스 처리 중 오류가 발생했습니다."
+                ));
     }
 
     @Test

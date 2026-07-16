@@ -6,8 +6,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.time.LocalDate;
-
 /** 저장된 코스의 장소별 방문 순서와 화면 표시 정보를 반환한다. */
 @Getter
 @Setter
@@ -28,10 +26,9 @@ public class CoursePlaceResponse {
     private String imageUrl;
     private Double latitude;
     private Double longitude;
+    private Double recommendationScore;
 
-    // 저장된 일정 정보이다. dayNo는 1일차·2일차 표시, visitOrder는 하루 안의 순서이다.
-    private Integer dayNo;
-    private LocalDate visitDate;
+    // 날짜 정보는 상위 CourseDayResponse가 담당하며, 이 DTO는 하루 안의 순서를 표현한다.
     private Integer visitOrder;
     private String memo;
     private String visitTime;

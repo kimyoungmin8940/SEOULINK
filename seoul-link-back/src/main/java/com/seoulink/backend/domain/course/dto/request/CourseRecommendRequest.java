@@ -32,7 +32,11 @@ public class CourseRecommendRequest {
     @Builder.Default
     private Boolean publicCourse = false;
 
-    // 추천 담당자가 계산한 후보를 받아 최적화 서비스로 전달한다.
+    // 추천 담당자가 계산한 1차 코스 후보를 받아 최적화 서비스로 전달한다.
     @Builder.Default
     private List<PlaceCandidateDto> placeCandidates = new ArrayList<>();
+
+    // 먼 장소가 발견됐을 때 같은 날짜·카테고리 안에서 교체할 예비 후보이다.
+    @Builder.Default
+    private List<PlaceCandidateDto> alternativeCandidates = new ArrayList<>();
 }

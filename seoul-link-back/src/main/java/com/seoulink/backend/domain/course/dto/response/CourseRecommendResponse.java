@@ -20,6 +20,11 @@ public class CourseRecommendResponse {
     // 방금 저장된 추천 코스의 식별자와 전체 집계값이다.
     private Long courseId;
     private String title;
+    private String description;
+    private String travelCode;
+    private String courseType;
+    private String region;
+    private Boolean publicCourse;
     private Integer placeCount;
     private Integer dayCount;
     private Double totalDistanceKm;
@@ -27,7 +32,7 @@ public class CourseRecommendResponse {
     private Integer totalVisitTimeMinutes;
     private Double totalCourseTimeMinutes;
 
-    // 프론트가 저장 직후 경로를 바로 표시할 수 있도록 최적화 결과도 함께 반환한다.
+    // 추천 결과와 상세 조회가 같은 날짜별 구조를 사용하도록 통일한다.
     @Builder.Default
-    private List<OptimizedPlaceDto> optimizedPlaces = new ArrayList<>();
+    private List<CourseDayResponse> days = new ArrayList<>();
 }

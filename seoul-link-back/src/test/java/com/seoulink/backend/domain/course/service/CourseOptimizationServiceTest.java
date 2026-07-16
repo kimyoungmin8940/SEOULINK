@@ -14,6 +14,9 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /** 날짜 분리, 중복 제거, 경로 선택 우선순위와 입력값 검증을 확인한다. */
 class CourseOptimizationServiceTest {
@@ -155,6 +158,57 @@ class CourseOptimizationServiceTest {
     }
 
     @Test
+    @DisplayName("유효 범위를 벗어난 좌표가 있으면 최적화를 중단한다")
+    void optimizeRejectsOutOfRangeCoordinates() {
+        PlaceCandidateDto invalidCandidate = place(
+                1L,
+                "잘못된 좌표의 장소",
+                "TOUR",
+                90.0,
+                91.0,
+                126.9780,
+                LocalDate.of(2026, 7, 20)
+        );
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> courseOptimizationService.optimize(
+                        CourseOptimizeRequest.builder()
+                                .placeCandidates(List.of(invalidCandidate))
+                                .build()
+                )
+        );
+
+        assertEquals(
+                "위도는 -90 이상 90 이하의 유한한 숫자여야 합니다.",
+                exception.getMessage()
+        );
+    }
+
+    @Test
+    @DisplayName("대체 후보의 좌표가 누락되어도 최적화를 중단한다")
+    void optimizeRejectsAlternativeWithoutCoordinates() {
+        LocalDate visitDate = LocalDate.of(2026, 7, 20);
+        CourseOptimizeRequest request = CourseOptimizeRequest.builder()
+                .placeCandidates(List.of(place(
+                        1L, "서울시청", "TOUR", 100.0,
+                        37.5665, 126.9780, visitDate
+                )))
+                .alternativeCandidates(List.of(place(
+                        2L, "좌표 없는 대체 후보", "TOUR", 90.0,
+                        null, 126.9751, visitDate
+                )))
+                .build();
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> courseOptimizationService.optimize(request)
+        );
+
+        assertEquals("장소의 위도와 경도는 필수입니다.", exception.getMessage());
+    }
+
+    @Test
     @DisplayName("중복 장소는 한 번만 남기고 같은 날짜에서는 높은 추천 점수를 사용한다")
     void optimizeRemovesDuplicatePlaces() {
         LocalDate visitDate = LocalDate.of(2026, 7, 20);
@@ -234,6 +288,212 @@ class CourseOptimizationServiceTest {
         );
         assertEquals(0.0, response.getTotalDistanceKm(), 0.000001);
         assertEquals(0.0, response.getTotalTravelTimeMinutes(), 0.000001);
+    }
+
+    @Test
+    @DisplayName("거리 2km 초과 장소를 같은 날짜와 카테고리의 가까운 후보로 교체한다")
+    void replacePlaceWhenDistanceExceedsTwoKilometers() {
+        LocalDate visitDate = LocalDate.of(2026, 7, 20);
+        CourseOptimizeRequest request = CourseOptimizeRequest.builder()
+                .placeCandidates(List.of(
+                        place(1L, "서울시청", "TOUR", 100.0,
+                                37.5665, 126.9780, visitDate),
+                        // 직선거리는 약 2.1km, 예상 도보시간은 약 28분이다.
+                        place(2L, "먼 관광지", "TOUR", 90.0,
+                                37.5854, 126.9780, visitDate)
+                ))
+                .alternativeCandidates(List.of(
+                        // 한글 별칭이어도 TOUR와 같은 기본 카테고리로 처리한다.
+                        place(3L, "덕수궁", "관광지", 85.0,
+                                37.5658, 126.9751, visitDate)
+                ))
+                .build();
+
+        CourseOptimizeResponse response = courseOptimizationService.optimize(request);
+
+        assertEquals(
+                List.of(1L, 3L),
+                response.getOptimizedPlaces().stream()
+                        .map(OptimizedPlaceDto::getPlaceId)
+                        .toList()
+        );
+        assertTrue(response.getTotalDistanceKm() < 2.0);
+        assertTrue(response.getTotalTravelTimeMinutes() < 30.0);
+        assertEquals(
+                response.getOptimizedPlaces().get(1).getDistanceFromPreviousKm(),
+                response.getTotalDistanceKm(),
+                0.000001
+        );
+        assertEquals(
+                response.getOptimizedPlaces().get(1).getTravelTimeFromPreviousMinutes(),
+                response.getTotalTravelTimeMinutes(),
+                0.000001
+        );
+    }
+
+    @Test
+    @DisplayName("거리가 2km 이하여도 이동시간이 30분을 초과하면 교체한다")
+    void replacePlaceWhenTravelTimeExceedsThirtyMinutes() {
+        DistanceService mockedDistanceService = mock(DistanceService.class);
+        when(mockedDistanceService.calculateRouteMatrix(anyList()))
+                .thenAnswer(invocation -> {
+                    List<PlaceCandidateDto> places = invocation.getArgument(0);
+                    int size = places.size();
+                    double[][] distances = new double[size][size];
+                    double[][] travelTimes = new double[size][size];
+                    boolean containsDistantPlace = places.stream()
+                            .anyMatch(place -> place.getPlaceId().equals(2L));
+
+                    for (int from = 0; from < size; from++) {
+                        for (int to = 0; to < size; to++) {
+                            if (from == to) {
+                                continue;
+                            }
+                            distances[from][to] = containsDistantPlace ? 1.5 : 0.5;
+                            travelTimes[from][to] = containsDistantPlace ? 35.0 : 10.0;
+                        }
+                    }
+                    return new DistanceService.RouteMatrix(distances, travelTimes);
+                });
+        CourseOptimizationService service = new CourseOptimizationService(
+                mockedDistanceService,
+                new VisitDurationService()
+        );
+        LocalDate visitDate = LocalDate.of(2026, 7, 20);
+        CourseOptimizeRequest request = CourseOptimizeRequest.builder()
+                .placeCandidates(List.of(
+                        place(1L, "출발 장소", "CAFE", 100.0,
+                                37.5665, 126.9780, visitDate),
+                        place(2L, "이동이 오래 걸리는 카페", "CAFE", 90.0,
+                                37.5670, 126.9790, visitDate)
+                ))
+                .alternativeCandidates(List.of(
+                        place(3L, "가까운 대체 카페", "CAFE", 80.0,
+                                37.5680, 126.9780, visitDate)
+                ))
+                .build();
+
+        CourseOptimizeResponse response = service.optimize(request);
+
+        assertEquals(
+                List.of(1L, 3L),
+                response.getOptimizedPlaces().stream()
+                        .map(OptimizedPlaceDto::getPlaceId)
+                        .toList()
+        );
+        assertEquals(0.5, response.getTotalDistanceKm(), 0.000001);
+        assertEquals(10.0, response.getTotalTravelTimeMinutes(), 0.000001);
+    }
+
+    @Test
+    @DisplayName("조건을 만족하는 대체 후보가 없으면 원래 장소와 경로를 유지한다")
+    void keepOriginalPlaceWhenNoUsableAlternativeExists() {
+        LocalDate visitDate = LocalDate.of(2026, 7, 20);
+        CourseOptimizeRequest request = CourseOptimizeRequest.builder()
+                .placeCandidates(List.of(
+                        place(1L, "서울시청", "TOUR", 100.0,
+                                37.5665, 126.9780, visitDate),
+                        place(2L, "서울숲", "TOUR", 90.0,
+                                37.5444, 127.0374, visitDate)
+                ))
+                .alternativeCandidates(List.of(
+                        // 카테고리가 다르므로 관광지 교체 후보로 사용할 수 없다.
+                        place(3L, "가까운 카페", "CAFE", 95.0,
+                                37.5658, 126.9751, visitDate)
+                ))
+                .build();
+
+        CourseOptimizeResponse response = courseOptimizationService.optimize(request);
+
+        assertEquals(
+                List.of(1L, 2L),
+                response.getOptimizedPlaces().stream()
+                        .map(OptimizedPlaceDto::getPlaceId)
+                        .toList()
+        );
+        assertTrue(response.getTotalDistanceKm() > 2.0);
+    }
+
+    @Test
+    @DisplayName("현재 코스와 같은 장소 ID의 대체 후보는 중복 삽입하지 않는다")
+    void ignoreAlternativeAlreadyIncludedInCourse() {
+        LocalDate visitDate = LocalDate.of(2026, 7, 20);
+        CourseOptimizeRequest request = CourseOptimizeRequest.builder()
+                .placeCandidates(List.of(
+                        place(1L, "서울시청", "TOUR", 100.0,
+                                37.5665, 126.9780, visitDate),
+                        place(2L, "서울숲", "TOUR", 90.0,
+                                37.5444, 127.0374, visitDate)
+                ))
+                .alternativeCandidates(List.of(
+                        // 장소 ID 2는 이미 코스에 있으므로 좌표가 가까워도 대체 후보로 쓰지 않는다.
+                        place(2L, "중복 대체 후보", "TOUR", 95.0,
+                                37.5658, 126.9751, visitDate)
+                ))
+                .build();
+
+        CourseOptimizeResponse response = courseOptimizationService.optimize(request);
+
+        assertEquals(
+                List.of(1L, 2L),
+                response.getOptimizedPlaces().stream()
+                        .map(OptimizedPlaceDto::getPlaceId)
+                        .toList()
+        );
+        assertEquals(2, response.getOptimizedPlaces().size());
+        assertTrue(response.getTotalDistanceKm() > 2.0);
+    }
+
+    @Test
+    @DisplayName("다일 코스는 날짜별 먼 장소를 각각 교체하고 방문 순서를 날짜마다 다시 계산한다")
+    void replaceDistantPlacesForMultipleDays() {
+        LocalDate firstDay = LocalDate.of(2026, 7, 20);
+        LocalDate secondDay = LocalDate.of(2026, 7, 21);
+        CourseOptimizeRequest request = CourseOptimizeRequest.builder()
+                .placeCandidates(List.of(
+                        place(1L, "첫날 출발", "TOUR", 100.0,
+                                37.5665, 126.9780, firstDay),
+                        place(2L, "첫날 먼 장소", "TOUR", 90.0,
+                                37.5854, 126.9780, firstDay),
+                        place(3L, "둘째날 출발", "CAFE", 100.0,
+                                37.5572, 126.9254, secondDay),
+                        place(4L, "둘째날 먼 카페", "CAFE", 90.0,
+                                37.5761, 126.9254, secondDay)
+                ))
+                .alternativeCandidates(List.of(
+                        place(5L, "첫날 가까운 관광지", "TOUR", 85.0,
+                                37.5658, 126.9751, firstDay),
+                        place(6L, "둘째날 가까운 카페", "CAFE", 85.0,
+                                37.5580, 126.9270, secondDay)
+                ))
+                .build();
+
+        CourseOptimizeResponse response = courseOptimizationService.optimize(request);
+
+        assertEquals(
+                List.of(1L, 5L, 3L, 6L),
+                response.getOptimizedPlaces().stream()
+                        .map(OptimizedPlaceDto::getPlaceId)
+                        .toList()
+        );
+        assertEquals(
+                List.of(1, 2, 1, 2),
+                response.getOptimizedPlaces().stream()
+                        .map(OptimizedPlaceDto::getVisitOrder)
+                        .toList()
+        );
+        assertEquals(firstDay, response.getOptimizedPlaces().get(0).getVisitDate());
+        assertEquals(secondDay, response.getOptimizedPlaces().get(2).getVisitDate());
+        assertEquals(
+                0.0,
+                response.getOptimizedPlaces().get(2).getDistanceFromPreviousKm(),
+                0.000001
+        );
+        assertEquals(
+                0.0,
+                response.getOptimizedPlaces().get(2).getTravelTimeFromPreviousMinutes(),
+                0.000001
+        );
     }
 
     @Test

@@ -4,6 +4,7 @@ import com.seoulink.backend.domain.course.dto.request.CourseOptimizeRequest;
 import com.seoulink.backend.domain.course.dto.request.CourseRecommendRequest;
 import com.seoulink.backend.domain.course.dto.request.CourseSaveRequest;
 import com.seoulink.backend.domain.course.dto.response.CourseDetailResponse;
+import com.seoulink.backend.domain.course.dto.response.CourseErrorResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseOptimizeResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseRecommendResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseRecommendationResponse;
@@ -106,18 +107,30 @@ public class CourseController {
      */
     @ExceptionHandler(IllegalArgumentException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
-    public ErrorResponse handleInvalidRequest(IllegalArgumentException exception) {
-        return new ErrorResponse(exception.getMessage());
+    public CourseErrorResponse handleInvalidRequest(
+            IllegalArgumentException exception
+    ) {
+        return new CourseErrorResponse("INVALID_REQUEST", exception.getMessage());
     }
 
     /** 존재하지 않는 코스를 조회한 경우 404 응답으로 변환한다. */
     @ExceptionHandler(NoSuchElementException.class)
     @ResponseStatus(HttpStatus.NOT_FOUND)
-    public ErrorResponse handleCourseNotFound(NoSuchElementException exception) {
-        return new ErrorResponse(exception.getMessage());
+    public CourseErrorResponse handleCourseNotFound(
+            NoSuchElementException exception
+    ) {
+        return new CourseErrorResponse("COURSE_NOT_FOUND", exception.getMessage());
     }
 
-    /** 코스 API에서 사용하는 임시 오류 응답 형식이다. */
-    public record ErrorResponse(String message) {
+    /** 저장·최적화 내부 상태 오류는 상세 원인을 노출하지 않고 공통 500 코드로 반환한다. */
+    @ExceptionHandler(IllegalStateException.class)
+    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
+    public CourseErrorResponse handleCourseProcessingFailure(
+            IllegalStateException exception
+    ) {
+        return new CourseErrorResponse(
+                "COURSE_PROCESSING_FAILED",
+                "코스 처리 중 오류가 발생했습니다."
+        );
     }
 }

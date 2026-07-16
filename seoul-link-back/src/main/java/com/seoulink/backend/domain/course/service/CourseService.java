@@ -1,6 +1,7 @@
 package com.seoulink.backend.domain.course.service;
 
 import com.seoulink.backend.domain.course.dto.response.CourseDetailResponse;
+import com.seoulink.backend.domain.course.dto.response.CourseDayResponse;
 import com.seoulink.backend.domain.course.dto.response.CoursePlaceResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseRecommendationResponse;
 import com.seoulink.backend.domain.course.entity.CourseDetail;
@@ -10,8 +11,11 @@ import com.seoulink.backend.domain.course.repository.TravelCourseRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.TreeMap;
 
 /**
  * 저장된 여행 코스와 날짜별 장소 순서를 조회한다.
@@ -48,13 +52,7 @@ public class CourseService {
                 courseDetailRepository.findByCourseIdOrderByDayNoAscPlaceOrderAsc(
                         courseId
                 );
-        List<CoursePlaceResponse> places = details.stream()
-                .map(this::toPlaceResponse)
-                .toList();
-        int dayCount = (int) details.stream()
-                .map(CourseDetail::getDayNo)
-                .distinct()
-                .count();
+        List<CourseDayResponse> days = toDayResponses(details);
 
         return CourseDetailResponse.builder()
                 .courseId(course.getCourseId())
@@ -65,15 +63,15 @@ public class CourseService {
                 .region(course.getRegion())
                 .publicCourse("Y".equalsIgnoreCase(course.getPublicStatus()))
                 .viewCount(course.getViewCount())
-                .placeCount(places.size())
-                .dayCount(dayCount)
+                .placeCount(details.size())
+                .dayCount(days.size())
                 .totalDistanceKm(course.getTotalDistanceKm())
                 .totalTravelTimeMinutes(course.getTotalTravelTimeMinutes())
                 .totalVisitTimeMinutes(course.getTotalVisitTimeMinutes())
                 .totalCourseTimeMinutes(course.getTotalCourseTimeMinutes())
                 .createdAt(course.getCreatedAt())
                 .updatedAt(course.getUpdatedAt())
-                .places(places)
+                .days(days)
                 .build();
     }
 
@@ -142,13 +140,31 @@ public class CourseService {
         }
     }
 
+    /** 저장 상세를 dayNo 기준으로 묶어 추천 결과와 동일한 날짜별 구조를 만든다. */
+    private List<CourseDayResponse> toDayResponses(List<CourseDetail> details) {
+        Map<Integer, List<CourseDetail>> detailsByDay = new TreeMap<>();
+        for (CourseDetail detail : details) {
+            detailsByDay
+                    .computeIfAbsent(detail.getDayNo(), ignored -> new ArrayList<>())
+                    .add(detail);
+        }
+
+        return detailsByDay.entrySet().stream()
+                .map(entry -> CourseDayResponse.builder()
+                        .dayNo(entry.getKey())
+                        .visitDate(entry.getValue().get(0).getVisitDate())
+                        .places(entry.getValue().stream()
+                                .map(this::toPlaceResponse)
+                                .toList())
+                        .build())
+                .toList();
+    }
+
     /** 상세 장소 엔티티의 저장 필드를 프론트 조회 응답 필드로 변환한다. */
     private CoursePlaceResponse toPlaceResponse(CourseDetail detail) {
         return CoursePlaceResponse.builder()
                 .detailId(detail.getDetailId())
                 .placeId(detail.getPlaceId())
-                .dayNo(detail.getDayNo())
-                .visitDate(detail.getVisitDate())
                 .visitOrder(detail.getPlaceOrder())
                 .memo(detail.getMemo())
                 .visitTime(detail.getVisitTime())

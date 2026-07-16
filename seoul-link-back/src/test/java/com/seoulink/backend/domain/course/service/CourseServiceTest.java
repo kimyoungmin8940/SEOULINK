@@ -63,7 +63,8 @@ class CourseServiceTest {
                 .build();
         List<CourseDetail> details = List.of(
                 detail(100L, 10L, 1L, 1, 1, visitDate, 90, 0.0, 0.0),
-                detail(101L, 10L, 2L, 1, 2, visitDate, 90, 0.27, 3.56)
+                detail(101L, 10L, 2L, 1, 2, visitDate, 90, 0.27, 3.56),
+                detail(102L, 10L, 3L, 2, 1, visitDate.plusDays(1), 90, 0.0, 0.0)
         );
 
         when(travelCourseRepository.findById(10L))
@@ -77,15 +78,27 @@ class CourseServiceTest {
         assertEquals(10L, response.getCourseId());
         assertEquals("서울 궁궐 코스", response.getTitle());
         assertEquals(true, response.getPublicCourse());
-        assertEquals(2, response.getPlaceCount());
-        assertEquals(1, response.getDayCount());
-        assertEquals(List.of(1L, 2L), response.getPlaces().stream()
+        assertEquals(3, response.getPlaceCount());
+        assertEquals(2, response.getDayCount());
+        assertEquals(List.of(1, 2), response.getDays().stream()
+                .map(day -> day.getDayNo())
+                .toList());
+        assertEquals(
+                List.of(visitDate, visitDate.plusDays(1)),
+                response.getDays().stream()
+                        .map(day -> day.getVisitDate())
+                        .toList()
+        );
+        assertEquals(List.of(1L, 2L), response.getDays().get(0).getPlaces().stream()
                 .map(place -> place.getPlaceId())
                 .toList());
-        assertEquals(List.of(1, 2), response.getPlaces().stream()
+        assertEquals(List.of(1, 2), response.getDays().get(0).getPlaces().stream()
                 .map(place -> place.getVisitOrder())
                 .toList());
-        assertEquals(90, response.getPlaces().get(0).getExpectedVisitMinutes());
+        assertEquals(
+                90,
+                response.getDays().get(0).getPlaces().get(0).getExpectedVisitMinutes()
+        );
     }
 
     @Test

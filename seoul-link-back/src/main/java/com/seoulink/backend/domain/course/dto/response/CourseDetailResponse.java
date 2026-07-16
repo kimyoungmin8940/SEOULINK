@@ -39,7 +39,7 @@ public class CourseDetailResponse {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
-    // 날짜와 방문 순서대로 정렬된 상세 장소 목록이다.
+    // 날짜별로 묶이고 각 날짜 안에서 방문 순서대로 정렬된 장소 목록이다.
     @Builder.Default
-    private List<CoursePlaceResponse> places = new ArrayList<>();
+    private List<CourseDayResponse> days = new ArrayList<>();
 }

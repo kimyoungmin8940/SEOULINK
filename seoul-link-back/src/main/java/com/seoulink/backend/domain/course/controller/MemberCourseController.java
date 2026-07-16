@@ -1,5 +1,6 @@
 package com.seoulink.backend.domain.course.controller;
 
+import com.seoulink.backend.domain.course.dto.response.CourseErrorResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseRecommendationResponse;
 import com.seoulink.backend.domain.course.service.CourseService;
 import org.springframework.http.HttpStatus;
@@ -34,11 +35,9 @@ public class MemberCourseController {
     /** 회원 ID 형식 오류를 클라이언트 입력 오류인 400으로 반환한다. */
     @ExceptionHandler(IllegalArgumentException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
-    public ErrorResponse handleInvalidRequest(IllegalArgumentException exception) {
-        return new ErrorResponse(exception.getMessage());
-    }
-
-    /** 내 코스 조회 API에서 사용하는 임시 오류 응답 형식이다. */
-    public record ErrorResponse(String message) {
+    public CourseErrorResponse handleInvalidRequest(
+            IllegalArgumentException exception
+    ) {
+        return new CourseErrorResponse("INVALID_REQUEST", exception.getMessage());
     }
 }

@@ -168,6 +168,40 @@ class CourseSaveServiceTest {
     }
 
     @Test
+    @DisplayName("상세 장소 저장 중 오류가 발생하면 예외를 전파해 트랜잭션 롤백되게 한다")
+    void propagateDetailSaveFailureForRollback() {
+        LocalDate visitDate = LocalDate.of(2026, 7, 20);
+        CourseSaveRequest request = CourseSaveRequest.builder()
+                .memberId(1L)
+                .title("저장 실패 테스트 코스")
+                .places(List.of(place(
+                        1L,
+                        visitDate,
+                        1,
+                        90,
+                        0.0,
+                        0.0
+                )))
+                .build();
+        when(travelCourseRepository.save(any(TravelCourse.class)))
+                .thenReturn(TravelCourse.builder()
+                        .courseId(10L)
+                        .title("저장 실패 테스트 코스")
+                        .build());
+        when(courseDetailRepository.saveAll(any()))
+                .thenThrow(new IllegalStateException("상세 장소 저장 실패"));
+
+        IllegalStateException exception = assertThrows(
+                IllegalStateException.class,
+                () -> courseSaveService.saveOptimizedCourse(request)
+        );
+
+        assertEquals("상세 장소 저장 실패", exception.getMessage());
+        verify(travelCourseRepository).save(any(TravelCourse.class));
+        verify(courseDetailRepository).saveAll(any());
+    }
+
+    @Test
     @DisplayName("코스와 상세 장소 저장은 하나의 트랜잭션으로 처리한다")
     void saveMethodIsTransactional() throws NoSuchMethodException {
         boolean transactional = CourseSaveService.class

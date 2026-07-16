@@ -57,6 +57,15 @@ class CourseRecommendationServiceTest {
                 .longitude(126.9770)
                 .visitDate(visitDate)
                 .build();
+        PlaceCandidateDto alternativeCandidate = PlaceCandidateDto.builder()
+                .placeId(2L)
+                .placeName("덕수궁")
+                .category("TOUR")
+                .recommendationScore(88.0)
+                .latitude(37.5658)
+                .longitude(126.9751)
+                .visitDate(visitDate)
+                .build();
         OptimizedPlaceDto optimizedPlace = OptimizedPlaceDto.builder()
                 .placeId(1L)
                 .placeName("경복궁")
@@ -100,9 +109,13 @@ class CourseRecommendationServiceTest {
                                 .travelCode("ATLSR")
                                 .region("서울 종로구")
                                 .placeCandidates(List.of(candidate))
+                                .alternativeCandidates(List.of(alternativeCandidate))
                                 .build()
                 );
 
+        ArgumentCaptor<CourseOptimizeRequest> optimizeCaptor =
+                ArgumentCaptor.forClass(CourseOptimizeRequest.class);
+        verify(courseOptimizationService).optimize(optimizeCaptor.capture());
         ArgumentCaptor<CourseSaveRequest> saveCaptor =
                 ArgumentCaptor.forClass(CourseSaveRequest.class);
         verify(courseSaveService).saveOptimizedCourse(saveCaptor.capture());
@@ -110,12 +123,28 @@ class CourseRecommendationServiceTest {
 
         assertEquals(1L, saveRequest.getMemberId());
         assertEquals(5L, saveRequest.getResultId());
+        assertEquals(1, optimizeCaptor.getValue().getAlternativeCandidates().size());
+        assertEquals(
+                2L,
+                optimizeCaptor.getValue().getAlternativeCandidates().get(0).getPlaceId()
+        );
         assertEquals("SURVEY", saveRequest.getCourseType());
         assertEquals(1, saveRequest.getPlaces().size());
         assertEquals(1L, saveRequest.getPlaces().get(0).getPlaceId());
         assertEquals(1, saveRequest.getPlaces().get(0).getVisitOrder());
         assertEquals(20L, response.getCourseId());
-        assertEquals(1, response.getOptimizedPlaces().size());
+        assertEquals("ATLSR", response.getTravelCode());
+        assertEquals("SURVEY", response.getCourseType());
+        assertEquals("서울 종로구", response.getRegion());
+        assertEquals(1, response.getDays().size());
+        assertEquals(1, response.getDays().get(0).getDayNo());
+        assertEquals(visitDate, response.getDays().get(0).getVisitDate());
+        assertEquals(1L, response.getDays().get(0).getPlaces().get(0).getPlaceId());
+        assertEquals(
+                92.0,
+                response.getDays().get(0).getPlaces().get(0).getRecommendationScore(),
+                0.000001
+        );
         assertEquals(
                 90.0,
                 response.getTotalCourseTimeMinutes(),

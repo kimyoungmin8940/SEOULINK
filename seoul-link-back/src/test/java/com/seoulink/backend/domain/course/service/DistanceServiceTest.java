@@ -114,6 +114,29 @@ class DistanceServiceTest {
         );
     }
 
+    @Test
+    @DisplayName("NaN 또는 무한대 좌표는 예외가 발생한다")
+    void calculateDistanceKmRejectsNonFiniteCoordinates() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> distanceService.calculateDistanceKm(
+                        37.5665,
+                        Double.NaN,
+                        37.5796,
+                        126.9770
+                )
+        );
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> distanceService.calculateDistanceKm(
+                        37.5665,
+                        126.9780,
+                        Double.POSITIVE_INFINITY,
+                        126.9770
+                )
+        );
+    }
+
     /** 거리 행렬 테스트에 필요한 최소 장소 후보를 생성한다. */
     private PlaceCandidateDto place(
             Long placeId,

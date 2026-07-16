@@ -48,4 +48,21 @@ class MemberCourseControllerTest {
                 .andExpect(jsonPath("$[0].title").value("내 서울 코스"))
                 .andExpect(jsonPath("$[0].placeCount").value(2));
     }
+
+    @Test
+    @DisplayName("잘못된 회원 ID는 코드가 포함된 400 응답을 반환한다")
+    void rejectInvalidMemberId() throws Exception {
+        when(courseService.getMemberCourses(0L))
+                .thenThrow(new IllegalArgumentException(
+                        "회원 ID는 1 이상이어야 합니다."
+                ));
+
+        mockMvc.perform(get("/api/members/me/courses")
+                        .param("memberId", "0"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+                .andExpect(jsonPath("$.message").value(
+                        "회원 ID는 1 이상이어야 합니다."
+                ));
+    }
 }

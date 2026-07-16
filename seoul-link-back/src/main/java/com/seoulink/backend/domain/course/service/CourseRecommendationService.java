@@ -4,14 +4,20 @@ import com.seoulink.backend.domain.course.dto.request.CourseOptimizeRequest;
 import com.seoulink.backend.domain.course.dto.request.CourseRecommendRequest;
 import com.seoulink.backend.domain.course.dto.request.CourseSavePlaceDto;
 import com.seoulink.backend.domain.course.dto.request.CourseSaveRequest;
+import com.seoulink.backend.domain.course.dto.response.CourseDayResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseOptimizeResponse;
+import com.seoulink.backend.domain.course.dto.response.CoursePlaceResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseRecommendResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseSaveResponse;
 import com.seoulink.backend.domain.course.dto.response.OptimizedPlaceDto;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 
 /** 추천 후보 최적화부터 최종 코스 저장까지 하나의 서비스 흐름으로 연결한다. */
 @Service
@@ -42,6 +48,7 @@ public class CourseRecommendationService {
         CourseOptimizeResponse optimized = courseOptimizationService.optimize(
                 CourseOptimizeRequest.builder()
                         .placeCandidates(request.getPlaceCandidates())
+                        .alternativeCandidates(request.getAlternativeCandidates())
                         .build()
         );
 
@@ -70,13 +77,64 @@ public class CourseRecommendationService {
         return CourseRecommendResponse.builder()
                 .courseId(saved.getCourseId())
                 .title(saved.getTitle())
+                .description(request.getDescription())
+                .travelCode(request.getTravelCode())
+                .courseType("SURVEY")
+                .region(request.getRegion())
+                .publicCourse(Boolean.TRUE.equals(request.getPublicCourse()))
                 .placeCount(saved.getPlaceCount())
                 .dayCount(saved.getDayCount())
                 .totalDistanceKm(saved.getTotalDistanceKm())
                 .totalTravelTimeMinutes(saved.getTotalTravelTimeMinutes())
                 .totalVisitTimeMinutes(saved.getTotalVisitTimeMinutes())
                 .totalCourseTimeMinutes(saved.getTotalCourseTimeMinutes())
-                .optimizedPlaces(optimized.getOptimizedPlaces())
+                .days(toDayResponses(optimized.getOptimizedPlaces()))
+                .build();
+    }
+
+    /** 최적화된 평면 장소 목록을 프론트 공통 계약인 날짜별 구조로 변환한다. */
+    private List<CourseDayResponse> toDayResponses(
+            List<OptimizedPlaceDto> optimizedPlaces
+    ) {
+        Map<LocalDate, List<OptimizedPlaceDto>> placesByDate =
+                new TreeMap<>();
+        for (OptimizedPlaceDto place : optimizedPlaces) {
+            placesByDate
+                    .computeIfAbsent(place.getVisitDate(), ignored -> new ArrayList<>())
+                    .add(place);
+        }
+
+        List<CourseDayResponse> days = new ArrayList<>();
+        int dayNo = 1;
+        for (Map.Entry<LocalDate, List<OptimizedPlaceDto>> entry
+                : placesByDate.entrySet()) {
+            List<CoursePlaceResponse> places = entry.getValue().stream()
+                    .map(this::toPlaceResponse)
+                    .toList();
+            days.add(CourseDayResponse.builder()
+                    .dayNo(dayNo++)
+                    .visitDate(entry.getKey())
+                    .places(places)
+                    .build());
+        }
+        return days;
+    }
+
+    /** 추천 직후 화면에 필요한 장소 표시값과 최적화 계산값을 공통 DTO로 변환한다. */
+    private CoursePlaceResponse toPlaceResponse(OptimizedPlaceDto place) {
+        return CoursePlaceResponse.builder()
+                .placeId(place.getPlaceId())
+                .placeName(place.getPlaceName())
+                .category(place.getCategory())
+                .latitude(place.getLatitude())
+                .longitude(place.getLongitude())
+                .recommendationScore(place.getRecommendationScore())
+                .visitOrder(place.getVisitOrder())
+                .expectedVisitMinutes(place.getExpectedVisitMinutes())
+                .distanceFromPreviousKm(place.getDistanceFromPreviousKm())
+                .travelTimeFromPreviousMinutes(
+                        place.getTravelTimeFromPreviousMinutes()
+                )
                 .build();
     }
 

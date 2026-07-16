@@ -9,9 +9,12 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 
 /**
@@ -19,6 +22,8 @@ import java.util.TreeMap;
  *
  * <p>중복 장소를 한 번만 남긴 뒤 각 날짜에서 추천 점수가 가장 높은 장소를 첫 장소로 선택하고,
  * OpenRouteService 경로 행렬의 이동시간을 기준으로 다음 장소를 선택한다.
+ * 한 구간의 이동거리 또는 이동시간이 허용 기준을 넘으면 같은 날짜·카테고리의
+ * 예비 후보 중 기준 안에 들어오는 가장 가까운 장소로 교체한 뒤 전체 경로를 다시 계산한다.
  * 외부 API를 사용할 수 없으면 {@link DistanceService}가 직선거리 방식으로 자동 대체하고,
  * 예상 방문 시간은 {@link VisitDurationService}가 카테고리에 따라 계산한다.</p>
  */
@@ -27,6 +32,10 @@ public class CourseOptimizationService {
 
     // 외부 API의 부동소수점 오차 때문에 사실상 같은 경로 비용을 다르게 보지 않도록 한다.
     private static final double ROUTE_TIE_EPSILON = 0.000000001;
+
+    // 두 장소 사이에서 하나라도 초과하면 먼 이동 구간으로 판단한다.
+    private static final double MAX_LEG_DISTANCE_KM = 2.0;
+    private static final double MAX_LEG_TRAVEL_TIME_MINUTES = 30.0;
 
     private final DistanceService distanceService;
     private final VisitDurationService visitDurationService;
@@ -64,9 +73,59 @@ public class CourseOptimizationService {
                     .build();
         }
 
+        List<PlaceCandidateDto> currentCandidates = validateAndRemoveDuplicates(candidates);
+        List<PlaceCandidateDto> alternatives = validateAndRemoveDuplicates(
+                request.getAlternativeCandidates()
+        );
+
+        if (alternatives.isEmpty()) {
+            return optimizeCandidates(currentCandidates);
+        }
+
+        // 원래 코스 장소와 이미 소비한 대체 후보가 다시 들어가지 않도록 ID를 추적한다.
+        Set<Long> originalPlaceIds = new HashSet<>();
+        Set<Long> currentCoursePlaceIds = new HashSet<>();
+        for (PlaceCandidateDto candidate : currentCandidates) {
+            originalPlaceIds.add(candidate.getPlaceId());
+            currentCoursePlaceIds.add(candidate.getPlaceId());
+        }
+        Set<Long> consumedAlternativeIds = new HashSet<>();
+
+        // 교체 후보 한 건은 최대 한 번만 사용하므로 후보 수만큼 반복하면 반드시 종료된다.
+        for (int attempt = 0; attempt < alternatives.size(); attempt++) {
+            CourseOptimizeResponse optimized = optimizeCandidates(currentCandidates);
+            Replacement replacement = findReplacement(
+                    optimized,
+                    currentCandidates,
+                    alternatives,
+                    originalPlaceIds,
+                    currentCoursePlaceIds,
+                    consumedAlternativeIds
+            );
+
+            if (replacement == null) {
+                return optimized;
+            }
+
+            replaceCandidateByPlaceId(
+                    currentCandidates,
+                    replacement.distantPlace().getPlaceId(),
+                    replacement.alternativePlace()
+            );
+            currentCoursePlaceIds.remove(replacement.distantPlace().getPlaceId());
+            currentCoursePlaceIds.add(replacement.alternativePlace().getPlaceId());
+            consumedAlternativeIds.add(replacement.alternativePlace().getPlaceId());
+        }
+
+        return optimizeCandidates(currentCandidates);
+    }
+
+    /** 교체가 반영된 후보 목록을 날짜별 방문 순서로 정렬하고 합계를 다시 계산한다. */
+    private CourseOptimizeResponse optimizeCandidates(List<PlaceCandidateDto> candidates) {
+
         // 중복을 먼저 제거한 뒤 TreeMap으로 날짜가 빠른 일정부터 처리한다.
         Map<LocalDate, List<PlaceCandidateDto>> candidatesByDate = new TreeMap<>();
-        for (PlaceCandidateDto candidate : validateAndRemoveDuplicates(candidates)) {
+        for (PlaceCandidateDto candidate : candidates) {
             candidatesByDate
                     .computeIfAbsent(candidate.getVisitDate(), ignored -> new ArrayList<>())
                     .add(candidate);
@@ -136,6 +195,176 @@ public class CourseOptimizationService {
                 .build();
     }
 
+    /** 현재 최적화 결과의 먼 구간을 앞에서부터 확인해 실제 사용할 첫 교체안을 찾는다. */
+    private Replacement findReplacement(
+            CourseOptimizeResponse optimized,
+            List<PlaceCandidateDto> currentCandidates,
+            List<PlaceCandidateDto> alternatives,
+            Set<Long> originalPlaceIds,
+            Set<Long> currentCoursePlaceIds,
+            Set<Long> consumedAlternativeIds
+    ) {
+        List<OptimizedPlaceDto> optimizedPlaces = optimized.getOptimizedPlaces();
+
+        for (int index = 1; index < optimizedPlaces.size(); index++) {
+            OptimizedPlaceDto distantPlace = optimizedPlaces.get(index);
+
+            // 방문 순서가 1이면 새 날짜의 첫 장소이므로 전날 마지막 장소와 연결하지 않는다.
+            if (distantPlace.getVisitOrder() == 1 || !isDistantLeg(
+                    distantPlace.getDistanceFromPreviousKm(),
+                    distantPlace.getTravelTimeFromPreviousMinutes()
+            )) {
+                continue;
+            }
+
+            PlaceCandidateDto previousCandidate = findCandidateByPlaceId(
+                    currentCandidates,
+                    optimizedPlaces.get(index - 1).getPlaceId()
+            );
+            PlaceCandidateDto distantCandidate = findCandidateByPlaceId(
+                    currentCandidates,
+                    distantPlace.getPlaceId()
+            );
+            PlaceCandidateDto alternative = selectBestAlternative(
+                    previousCandidate,
+                    distantCandidate,
+                    alternatives,
+                    originalPlaceIds,
+                    currentCoursePlaceIds,
+                    consumedAlternativeIds
+            );
+
+            if (alternative != null) {
+                return new Replacement(distantCandidate, alternative);
+            }
+        }
+
+        return null;
+    }
+
+    /** 거리 2km 초과 또는 이동시간 30분 초과 구간인지 확인한다. */
+    private boolean isDistantLeg(double distanceKm, double travelTimeMinutes) {
+        return distanceKm > MAX_LEG_DISTANCE_KM
+                || travelTimeMinutes > MAX_LEG_TRAVEL_TIME_MINUTES;
+    }
+
+    /**
+     * 날짜·카테고리·중복 조건을 만족하며 새 구간도 허용 기준 안인 후보 중
+     * 이동시간 → 거리 → 추천 점수 → 장소 ID 순으로 가장 좋은 후보를 고른다.
+     */
+    private PlaceCandidateDto selectBestAlternative(
+            PlaceCandidateDto previousPlace,
+            PlaceCandidateDto distantPlace,
+            List<PlaceCandidateDto> alternatives,
+            Set<Long> originalPlaceIds,
+            Set<Long> currentCoursePlaceIds,
+            Set<Long> consumedAlternativeIds
+    ) {
+        List<PlaceCandidateDto> eligibleAlternatives = alternatives.stream()
+                .filter(alternative -> alternative.getVisitDate().equals(
+                        distantPlace.getVisitDate()
+                ))
+                .filter(alternative -> isSameCategory(
+                        alternative.getCategory(),
+                        distantPlace.getCategory()
+                ))
+                .filter(alternative -> !originalPlaceIds.contains(alternative.getPlaceId()))
+                .filter(alternative -> !currentCoursePlaceIds.contains(alternative.getPlaceId()))
+                .filter(alternative -> !consumedAlternativeIds.contains(alternative.getPlaceId()))
+                .toList();
+
+        if (eligibleAlternatives.isEmpty()) {
+            return null;
+        }
+
+        List<PlaceCandidateDto> matrixCandidates = new ArrayList<>();
+        matrixCandidates.add(previousPlace);
+        matrixCandidates.addAll(eligibleAlternatives);
+        RouteMatrix routeMatrix = distanceService.calculateRouteMatrix(matrixCandidates);
+
+        int selectedMatrixIndex = -1;
+        double shortestTravelTimeMinutes = Double.MAX_VALUE;
+        double shortestDistanceKm = Double.MAX_VALUE;
+
+        // 0번은 이전 장소이고 1번부터 실제 대체 후보이다.
+        for (int matrixIndex = 1; matrixIndex < matrixCandidates.size(); matrixIndex++) {
+            double distanceKm = routeMatrix.getDistanceKm(0, matrixIndex);
+            double travelTimeMinutes = routeMatrix.getTravelTimeMinutes(0, matrixIndex);
+            if (isDistantLeg(distanceKm, travelTimeMinutes)) {
+                continue;
+            }
+
+            PlaceCandidateDto candidate = matrixCandidates.get(matrixIndex);
+            boolean faster = travelTimeMinutes
+                    < shortestTravelTimeMinutes - ROUTE_TIE_EPSILON;
+            boolean sameTravelTime = Math.abs(
+                    travelTimeMinutes - shortestTravelTimeMinutes
+            ) <= ROUTE_TIE_EPSILON;
+            boolean shorterAtSameTime = sameTravelTime
+                    && distanceKm < shortestDistanceKm - ROUTE_TIE_EPSILON;
+            boolean sameRouteCost = sameTravelTime
+                    && Math.abs(distanceKm - shortestDistanceKm) <= ROUTE_TIE_EPSILON;
+
+            if (faster
+                    || shorterAtSameTime
+                    || (sameRouteCost && (selectedMatrixIndex < 0 || isPreferredCandidate(
+                    candidate,
+                    matrixCandidates.get(selectedMatrixIndex)
+            )))) {
+                selectedMatrixIndex = matrixIndex;
+                shortestTravelTimeMinutes = travelTimeMinutes;
+                shortestDistanceKm = distanceKm;
+            }
+        }
+
+        return selectedMatrixIndex < 0
+                ? null
+                : matrixCandidates.get(selectedMatrixIndex);
+    }
+
+    /** 영문·한글 별칭이 달라도 같은 PLACES 기본 카테고리라면 교체를 허용한다. */
+    private boolean isSameCategory(String firstCategory, String secondCategory) {
+        return normalizeCategory(firstCategory).equals(normalizeCategory(secondCategory));
+    }
+
+    private String normalizeCategory(String category) {
+        String normalized = category.trim().toLowerCase(Locale.ROOT);
+        return switch (normalized) {
+            case "tour", "관광지", "attraction", "tourist_attraction" -> "tour";
+            case "restaurant", "식당", "음식점" -> "restaurant";
+            case "cafe", "café", "카페" -> "cafe";
+            case "hotel", "숙소", "호텔", "accommodation", "lodging" -> "hotel";
+            default -> normalized;
+        };
+    }
+
+    /** 장소 ID로 현재 코스 후보를 찾는다. ID 중복은 앞 단계에서 이미 제거된다. */
+    private PlaceCandidateDto findCandidateByPlaceId(
+            List<PlaceCandidateDto> candidates,
+            Long placeId
+    ) {
+        return candidates.stream()
+                .filter(candidate -> candidate.getPlaceId().equals(placeId))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException(
+                        "최적화 결과와 장소 후보 목록이 일치하지 않습니다."
+                ));
+    }
+
+    /** 기존 후보의 위치에 대체 장소를 넣고, 이후 전체 경로를 다시 계산한다. */
+    private void replaceCandidateByPlaceId(
+            List<PlaceCandidateDto> candidates,
+            Long placeId,
+            PlaceCandidateDto replacement
+    ) {
+        for (int index = 0; index < candidates.size(); index++) {
+            if (candidates.get(index).getPlaceId().equals(placeId)) {
+                candidates.set(index, replacement);
+                return;
+            }
+        }
+    }
+
     /**
      * 같은 장소가 여러 번 들어오면 코스 전체에서 한 번만 사용한다.
      * 날짜가 다르면 더 이른 날짜의 후보를 남기고, 같은 날짜라면 추천 점수가
@@ -144,6 +373,10 @@ public class CourseOptimizationService {
     private List<PlaceCandidateDto> validateAndRemoveDuplicates(
             List<PlaceCandidateDto> candidates
     ) {
+        if (candidates == null || candidates.isEmpty()) {
+            return new ArrayList<>();
+        }
+
         Map<Long, PlaceCandidateDto> uniqueCandidates = new LinkedHashMap<>();
 
         for (PlaceCandidateDto candidate : candidates) {
@@ -311,5 +544,12 @@ public class CourseOptimizationService {
                 candidate.getLatitude(),
                 candidate.getLongitude()
         );
+    }
+
+    /** 먼 구간에서 제거할 장소와 그 자리에 넣을 대체 후보이다. */
+    private record Replacement(
+            PlaceCandidateDto distantPlace,
+            PlaceCandidateDto alternativePlace
+    ) {
     }
 }
