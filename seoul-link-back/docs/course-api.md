@@ -116,6 +116,9 @@ DB에 저장하지 않고 최근접 이웃과 2-opt로 방문 순서와 이동�
 |---|---|---:|---|
 | `resultId` | number | Y | 설문 결과 ID |
 | `dailyStartTime` | string | Y | 매일 일정 시작 시각, `HH:mm` |
+| `weatherStatus` | string | N | 추천 시점 날씨 상태. 공백 제거 후 대문자로 응답 |
+| `temperature` | number | N | 추천 시점 기온, -100.0~100.0 |
+| `rainProbability` | number | N | 추천 시점 강수 확률, 0~100 |
 | `dailyPlans` | array | Y | 날짜별 후보 풀과 선발 목표 |
 | `dailyPlans[].visitDate` | string | Y | 방문 날짜 |
 | `dailyPlans[].targetPlaceCount` | number | Y | 해당 날짜에 최종 선발할 장소 수 |
@@ -133,6 +136,9 @@ DB에 저장하지 않고 최근접 이웃과 2-opt로 방문 순서와 이동�
 {
   "resultId": 101,
   "dailyStartTime": "10:00",
+  "weatherStatus": "RAIN",
+  "temperature": 27.5,
+  "rainProbability": 80,
   "optionCount": 3,
   "courseOptions": [
     {
@@ -177,6 +183,9 @@ DB에 저장하지 않고 최근접 이웃과 2-opt로 방문 순서와 이동�
 }
 ```
 
+- 날씨 세 필드는 세 코스에 공통인 추천 시점 스냅샷으로 최상위에 한 번 반환한다.
+  실제 날씨 기반 후보 필터링은 상위 추천 단계에서 끝난 후보 풀을 전달받는 구조이며,
+  코스 최적화 단계에서는 장소 조합·거리·시간·순서를 계산한다.
 - `PREFERENCE`: 카테고리 목표 안에서 추천 점수 합계가 높은 조합을 우선한다.
 - `MIN_DISTANCE`: 직선거리 기반 예상 이동시간과 거리가 짧은 조합을 우선한다.
 - `BALANCED`: 추천 점수 50%, 이동시간 30%, 거리 20%를 정규화해 균형을 맞춘다.

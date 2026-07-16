@@ -49,6 +49,9 @@ class CourseRecommendationServiceTest {
         CourseRecommendRequest request = CourseRecommendRequest.builder()
                 .resultId(101L)
                 .dailyStartTime(LocalTime.of(10, 0))
+                .weatherStatus("rain")
+                .temperature(27.5)
+                .rainProbability(80)
                 .dailyPlans(List.of(
                         DailyPlanRequest.builder()
                                 .visitDate(firstDate)
@@ -84,6 +87,9 @@ class CourseRecommendationServiceTest {
 
         assertEquals(101L, response.getResultId());
         assertEquals(LocalTime.of(10, 0), response.getDailyStartTime());
+        assertEquals("RAIN", response.getWeatherStatus());
+        assertEquals(27.5, response.getTemperature());
+        assertEquals(80, response.getRainProbability());
         assertEquals(3, response.getOptionCount());
         assertEquals(3, response.getCourseOptions().size());
         assertEquals("PREFERENCE", response.getCourseOptions().get(0).getOptionType());
@@ -115,6 +121,40 @@ class CourseRecommendationServiceTest {
         assertEquals(3, optionSignatures.size());
         assertTrue(response.getCourseOptions().stream()
                 .allMatch(option -> option.getTotalCourseTimeMinutes() > 0));
+    }
+
+    @Test
+    @DisplayName("강수 확률이 0~100 범위를 벗어나면 요청을 거부한다")
+    void rejectInvalidRainProbability() {
+        CourseRecommendRequest request = CourseRecommendRequest.builder()
+                .resultId(101L)
+                .dailyStartTime(LocalTime.of(10, 0))
+                .weatherStatus("RAIN")
+                .temperature(27.5)
+                .rainProbability(101)
+                .dailyPlans(List.of(DailyPlanRequest.builder()
+                        .visitDate(LocalDate.of(2026, 7, 20))
+                        .targetPlaceCount(1)
+                        .categoryTargets(Map.of(
+                                "TOUR", 1,
+                                "RESTAURANT", 0,
+                                "CAFE", 0,
+                                "HOTEL", 0
+                        ))
+                        .placeCandidates(List.of(
+                                candidate(1L, "관광지", "TOUR", 90.0, 37.5, 127.0)
+                        ))
+                        .build()))
+                .build();
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> courseRecommendationService.recommend(request)
+        );
+        assertEquals(
+                "rainProbability는 0 이상 100 이하이어야 합니다.",
+                exception.getMessage()
+        );
     }
 
     @Test

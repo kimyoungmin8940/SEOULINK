@@ -340,6 +340,9 @@ class CourseControllerTest {
                 .thenReturn(CourseRecommendResponse.builder()
                         .resultId(101L)
                         .dailyStartTime(java.time.LocalTime.of(10, 0))
+                        .weatherStatus("RAIN")
+                        .temperature(27.5)
+                        .rainProbability(80)
                         .optionCount(3)
                         .courseOptions(List.of(
                                 option(1, "PREFERENCE", "취향 집중 코스", day),
@@ -354,6 +357,9 @@ class CourseControllerTest {
                                 {
                                   "resultId": 101,
                                   "dailyStartTime": "10:00",
+                                  "weatherStatus": "RAIN",
+                                  "temperature": 27.5,
+                                  "rainProbability": 80,
                                   "dailyPlans": [
                                     {
                                       "visitDate": "2026-07-20",
@@ -428,6 +434,9 @@ class CourseControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.resultId").value(101))
                 .andExpect(jsonPath("$.dailyStartTime").value("10:00"))
+                .andExpect(jsonPath("$.weatherStatus").value("RAIN"))
+                .andExpect(jsonPath("$.temperature").value(27.5))
+                .andExpect(jsonPath("$.rainProbability").value(80))
                 .andExpect(jsonPath("$.optionCount").value(3))
                 .andExpect(jsonPath("$.courseOptions.length()").value(3))
                 .andExpect(jsonPath("$.courseOptions[0].optionType").value("PREFERENCE"))
