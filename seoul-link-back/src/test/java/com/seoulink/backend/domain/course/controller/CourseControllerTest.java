@@ -245,17 +245,12 @@ class CourseControllerTest {
     }
 
     @Test
-    @DisplayName("추천 후보를 최적화하고 저장한 뒤 201 응답을 반환한다")
+    @DisplayName("확정 날짜별 추천 JSON을 받아 최적화 결과를 반환한다")
     void recommendCourse() throws Exception {
-        when(courseRecommendationService.recommendAndSave(any()))
+        when(courseRecommendationService.recommend(any()))
                 .thenReturn(CourseRecommendResponse.builder()
-                        .courseId(20L)
-                        .title("서울 추천 코스")
-                        .description("설문 기반 추천 코스")
-                        .travelCode("ATLSR")
-                        .courseType("SURVEY")
-                        .region("서울 종로구")
-                        .publicCourse(false)
+                        .resultId(101L)
+                        .dailyStartTime(java.time.LocalTime.of(10, 0))
                         .placeCount(1)
                         .dayCount(1)
                         .totalDistanceKm(0.0)
@@ -270,10 +265,12 @@ class CourseControllerTest {
                                 .dailyVisitTimeMinutes(90)
                                 .dailyCourseTimeMinutes(90.0)
                                 .places(List.of(CoursePlaceResponse.builder()
-                                        .placeId(1L)
+                                        .placeId(10L)
                                         .placeName("경복궁")
                                         .recommendationScore(92.0)
+                                        .themePalaceCultureYn("Y")
                                         .visitOrder(1)
+                                        .visitTime("10:00")
                                         .expectedVisitMinutes(90)
                                         .build()))
                                 .build()))
@@ -283,28 +280,42 @@ class CourseControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                  "memberId": 1,
-                                  "title": "서울 추천 코스",
-                                  "travelCode": "ATLSR",
-                                  "placeCandidates": [
+                                  "resultId": 101,
+                                  "dailyStartTime": "10:00",
+                                  "dailyPlans": [
                                     {
-                                      "placeId": 1,
-                                      "placeName": "경복궁",
-                                      "category": "TOUR",
-                                      "recommendationScore": 92.0,
-                                      "latitude": 37.5796,
-                                      "longitude": 126.9770,
-                                      "visitDate": "2026-07-20"
+                                      "visitDate": "2026-07-20",
+                                      "placeCandidates": [
+                                        {
+                                          "placeId": 10,
+                                          "placeName": "경복궁",
+                                          "category": "TOUR",
+                                          "recommendationScore": 92.0,
+                                          "latitude": 37.5796,
+                                          "longitude": 126.9770,
+                                          "themePalaceCultureYn": "Y",
+                                          "alternativeCandidates": [
+                                            {
+                                              "placeId": 20,
+                                              "placeName": "창덕궁",
+                                              "category": "TOUR",
+                                              "recommendationScore": 88.0,
+                                              "latitude": 37.5794,
+                                              "longitude": 126.9910,
+                                              "themePalaceCultureYn": "Y"
+                                            }
+                                          ]
+                                        }
+                                      ]
                                     }
                                   ]
                                 }
                                 """))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.courseId").value(20))
-                .andExpect(jsonPath("$.title").value("서울 추천 코스"))
-                .andExpect(jsonPath("$.description").value("설문 기반 추천 코스"))
-                .andExpect(jsonPath("$.travelCode").value("ATLSR"))
-                .andExpect(jsonPath("$.courseType").value("SURVEY"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resultId").value(101))
+                .andExpect(jsonPath("$.dailyStartTime").value("10:00"))
+                .andExpect(jsonPath("$.placeCount").value(1))
+                .andExpect(jsonPath("$.dayCount").value(1))
                 .andExpect(jsonPath("$.days.length()").value(1))
                 .andExpect(jsonPath("$.days[0].dayNo").value(1))
                 .andExpect(jsonPath("$.days[0].visitDate").value("2026-07-20"))
@@ -312,8 +323,13 @@ class CourseControllerTest {
                 .andExpect(jsonPath("$.days[0].dailyTravelTimeMinutes").value(0.0))
                 .andExpect(jsonPath("$.days[0].dailyVisitTimeMinutes").value(90))
                 .andExpect(jsonPath("$.days[0].dailyCourseTimeMinutes").value(90.0))
-                .andExpect(jsonPath("$.days[0].places[0].placeId").value(1))
-                .andExpect(jsonPath("$.days[0].places[0].recommendationScore").value(92.0))
+                .andExpect(jsonPath("$.days[0].places[0].placeId").value(10))
+                .andExpect(jsonPath(
+                        "$.days[0].places[0].themePalaceCultureYn"
+                ).value("Y"))
+                .andExpect(jsonPath(
+                        "$.days[0].places[0].visitTime"
+                ).value("10:00"))
                 .andExpect(jsonPath("$.totalCourseTimeMinutes").value(90.0));
     }
 
@@ -379,8 +395,8 @@ class CourseControllerTest {
     @Test
     @DisplayName("코스 내부 처리 실패는 상세 원인을 숨긴 500 응답을 반환한다")
     void rejectCourseProcessingFailure() throws Exception {
-        when(courseRecommendationService.recommendAndSave(any()))
-                .thenThrow(new IllegalStateException("DB 상세 저장 실패"));
+        when(courseRecommendationService.recommend(any()))
+                .thenThrow(new IllegalStateException("추천 최적화 실패"));
 
         mockMvc.perform(post("/api/courses/recommend")
                         .contentType(MediaType.APPLICATION_JSON)

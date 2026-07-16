@@ -398,18 +398,22 @@ class CourseOptimizationServiceTest {
     @DisplayName("거리 2km 초과 장소를 같은 날짜와 카테고리의 가까운 후보로 교체한다")
     void replacePlaceWhenDistanceExceedsTwoKilometers() {
         LocalDate visitDate = LocalDate.of(2026, 7, 20);
+        PlaceCandidateDto distantPlace = place(
+                2L, "먼 관광지", "TOUR", 90.0,
+                37.5854, 126.9780, visitDate
+        );
+        distantPlace.setAlternativeCandidates(List.of(
+                // 이 후보는 먼 관광지 전용이며 다른 원본 장소 교체에는 사용하지 않는다.
+                place(3L, "덕수궁", "관광지", 85.0,
+                        37.5658, 126.9751, visitDate)
+        ));
+
         CourseOptimizeRequest request = CourseOptimizeRequest.builder()
                 .placeCandidates(List.of(
                         place(1L, "서울시청", "TOUR", 100.0,
                                 37.5665, 126.9780, visitDate),
                         // 직선거리는 약 2.1km, 예상 도보시간은 약 28분이다.
-                        place(2L, "먼 관광지", "TOUR", 90.0,
-                                37.5854, 126.9780, visitDate)
-                ))
-                .alternativeCandidates(List.of(
-                        // 한글 별칭이어도 TOUR와 같은 기본 카테고리로 처리한다.
-                        place(3L, "덕수궁", "관광지", 85.0,
-                                37.5658, 126.9751, visitDate)
+                        distantPlace
                 ))
                 .build();
 

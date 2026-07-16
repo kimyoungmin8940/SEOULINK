@@ -28,6 +28,16 @@ public class CoursePlaceResponse {
     private Double longitude;
     private Double recommendationScore;
 
+    // 추천 후보에서 전달된 8개 테마 여부이다.
+    private String themePalaceCultureYn;
+    private String themeNatureHangangYn;
+    private String themeDateYn;
+    private String themeFoodTourYn;
+    private String themeCafeTourYn;
+    private String themeShoppingHotplaceYn;
+    private String themeNightViewYn;
+    private String themeHotelStayYn;
+
     // 날짜 정보는 상위 CourseDayResponse가 담당하며, 이 DTO는 하루 안의 순서를 표현한다.
     private Integer visitOrder;
     private String memo;

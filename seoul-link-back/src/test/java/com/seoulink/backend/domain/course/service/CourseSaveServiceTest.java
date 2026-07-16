@@ -63,6 +63,7 @@ class CourseSaveServiceTest {
                         place(3L, secondDay, 1, 90, 0.0, 0.0)
                 ))
                 .build();
+        request.getPlaces().get(0).setVisitTime("10:00");
 
         when(travelCourseRepository.save(any(TravelCourse.class)))
                 .thenAnswer(invocation -> {
@@ -105,6 +106,7 @@ class CourseSaveServiceTest {
         assertEquals(List.of(firstDay, firstDay, secondDay), details.stream()
                 .map(CourseDetail::getVisitDate)
                 .toList());
+        assertEquals("10:00", details.get(0).getVisitTime());
 
         assertEquals(10L, response.getCourseId());
         assertEquals(3, response.getPlaceCount());

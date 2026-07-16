@@ -30,6 +30,16 @@ public class OptimizedPlaceDto {
     private Double longitude;
     private LocalDate visitDate;
 
+    // 원본 추천 장소의 8개 테마 여부를 최적화 결과에서도 유지한다.
+    private String themePalaceCultureYn;
+    private String themeNatureHangangYn;
+    private String themeDateYn;
+    private String themeFoodTourYn;
+    private String themeCafeTourYn;
+    private String themeShoppingHotplaceYn;
+    private String themeNightViewYn;
+    private String themeHotelStayYn;
+
     // 최적화 단계에서 새로 계산되는 체류시간·방문 순서·이동 정보이다.
     private Integer expectedVisitMinutes;
     private Integer visitOrder;

@@ -20,6 +20,7 @@ public class CourseSavePlaceDto {
     private Long placeId;
     private LocalDate visitDate;
     private Integer visitOrder;
+    private String visitTime;
 
     // 해당 장소의 체류시간과 바로 이전 장소에서 이동해 온 거리·시간이다.
     // 날짜별 첫 장소는 이전 장소가 없으므로 거리와 이동시간을 0으로 전달한다.

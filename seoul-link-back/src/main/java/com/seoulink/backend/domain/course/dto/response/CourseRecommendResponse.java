@@ -1,15 +1,17 @@
 package com.seoulink.backend.domain.course.dto.response;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 
-/** 추천 장소의 최적화와 DB 저장을 한 번에 수행한 결과를 반환한다. */
+/** 설문 추천 장소를 날짜별로 최적화한 결과를 반환한다. */
 @Getter
 @Setter
 @Builder
@@ -17,14 +19,12 @@ import java.util.List;
 @AllArgsConstructor
 public class CourseRecommendResponse {
 
-    // 방금 저장된 추천 코스의 식별자와 전체 집계값이다.
-    private Long courseId;
-    private String title;
-    private String description;
-    private String travelCode;
-    private String courseType;
-    private String region;
-    private Boolean publicCourse;
+    // 요청과 결과를 연결하는 설문 결과 식별자와 공통 일정 시작 시각이다.
+    private Long resultId;
+    @JsonFormat(pattern = "HH:mm")
+    private LocalTime dailyStartTime;
+
+    // 최적화된 전체 장소 수·일수와 거리·시간 합계이다.
     private Integer placeCount;
     private Integer dayCount;
     private Double totalDistanceKm;
@@ -32,7 +32,7 @@ public class CourseRecommendResponse {
     private Integer totalVisitTimeMinutes;
     private Double totalCourseTimeMinutes;
 
-    // 추천 결과와 상세 조회가 같은 날짜별 구조를 사용하도록 통일한다.
+    // 날짜별 장소 순서와 날짜별 합계이다.
     @Builder.Default
     private List<CourseDayResponse> days = new ArrayList<>();
 }

@@ -2,194 +2,204 @@ package com.seoulink.backend.domain.course.service;
 
 import com.seoulink.backend.domain.course.dto.request.CourseOptimizeRequest;
 import com.seoulink.backend.domain.course.dto.request.CourseRecommendRequest;
-import com.seoulink.backend.domain.course.dto.request.CourseSaveRequest;
+import com.seoulink.backend.domain.course.dto.request.DailyPlanRequest;
 import com.seoulink.backend.domain.course.dto.request.PlaceCandidateDto;
 import com.seoulink.backend.domain.course.dto.response.CourseOptimizeResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseRecommendResponse;
-import com.seoulink.backend.domain.course.dto.response.CourseSaveResponse;
 import com.seoulink.backend.domain.course.dto.response.OptimizedPlaceDto;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-/** 추천 후보가 최적화 DTO를 거쳐 SURVEY 코스로 저장되는 통합 서비스 흐름을 검증한다. */
+/** 확정 날짜별 JSON이 최적화 입력으로 변환되는 흐름을 검증한다. */
 class CourseRecommendationServiceTest {
 
     private CourseOptimizationService courseOptimizationService;
-    private CourseSaveService courseSaveService;
     private CourseRecommendationService courseRecommendationService;
 
     @BeforeEach
     void setUp() {
-        // 최적화와 저장 서비스를 mock으로 분리해 두 서비스 사이의 전달값을 확인한다.
         courseOptimizationService = mock(CourseOptimizationService.class);
-        courseSaveService = mock(CourseSaveService.class);
         courseRecommendationService = new CourseRecommendationService(
-                courseOptimizationService,
-                courseSaveService
+                courseOptimizationService
         );
     }
 
     @Test
-    @DisplayName("추천 후보를 최적화하고 SURVEY 코스로 저장한다")
-    void recommendAndSave() {
-        LocalDate visitDate = LocalDate.of(2026, 7, 20);
-        PlaceCandidateDto candidate = PlaceCandidateDto.builder()
-                .placeId(1L)
-                .placeName("경복궁")
-                .category("TOUR")
-                .recommendationScore(92.0)
-                .latitude(37.5796)
-                .longitude(126.9770)
-                .visitDate(visitDate)
-                .build();
-        PlaceCandidateDto alternativeCandidate = PlaceCandidateDto.builder()
-                .placeId(2L)
-                .placeName("덕수궁")
+    @DisplayName("dailyPlans의 날짜를 장소와 전용 대체 후보에 적용해 최적화한다")
+    void recommendWithFinalRequestContract() {
+        LocalDate firstDate = LocalDate.of(2026, 7, 20);
+        LocalDate secondDate = LocalDate.of(2026, 7, 21);
+        PlaceCandidateDto alternative = PlaceCandidateDto.builder()
+                .placeId(20L)
+                .placeName("창덕궁")
                 .category("TOUR")
                 .recommendationScore(88.0)
-                .latitude(37.5658)
-                .longitude(126.9751)
-                .visitDate(visitDate)
+                .latitude(37.5794)
+                .longitude(126.9910)
+                .themePalaceCultureYn("Y")
                 .build();
-        OptimizedPlaceDto optimizedPlace = OptimizedPlaceDto.builder()
-                .placeId(1L)
+        PlaceCandidateDto palace = PlaceCandidateDto.builder()
+                .placeId(10L)
                 .placeName("경복궁")
                 .category("TOUR")
                 .recommendationScore(92.0)
                 .latitude(37.5796)
                 .longitude(126.9770)
-                .visitDate(visitDate)
-                .expectedVisitMinutes(90)
-                .visitOrder(1)
-                .distanceFromPreviousKm(0.0)
-                .travelTimeFromPreviousMinutes(0.0)
+                .themePalaceCultureYn("Y")
+                .alternativeCandidates(List.of(alternative))
+                .build();
+        PlaceCandidateDto forest = PlaceCandidateDto.builder()
+                .placeId(30L)
+                .placeName("서울숲")
+                .category("TOUR")
+                .recommendationScore(94.0)
+                .latitude(37.5444)
+                .longitude(127.0374)
+                .themeNatureHangangYn("Y")
+                .themeDateYn("Y")
                 .build();
 
         when(courseOptimizationService.optimize(any(CourseOptimizeRequest.class)))
                 .thenReturn(CourseOptimizeResponse.builder()
-                        .optimizedPlaces(List.of(optimizedPlace))
+                        .optimizedPlaces(List.of(
+                                optimizedPlace(10L, "경복궁", firstDate, 1, "Y", null),
+                                optimizedPlace(30L, "서울숲", secondDate, 1, null, "Y")
+                        ))
                         .totalDistanceKm(0.0)
                         .totalTravelTimeMinutes(0.0)
-                        .totalVisitTimeMinutes(90)
-                        .totalCourseTimeMinutes(90.0)
+                        .totalVisitTimeMinutes(180)
+                        .totalCourseTimeMinutes(180.0)
                         .build());
-        when(courseSaveService.saveOptimizedCourse(any(CourseSaveRequest.class)))
-                .thenReturn(CourseSaveResponse.builder()
-                        .courseId(20L)
-                        .title("서울 추천 코스")
-                        .placeCount(1)
-                        .dayCount(1)
-                        .totalDistanceKm(0.0)
-                        .totalTravelTimeMinutes(0.0)
-                        .totalVisitTimeMinutes(90)
-                        .totalCourseTimeMinutes(90.0)
-                        .build());
+
+        CourseRecommendRequest request = CourseRecommendRequest.builder()
+                .resultId(101L)
+                .dailyStartTime(LocalTime.of(10, 0))
+                .dailyPlans(List.of(
+                        DailyPlanRequest.builder()
+                                .visitDate(firstDate)
+                                .placeCandidates(List.of(palace))
+                                .build(),
+                        DailyPlanRequest.builder()
+                                .visitDate(secondDate)
+                                .placeCandidates(List.of(forest))
+                                .build()
+                ))
+                .build();
 
         CourseRecommendResponse response =
-                courseRecommendationService.recommendAndSave(
-                        CourseRecommendRequest.builder()
-                                .memberId(1L)
-                                .resultId(5L)
-                                .title("서울 추천 코스")
-                                .travelCode("ATLSR")
-                                .region("서울 종로구")
-                                .placeCandidates(List.of(candidate))
-                                .alternativeCandidates(List.of(alternativeCandidate))
-                                .build()
-                );
+                courseRecommendationService.recommend(request);
 
-        ArgumentCaptor<CourseOptimizeRequest> optimizeCaptor =
+        ArgumentCaptor<CourseOptimizeRequest> captor =
                 ArgumentCaptor.forClass(CourseOptimizeRequest.class);
-        verify(courseOptimizationService).optimize(optimizeCaptor.capture());
-        ArgumentCaptor<CourseSaveRequest> saveCaptor =
-                ArgumentCaptor.forClass(CourseSaveRequest.class);
-        verify(courseSaveService).saveOptimizedCourse(saveCaptor.capture());
-        CourseSaveRequest saveRequest = saveCaptor.getValue();
+        verify(courseOptimizationService).optimize(captor.capture());
+        List<PlaceCandidateDto> flattened = captor.getValue().getPlaceCandidates();
 
-        assertEquals(1L, saveRequest.getMemberId());
-        assertEquals(5L, saveRequest.getResultId());
-        assertEquals(1, optimizeCaptor.getValue().getAlternativeCandidates().size());
+        assertEquals(2, flattened.size());
+        assertEquals(firstDate, flattened.get(0).getVisitDate());
+        assertEquals(secondDate, flattened.get(1).getVisitDate());
+        assertEquals(1, flattened.get(0).getAlternativeCandidates().size());
         assertEquals(
-                2L,
-                optimizeCaptor.getValue().getAlternativeCandidates().get(0).getPlaceId()
+                firstDate,
+                flattened.get(0).getAlternativeCandidates().get(0).getVisitDate()
         );
-        assertEquals("SURVEY", saveRequest.getCourseType());
-        assertEquals(1, saveRequest.getPlaces().size());
-        assertEquals(1L, saveRequest.getPlaces().get(0).getPlaceId());
-        assertEquals(1, saveRequest.getPlaces().get(0).getVisitOrder());
-        assertEquals(20L, response.getCourseId());
-        assertEquals("ATLSR", response.getTravelCode());
-        assertEquals("SURVEY", response.getCourseType());
-        assertEquals("서울 종로구", response.getRegion());
-        assertEquals(1, response.getDays().size());
-        assertEquals(1, response.getDays().get(0).getDayNo());
-        assertEquals(visitDate, response.getDays().get(0).getVisitDate());
-        assertEquals(0.0, response.getDays().get(0).getDailyDistanceKm(), 0.000001);
-        assertEquals(
-                0.0,
-                response.getDays().get(0).getDailyTravelTimeMinutes(),
-                0.000001
-        );
-        assertEquals(90, response.getDays().get(0).getDailyVisitTimeMinutes());
-        assertEquals(
-                90.0,
-                response.getDays().get(0).getDailyCourseTimeMinutes(),
-                0.000001
-        );
-        assertEquals(1L, response.getDays().get(0).getPlaces().get(0).getPlaceId());
-        assertEquals(
-                92.0,
-                response.getDays().get(0).getPlaces().get(0).getRecommendationScore(),
-                0.000001
-        );
-        assertEquals(
-                90.0,
-                response.getTotalCourseTimeMinutes(),
-                0.000001
-        );
+        assertEquals(20L, flattened.get(0).getAlternativeCandidates().get(0).getPlaceId());
+        assertNotSame(palace, flattened.get(0));
+        assertEquals(101L, response.getResultId());
+        assertEquals(LocalTime.of(10, 0), response.getDailyStartTime());
+        assertEquals(2, response.getPlaceCount());
+        assertEquals(2, response.getDayCount());
+        assertEquals("Y", response.getDays().get(0).getPlaces().get(0)
+                .getThemePalaceCultureYn());
+        assertEquals("10:00", response.getDays().get(0).getPlaces().get(0)
+                .getVisitTime());
+        assertEquals("Y", response.getDays().get(1).getPlaces().get(0)
+                .getThemeNatureHangangYn());
     }
 
     @Test
-    @DisplayName("최적화가 실패하면 코스 저장을 실행하지 않는다")
-    void doNotSaveWhenOptimizationFails() {
-        when(courseOptimizationService.optimize(any(CourseOptimizeRequest.class)))
-                .thenThrow(new IllegalArgumentException("장소의 위도와 경도는 필수입니다."));
-
+    @DisplayName("동일한 방문 날짜가 두 번 들어오면 요청을 거부한다")
+    void rejectDuplicateVisitDates() {
+        LocalDate date = LocalDate.of(2026, 7, 20);
+        DailyPlanRequest plan = DailyPlanRequest.builder()
+                .visitDate(date)
+                .placeCandidates(List.of(validCandidate(1L)))
+                .build();
         CourseRecommendRequest request = CourseRecommendRequest.builder()
-                .memberId(1L)
-                .title("실패 코스")
-                .placeCandidates(List.of(PlaceCandidateDto.builder().build()))
+                .resultId(101L)
+                .dailyStartTime(LocalTime.of(10, 0))
+                .dailyPlans(List.of(plan, plan))
                 .build();
 
         assertThrows(
                 IllegalArgumentException.class,
-                () -> courseRecommendationService.recommendAndSave(request)
+                () -> courseRecommendationService.recommend(request)
         );
-        verify(courseSaveService, never()).saveOptimizedCourse(any());
     }
 
     @Test
-    @DisplayName("추천 생성과 저장은 하나의 트랜잭션으로 처리한다")
-    void recommendMethodIsTransactional() throws NoSuchMethodException {
-        boolean transactional = CourseRecommendationService.class
-                .getMethod("recommendAndSave", CourseRecommendRequest.class)
-                .isAnnotationPresent(Transactional.class);
+    @DisplayName("일정 시작 시각이 없으면 요청을 거부한다")
+    void rejectMissingDailyStartTime() {
+        CourseRecommendRequest request = CourseRecommendRequest.builder()
+                .resultId(101L)
+                .dailyPlans(List.of(DailyPlanRequest.builder()
+                        .visitDate(LocalDate.of(2026, 7, 20))
+                        .placeCandidates(List.of(validCandidate(1L)))
+                        .build()))
+                .build();
 
-        assertTrue(transactional);
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> courseRecommendationService.recommend(request)
+        );
+    }
+
+    private PlaceCandidateDto validCandidate(Long placeId) {
+        return PlaceCandidateDto.builder()
+                .placeId(placeId)
+                .placeName("장소 " + placeId)
+                .category("TOUR")
+                .recommendationScore(90.0)
+                .latitude(37.5)
+                .longitude(127.0)
+                .build();
+    }
+
+    private OptimizedPlaceDto optimizedPlace(
+            Long placeId,
+            String placeName,
+            LocalDate visitDate,
+            int visitOrder,
+            String palaceTheme,
+            String natureTheme
+    ) {
+        return OptimizedPlaceDto.builder()
+                .placeId(placeId)
+                .placeName(placeName)
+                .category("TOUR")
+                .recommendationScore(90.0)
+                .latitude(37.5)
+                .longitude(127.0)
+                .visitDate(visitDate)
+                .themePalaceCultureYn(palaceTheme)
+                .themeNatureHangangYn(natureTheme)
+                .expectedVisitMinutes(90)
+                .visitOrder(visitOrder)
+                .distanceFromPreviousKm(0.0)
+                .travelTimeFromPreviousMinutes(0.0)
+                .build();
     }
 }

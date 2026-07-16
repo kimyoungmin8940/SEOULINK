@@ -99,6 +99,7 @@ public class CourseSaveService {
                         .placeId(place.getPlaceId())
                         .dayNo(dayNumbers.get(place.getVisitDate()))
                         .placeOrder(place.getVisitOrder())
+                        .visitTime(trimToNull(place.getVisitTime()))
                         .stayMinutes(place.getExpectedVisitMinutes())
                         .visitDate(place.getVisitDate())
                         .distanceFromPreviousKm(round(
@@ -179,6 +180,11 @@ public class CourseSaveService {
         }
         if (place.getVisitOrder() == null || place.getVisitOrder() < 1) {
             throw new IllegalArgumentException("장소 방문 순서는 1 이상이어야 합니다.");
+        }
+        String visitTime = trimToNull(place.getVisitTime());
+        if (visitTime != null
+                && !visitTime.matches("(?:[01]\\d|2[0-3]):[0-5]\\d")) {
+            throw new IllegalArgumentException("예상 방문 시각은 HH:mm 형식이어야 합니다.");
         }
         if (place.getExpectedVisitMinutes() == null
                 || place.getExpectedVisitMinutes() < 0) {

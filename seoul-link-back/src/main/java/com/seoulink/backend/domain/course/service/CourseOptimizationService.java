@@ -76,11 +76,19 @@ public class CourseOptimizationService {
         }
 
         List<PlaceCandidateDto> currentCandidates = validateAndRemoveDuplicates(candidates);
-        List<PlaceCandidateDto> alternatives = validateAndRemoveDuplicates(
+
+        // 최종 JSON은 각 원본 장소 안에 전용 대체 후보를 넣는다.
+        // 기존 /optimize 호출부의 최상위 대체 후보도 당분간 호환한다.
+        Map<Long, List<PlaceCandidateDto>> alternativesByCurrentPlaceId =
+                createNestedAlternativePools(currentCandidates);
+        List<PlaceCandidateDto> legacyAlternatives = validateAndRemoveDuplicates(
                 request.getAlternativeCandidates()
         );
+        int alternativeCount = alternativesByCurrentPlaceId.values().stream()
+                .mapToInt(List::size)
+                .sum() + legacyAlternatives.size();
 
-        if (alternatives.isEmpty()) {
+        if (alternativeCount == 0) {
             return optimizeCandidates(currentCandidates);
         }
 
@@ -93,13 +101,14 @@ public class CourseOptimizationService {
         }
         Set<Long> consumedAlternativeIds = new HashSet<>();
 
-        // 교체 후보 한 건은 최대 한 번만 사용하므로 후보 수만큼 반복하면 반드시 종료된다.
-        for (int attempt = 0; attempt < alternatives.size(); attempt++) {
+        // 교체 후보 한 건은 최대 한 번만 사용하므로 전체 후보 수만큼 반복하면 종료된다.
+        for (int attempt = 0; attempt < alternativeCount; attempt++) {
             CourseOptimizeResponse optimized = optimizeCandidates(currentCandidates);
             Replacement replacement = findReplacement(
                     optimized,
                     currentCandidates,
-                    alternatives,
+                    alternativesByCurrentPlaceId,
+                    legacyAlternatives,
                     originalPlaceIds,
                     currentCoursePlaceIds,
                     consumedAlternativeIds
@@ -109,14 +118,24 @@ public class CourseOptimizationService {
                 return optimized;
             }
 
+            Long distantPlaceId = replacement.distantPlace().getPlaceId();
+            Long alternativePlaceId = replacement.alternativePlace().getPlaceId();
             replaceCandidateByPlaceId(
                     currentCandidates,
-                    replacement.distantPlace().getPlaceId(),
+                    distantPlaceId,
                     replacement.alternativePlace()
             );
-            currentCoursePlaceIds.remove(replacement.distantPlace().getPlaceId());
-            currentCoursePlaceIds.add(replacement.alternativePlace().getPlaceId());
-            consumedAlternativeIds.add(replacement.alternativePlace().getPlaceId());
+
+            // 교체 뒤에도 같은 원본 장소의 남은 전용 후보만 계속 검토하도록 풀을 이동한다.
+            List<PlaceCandidateDto> candidatePool =
+                    alternativesByCurrentPlaceId.remove(distantPlaceId);
+            if (candidatePool != null) {
+                alternativesByCurrentPlaceId.put(alternativePlaceId, candidatePool);
+            }
+
+            currentCoursePlaceIds.remove(distantPlaceId);
+            currentCoursePlaceIds.add(alternativePlaceId);
+            consumedAlternativeIds.add(alternativePlaceId);
         }
 
         return optimizeCandidates(currentCandidates);
@@ -310,7 +329,8 @@ public class CourseOptimizationService {
     private Replacement findReplacement(
             CourseOptimizeResponse optimized,
             List<PlaceCandidateDto> currentCandidates,
-            List<PlaceCandidateDto> alternatives,
+            Map<Long, List<PlaceCandidateDto>> alternativesByCurrentPlaceId,
+            List<PlaceCandidateDto> legacyAlternatives,
             Set<Long> originalPlaceIds,
             Set<Long> currentCoursePlaceIds,
             Set<Long> consumedAlternativeIds
@@ -336,10 +356,16 @@ public class CourseOptimizationService {
                     currentCandidates,
                     distantPlace.getPlaceId()
             );
+            List<PlaceCandidateDto> candidateAlternatives =
+                    alternativesByCurrentPlaceId.get(distantCandidate.getPlaceId());
+            if (candidateAlternatives == null) {
+                candidateAlternatives = legacyAlternatives;
+            }
+
             PlaceCandidateDto alternative = selectBestAlternative(
                     previousCandidate,
                     distantCandidate,
-                    alternatives,
+                    candidateAlternatives,
                     originalPlaceIds,
                     currentCoursePlaceIds,
                     consumedAlternativeIds
@@ -474,6 +500,37 @@ public class CourseOptimizationService {
                 return;
             }
         }
+    }
+
+    /**
+     * 각 원본 장소에 포함된 전용 대체 후보를 검증하고 장소 ID별 후보 풀로 만든다.
+     * 전용 후보는 부모 장소와 같은 날짜여야 하며 다른 장소 교체에는 사용하지 않는다.
+     */
+    private Map<Long, List<PlaceCandidateDto>> createNestedAlternativePools(
+            List<PlaceCandidateDto> candidates
+    ) {
+        Map<Long, List<PlaceCandidateDto>> pools = new LinkedHashMap<>();
+
+        for (PlaceCandidateDto candidate : candidates) {
+            List<PlaceCandidateDto> alternatives = validateAndRemoveDuplicates(
+                    candidate.getAlternativeCandidates()
+            );
+            if (alternatives.isEmpty()) {
+                continue;
+            }
+
+            for (PlaceCandidateDto alternative : alternatives) {
+                if (!candidate.getVisitDate().equals(alternative.getVisitDate())) {
+                    throw new IllegalArgumentException(
+                            "대체 후보는 원본 장소와 방문 날짜가 같아야 합니다. placeId="
+                                    + candidate.getPlaceId()
+                    );
+                }
+            }
+            pools.put(candidate.getPlaceId(), alternatives);
+        }
+
+        return pools;
     }
 
     /**
@@ -612,6 +669,14 @@ public class CourseOptimizationService {
                 .latitude(candidate.getLatitude())
                 .longitude(candidate.getLongitude())
                 .visitDate(candidate.getVisitDate())
+                .themePalaceCultureYn(candidate.getThemePalaceCultureYn())
+                .themeNatureHangangYn(candidate.getThemeNatureHangangYn())
+                .themeDateYn(candidate.getThemeDateYn())
+                .themeFoodTourYn(candidate.getThemeFoodTourYn())
+                .themeCafeTourYn(candidate.getThemeCafeTourYn())
+                .themeShoppingHotplaceYn(candidate.getThemeShoppingHotplaceYn())
+                .themeNightViewYn(candidate.getThemeNightViewYn())
+                .themeHotelStayYn(candidate.getThemeHotelStayYn())
                 .expectedVisitMinutes(
                         visitDurationService.calculateExpectedVisitMinutes(
                                 candidate.getCategory()

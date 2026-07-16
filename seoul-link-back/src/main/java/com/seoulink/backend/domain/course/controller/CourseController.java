@@ -65,13 +65,12 @@ public class CourseController {
         return courseOptimizationService.optimize(request);
     }
 
-    /** 추천 후보 최적화부터 DB 저장까지 한 번에 처리한다. */
+    /** 확정된 날짜별 추천 후보를 최적화해 프론트 표시 구조로 반환한다. */
     @PostMapping("/recommend")
-    @ResponseStatus(HttpStatus.CREATED)
     public CourseRecommendResponse recommendCourse(
             @RequestBody CourseRecommendRequest request
     ) {
-        return courseRecommendationService.recommendAndSave(request);
+        return courseRecommendationService.recommend(request);
     }
 
     /**
