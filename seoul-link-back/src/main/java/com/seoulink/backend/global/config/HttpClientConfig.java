@@ -15,6 +15,7 @@ import java.time.Duration;
 @Configuration
 public class HttpClientConfig {
 
+    // 외부 API 지연이 전체 추천 요청을 오래 붙잡지 않도록 연결·응답 제한시간을 분리한다.
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(3);
     private static final Duration READ_TIMEOUT = Duration.ofSeconds(8);
 

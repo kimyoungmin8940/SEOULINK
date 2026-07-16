@@ -22,6 +22,7 @@ import java.util.List;
 @AllArgsConstructor
 public class CourseOptimizeRequest {
 
+    // 비어 있는 배열도 정상 요청으로 처리하기 위해 기본값을 빈 목록으로 둔다.
     @Builder.Default
     private List<PlaceCandidateDto> placeCandidates = new ArrayList<>();
 }

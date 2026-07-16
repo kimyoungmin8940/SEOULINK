@@ -15,12 +15,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+/** 날짜 분리, 중복 제거, 경로 선택 우선순위와 입력값 검증을 확인한다. */
 class CourseOptimizationServiceTest {
 
     private CourseOptimizationService courseOptimizationService;
 
     @BeforeEach
     void setUp() {
+        // 외부 경로 API가 없는 DistanceService를 사용해 테스트 결과를 결정적으로 유지한다.
         courseOptimizationService = new CourseOptimizationService(
                 new DistanceService(),
                 new VisitDurationService()
@@ -100,6 +102,141 @@ class CourseOptimizationServiceTest {
     }
 
     @Test
+    @DisplayName("장소가 한 개면 이동거리와 이동시간 없이 방문 순서 1로 반환한다")
+    void optimizeSingleCandidate() {
+        LocalDate visitDate = LocalDate.of(2026, 7, 20);
+        CourseOptimizeRequest request = CourseOptimizeRequest.builder()
+                .placeCandidates(List.of(place(
+                        1L,
+                        "경복궁",
+                        "TOUR",
+                        90.0,
+                        37.5796,
+                        126.9770,
+                        visitDate
+                )))
+                .build();
+
+        CourseOptimizeResponse response = courseOptimizationService.optimize(request);
+        OptimizedPlaceDto optimizedPlace = response.getOptimizedPlaces().get(0);
+
+        assertEquals(1, response.getOptimizedPlaces().size());
+        assertEquals(1L, optimizedPlace.getPlaceId());
+        assertEquals(1, optimizedPlace.getVisitOrder());
+        assertEquals(0.0, optimizedPlace.getDistanceFromPreviousKm(), 0.000001);
+        assertEquals(0.0, optimizedPlace.getTravelTimeFromPreviousMinutes(), 0.000001);
+        assertEquals(90, response.getTotalVisitTimeMinutes());
+        assertEquals(90.0, response.getTotalCourseTimeMinutes(), 0.000001);
+    }
+
+    @Test
+    @DisplayName("좌표가 누락된 장소 후보는 예외가 발생한다")
+    void optimizeRejectsCandidateWithoutCoordinates() {
+        PlaceCandidateDto invalidCandidate = place(
+                1L,
+                "좌표 없는 장소",
+                "TOUR",
+                90.0,
+                null,
+                126.9780,
+                LocalDate.of(2026, 7, 20)
+        );
+
+        CourseOptimizeRequest request = CourseOptimizeRequest.builder()
+                .placeCandidates(List.of(invalidCandidate))
+                .build();
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> courseOptimizationService.optimize(request)
+        );
+
+        assertEquals("장소의 위도와 경도는 필수입니다.", exception.getMessage());
+    }
+
+    @Test
+    @DisplayName("중복 장소는 한 번만 남기고 같은 날짜에서는 높은 추천 점수를 사용한다")
+    void optimizeRemovesDuplicatePlaces() {
+        LocalDate visitDate = LocalDate.of(2026, 7, 20);
+        CourseOptimizeRequest request = CourseOptimizeRequest.builder()
+                .placeCandidates(List.of(
+                        place(1L, "경복궁", "TOUR", 80.0,
+                                37.5796, 126.9770, visitDate),
+                        place(1L, "경복궁", "TOUR", 95.0,
+                                37.5796, 126.9770, visitDate),
+                        place(2L, "덕수궁", "TOUR", 90.0,
+                                37.5658, 126.9751, visitDate)
+                ))
+                .build();
+
+        CourseOptimizeResponse response = courseOptimizationService.optimize(request);
+
+        assertEquals(2, response.getOptimizedPlaces().size());
+        assertEquals(1L, response.getOptimizedPlaces().get(0).getPlaceId());
+        assertEquals(
+                95.0,
+                response.getOptimizedPlaces().get(0).getRecommendationScore(),
+                0.000001
+        );
+        assertEquals(1, response.getOptimizedPlaces().stream()
+                .filter(place -> place.getPlaceId().equals(1L))
+                .count());
+    }
+
+    @Test
+    @DisplayName("서로 다른 날짜에 중복된 장소는 더 이른 날짜에 한 번만 배치한다")
+    void optimizeKeepsDuplicatePlaceOnEarlierDate() {
+        LocalDate firstDay = LocalDate.of(2026, 7, 20);
+        LocalDate secondDay = LocalDate.of(2026, 7, 21);
+        CourseOptimizeRequest request = CourseOptimizeRequest.builder()
+                .placeCandidates(List.of(
+                        place(1L, "경복궁", "TOUR", 99.0,
+                                37.5796, 126.9770, secondDay),
+                        place(1L, "경복궁", "TOUR", 80.0,
+                                37.5796, 126.9770, firstDay),
+                        place(2L, "서울숲", "TOUR", 90.0,
+                                37.5444, 127.0374, secondDay)
+                ))
+                .build();
+
+        CourseOptimizeResponse response = courseOptimizationService.optimize(request);
+
+        assertEquals(2, response.getOptimizedPlaces().size());
+        assertEquals(firstDay, response.getOptimizedPlaces().stream()
+                .filter(place -> place.getPlaceId().equals(1L))
+                .findFirst()
+                .orElseThrow()
+                .getVisitDate());
+    }
+
+    @Test
+    @DisplayName("추천 점수와 경로 비용이 모두 같으면 장소 ID 순으로 결정한다")
+    void optimizeUsesPlaceIdForCompleteTie() {
+        LocalDate visitDate = LocalDate.of(2026, 7, 20);
+        CourseOptimizeRequest request = CourseOptimizeRequest.builder()
+                .placeCandidates(List.of(
+                        place(3L, "세 번째 장소", "CAFE", 90.0,
+                                37.5665, 126.9780, visitDate),
+                        place(1L, "첫 번째 장소", "CAFE", 90.0,
+                                37.5665, 126.9780, visitDate),
+                        place(2L, "두 번째 장소", "CAFE", 90.0,
+                                37.5665, 126.9780, visitDate)
+                ))
+                .build();
+
+        CourseOptimizeResponse response = courseOptimizationService.optimize(request);
+
+        assertEquals(
+                List.of(1L, 2L, 3L),
+                response.getOptimizedPlaces().stream()
+                        .map(OptimizedPlaceDto::getPlaceId)
+                        .toList()
+        );
+        assertEquals(0.0, response.getTotalDistanceKm(), 0.000001);
+        assertEquals(0.0, response.getTotalTravelTimeMinutes(), 0.000001);
+    }
+
+    @Test
     @DisplayName("방문 날짜가 없는 장소 후보는 예외가 발생한다")
     void optimizeRejectsCandidateWithoutVisitDate() {
         PlaceCandidateDto invalidCandidate = PlaceCandidateDto.builder()
@@ -121,6 +258,7 @@ class CourseOptimizationServiceTest {
         );
     }
 
+    /** 테스트마다 반복되는 장소 후보 생성을 한곳에 모은다. */
     private PlaceCandidateDto place(
             Long placeId,
             String placeName,

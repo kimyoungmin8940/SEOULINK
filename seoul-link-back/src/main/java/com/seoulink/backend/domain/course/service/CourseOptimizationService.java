@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -16,7 +17,7 @@ import java.util.TreeMap;
 /**
  * 추천 장소 후보를 날짜별로 나누고 실제 이동시간이 짧은 순서로 정렬하는 서비스이다.
  *
- * <p>각 날짜에서 추천 점수가 가장 높은 장소를 첫 장소로 선택한 뒤,
+ * <p>중복 장소를 한 번만 남긴 뒤 각 날짜에서 추천 점수가 가장 높은 장소를 첫 장소로 선택하고,
  * OpenRouteService 경로 행렬의 이동시간을 기준으로 다음 장소를 선택한다.
  * 외부 API를 사용할 수 없으면 {@link DistanceService}가 직선거리 방식으로 자동 대체하고,
  * 예상 방문 시간은 {@link VisitDurationService}가 카테고리에 따라 계산한다.</p>
@@ -24,6 +25,7 @@ import java.util.TreeMap;
 @Service
 public class CourseOptimizationService {
 
+    // 외부 API의 부동소수점 오차 때문에 사실상 같은 경로 비용을 다르게 보지 않도록 한다.
     private static final double ROUTE_TIE_EPSILON = 0.000000001;
 
     private final DistanceService distanceService;
@@ -62,9 +64,9 @@ public class CourseOptimizationService {
                     .build();
         }
 
+        // 중복을 먼저 제거한 뒤 TreeMap으로 날짜가 빠른 일정부터 처리한다.
         Map<LocalDate, List<PlaceCandidateDto>> candidatesByDate = new TreeMap<>();
-        for (PlaceCandidateDto candidate : candidates) {
-            validateCandidate(candidate);
+        for (PlaceCandidateDto candidate : validateAndRemoveDuplicates(candidates)) {
             candidatesByDate
                     .computeIfAbsent(candidate.getVisitDate(), ignored -> new ArrayList<>())
                     .add(candidate);
@@ -74,12 +76,14 @@ public class CourseOptimizationService {
         double totalDistanceKm = 0.0;
         double totalTravelTimeMinutes = 0.0;
 
+        // 하루마다 이동 행렬을 한 번 계산하고 최근접 이웃 방식으로 경로를 만든다.
         for (List<PlaceCandidateDto> dailyCandidates : candidatesByDate.values()) {
             RouteMatrix routeMatrix = distanceService.calculateRouteMatrix(dailyCandidates);
             List<Integer> remainingIndexes = createIndexes(dailyCandidates.size());
             int currentIndex = selectFirstPlaceIndex(dailyCandidates);
             remainingIndexes.remove(Integer.valueOf(currentIndex));
 
+            // 첫 장소는 추천 점수가 가장 높은 후보이며 이전 장소 이동값은 0이다.
             int visitOrder = 1;
             optimizedPlaces.add(toOptimizedPlace(
                     dailyCandidates.get(currentIndex),
@@ -88,6 +92,7 @@ public class CourseOptimizationService {
                     0.0
             ));
 
+            // 현재 장소에서 이동시간이 가장 짧은 미방문 장소를 차례로 연결한다.
             while (!remainingIndexes.isEmpty()) {
                 int nextIndex = selectNextPlaceIndex(
                         currentIndex,
@@ -115,6 +120,7 @@ public class CourseOptimizationService {
             }
         }
 
+        // 전체 소요시간은 장소 체류시간과 장소 사이 이동시간을 합산한다.
         int totalVisitTimeMinutes = optimizedPlaces.stream()
                 .mapToInt(OptimizedPlaceDto::getExpectedVisitMinutes)
                 .sum();
@@ -130,6 +136,47 @@ public class CourseOptimizationService {
                 .build();
     }
 
+    /**
+     * 같은 장소가 여러 번 들어오면 코스 전체에서 한 번만 사용한다.
+     * 날짜가 다르면 더 이른 날짜의 후보를 남기고, 같은 날짜라면 추천 점수가
+     * 더 높은 후보를 남긴다. 날짜와 점수까지 같으면 먼저 받은 후보를 유지한다.
+     */
+    private List<PlaceCandidateDto> validateAndRemoveDuplicates(
+            List<PlaceCandidateDto> candidates
+    ) {
+        Map<Long, PlaceCandidateDto> uniqueCandidates = new LinkedHashMap<>();
+
+        for (PlaceCandidateDto candidate : candidates) {
+            validateCandidate(candidate);
+            uniqueCandidates.merge(
+                    candidate.getPlaceId(),
+                    candidate,
+                    this::selectDuplicateCandidate
+            );
+        }
+
+        return new ArrayList<>(uniqueCandidates.values());
+    }
+
+    /** 중복 장소 중 더 이른 날짜, 같은 날짜라면 추천 점수가 높은 후보를 선택한다. */
+    private PlaceCandidateDto selectDuplicateCandidate(
+            PlaceCandidateDto existing,
+            PlaceCandidateDto candidate
+    ) {
+        int dateComparison = candidate.getVisitDate().compareTo(existing.getVisitDate());
+        if (dateComparison < 0) {
+            return candidate;
+        }
+        if (dateComparison > 0) {
+            return existing;
+        }
+
+        return candidate.getRecommendationScore() > existing.getRecommendationScore()
+                ? candidate
+                : existing;
+    }
+
+    /** 경로 행렬과 같은 위치 체계를 사용하도록 0부터 시작하는 후보 인덱스를 만든다. */
     private List<Integer> createIndexes(int size) {
         List<Integer> indexes = new ArrayList<>(size);
         for (int index = 0; index < size; index++) {
@@ -138,6 +185,7 @@ public class CourseOptimizationService {
         return indexes;
     }
 
+    /** 하루의 출발 장소를 추천 점수 우선, 장소 ID 보조 기준으로 결정한다. */
     private int selectFirstPlaceIndex(List<PlaceCandidateDto> candidates) {
         int firstIndex = 0;
 
@@ -150,6 +198,7 @@ public class CourseOptimizationService {
         return firstIndex;
     }
 
+    /** 이동시간 → 거리 → 추천 점수 → 장소 ID 순으로 다음 방문 장소를 결정한다. */
     private int selectNextPlaceIndex(
             int currentIndex,
             List<Integer> candidateIndexes,
@@ -189,6 +238,7 @@ public class CourseOptimizationService {
         return selectedIndex;
     }
 
+    /** 추천 점수가 같으면 항상 같은 결과가 나오도록 더 작은 장소 ID를 우선한다. */
     private boolean isPreferredCandidate(
             PlaceCandidateDto candidate,
             PlaceCandidateDto currentCandidate
@@ -203,6 +253,7 @@ public class CourseOptimizationService {
                 && candidate.getPlaceId() < currentCandidate.getPlaceId());
     }
 
+    /** 원본 후보에 계산된 체류시간·방문 순서·이동 정보를 더해 응답 DTO로 변환한다. */
     private OptimizedPlaceDto toOptimizedPlace(
             PlaceCandidateDto candidate,
             int visitOrder,
@@ -228,6 +279,7 @@ public class CourseOptimizationService {
                 .build();
     }
 
+    /** 최적화와 거리 계산에 필요한 장소 후보의 필수값을 한곳에서 검증한다. */
     private void validateCandidate(PlaceCandidateDto candidate) {
         if (candidate == null) {
             throw new IllegalArgumentException("장소 후보는 null일 수 없습니다.");
@@ -252,6 +304,7 @@ public class CourseOptimizationService {
             throw new IllegalArgumentException("방문 날짜는 필수입니다.");
         }
 
+        // 동일 좌표 간 거리 계산을 호출해 실제 계산 전에 위도·경도 범위까지 검증한다.
         distanceService.calculateDistanceKm(
                 candidate.getLatitude(),
                 candidate.getLongitude(),

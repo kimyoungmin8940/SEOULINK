@@ -21,6 +21,7 @@ import java.util.List;
 @Service
 public class DistanceService {
 
+    // 외부 경로 API를 사용할 수 없을 때 Haversine 거리와 시속 4.5km로 예상시간을 계산한다.
     private static final Logger log = LoggerFactory.getLogger(DistanceService.class);
     private static final double EARTH_RADIUS_KM = 6371.0088;
     private static final double FALLBACK_WALKING_SPEED_KM_PER_HOUR = 4.5;
@@ -54,6 +55,7 @@ public class DistanceService {
             return createFallbackMatrix(candidates);
         }
 
+        // API 키가 있을 때만 실제 도보 경로 행렬을 요청한다.
         if (openRouteServiceClient != null && openRouteServiceClient.isConfigured()) {
             try {
                 List<RouteCoordinate> coordinates = candidates.stream()
@@ -77,6 +79,7 @@ public class DistanceService {
             }
         }
 
+        // 키가 없거나 요청이 실패해도 추천 흐름은 중단하지 않고 직선거리로 대체한다.
         return createFallbackMatrix(candidates);
     }
 
@@ -106,6 +109,7 @@ public class DistanceService {
                 * Math.cos(endLatitudeRadians)
                 * Math.pow(Math.sin(longitudeDifference / 2), 2);
 
+        // 부동소수점 오차로 값이 0~1 범위를 벗어나 제곱근이 NaN이 되는 것을 막는다.
         double normalizedHaversine = Math.max(0.0, Math.min(1.0, haversine));
         double centralAngle = 2 * Math.atan2(
                 Math.sqrt(normalizedHaversine),
@@ -115,6 +119,7 @@ public class DistanceService {
         return EARTH_RADIUS_KM * centralAngle;
     }
 
+    /** 모든 장소 쌍의 직선거리와 평균 도보 속도 기반 이동시간 행렬을 만든다. */
     private RouteMatrix createFallbackMatrix(List<PlaceCandidateDto> candidates) {
         int size = candidates.size();
         double[][] distancesKm = new double[size][size];
@@ -141,6 +146,7 @@ public class DistanceService {
         return new RouteMatrix(distancesKm, travelTimesMinutes);
     }
 
+    /** 행렬 계산 전에 모든 장소에 유효 범위의 위도·경도가 있는지 확인한다. */
     private void validateCoordinates(List<PlaceCandidateDto> candidates) {
         for (PlaceCandidateDto candidate : candidates) {
             if (candidate == null
@@ -153,12 +159,14 @@ public class DistanceService {
         }
     }
 
+    /** 위도 범위(-90~90)와 유한값 여부를 검증한다. */
     private void validateLatitude(double latitude) {
         if (!Double.isFinite(latitude) || latitude < -90.0 || latitude > 90.0) {
             throw new IllegalArgumentException("위도는 -90 이상 90 이하의 유한한 숫자여야 합니다.");
         }
     }
 
+    /** 경도 범위(-180~180)와 유한값 여부를 검증한다. */
     private void validateLongitude(double longitude) {
         if (!Double.isFinite(longitude) || longitude < -180.0 || longitude > 180.0) {
             throw new IllegalArgumentException("경도는 -180 이상 180 이하의 유한한 숫자여야 합니다.");
@@ -186,6 +194,7 @@ public class DistanceService {
             return travelTimesMinutes[fromIndex][toIndex];
         }
 
+        /** 거리와 시간 배열이 같은 크기의 정사각 행렬인지 확인한다. */
         private static void validateMatrix(
                 double[][] distancesKm,
                 double[][] travelTimesMinutes

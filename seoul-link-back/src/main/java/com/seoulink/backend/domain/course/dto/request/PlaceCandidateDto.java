@@ -23,10 +23,15 @@ import java.time.LocalDate;
 @AllArgsConstructor
 public class PlaceCandidateDto {
 
+    // 장소 DB의 식별자와 화면·체류시간 계산에 필요한 기본 정보이다.
     private Long placeId;
     private String placeName;
     private String category;
+
+    // 추천 담당자가 계산한 점수로 첫 장소와 경로 비용 동점 후보를 결정한다.
     private Double recommendationScore;
+
+    // 거리 계산 좌표와 추천 담당자가 우선 배정한 방문 날짜이다.
     private Double latitude;
     private Double longitude;
     private LocalDate visitDate;

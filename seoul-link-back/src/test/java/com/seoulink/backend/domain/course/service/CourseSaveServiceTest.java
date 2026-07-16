@@ -11,6 +11,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -18,12 +19,14 @@ import java.util.stream.StreamSupport;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/** 코스 기본 행과 상세 장소 행의 저장값, 검증 규칙, 트랜잭션 경계를 확인한다. */
 class CourseSaveServiceTest {
 
     private TravelCourseRepository travelCourseRepository;
@@ -32,6 +35,7 @@ class CourseSaveServiceTest {
 
     @BeforeEach
     void setUp() {
+        // Repository를 mock으로 두어 DB 없이 저장 호출과 전달 엔티티를 검증한다.
         travelCourseRepository = mock(TravelCourseRepository.class);
         courseDetailRepository = mock(CourseDetailRepository.class);
         courseSaveService = new CourseSaveService(
@@ -136,6 +140,44 @@ class CourseSaveServiceTest {
         verify(courseDetailRepository, never()).saveAll(any());
     }
 
+    @Test
+    @DisplayName("같은 장소가 여러 날짜에 중복되면 저장하지 않는다")
+    void rejectDuplicatePlace() {
+        CourseSaveRequest request = CourseSaveRequest.builder()
+                .memberId(1L)
+                .title("중복 장소 코스")
+                .places(List.of(
+                        place(1L, LocalDate.of(2026, 7, 20),
+                                1, 90, 0.0, 0.0),
+                        place(1L, LocalDate.of(2026, 7, 21),
+                                1, 90, 0.0, 0.0)
+                ))
+                .build();
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> courseSaveService.saveOptimizedCourse(request)
+        );
+
+        assertEquals(
+                "동일한 장소를 코스에 중복 저장할 수 없습니다. placeId=1",
+                exception.getMessage()
+        );
+        verify(travelCourseRepository, never()).save(any());
+        verify(courseDetailRepository, never()).saveAll(any());
+    }
+
+    @Test
+    @DisplayName("코스와 상세 장소 저장은 하나의 트랜잭션으로 처리한다")
+    void saveMethodIsTransactional() throws NoSuchMethodException {
+        boolean transactional = CourseSaveService.class
+                .getMethod("saveOptimizedCourse", CourseSaveRequest.class)
+                .isAnnotationPresent(Transactional.class);
+
+        assertTrue(transactional);
+    }
+
+    /** 날짜·순서별 상세 장소 입력을 간결하게 만드는 테스트 헬퍼이다. */
     private CourseSavePlaceDto place(
             Long placeId,
             LocalDate visitDate,

@@ -19,8 +19,11 @@ import java.util.List;
 @AllArgsConstructor
 public class CourseOptimizeResponse {
 
+    // 날짜별 방문 순서와 장소 간 이동 정보가 계산된 결과이다.
     @Builder.Default
     private List<OptimizedPlaceDto> optimizedPlaces = new ArrayList<>();
+
+    // 모든 날짜를 합산한 거리·이동시간·체류시간·전체 소요시간이다.
     private Double totalDistanceKm;
     private Double totalTravelTimeMinutes;
     private Integer totalVisitTimeMinutes;

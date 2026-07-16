@@ -7,12 +7,14 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+/** 기본 카테고리와 한글 별칭별 예상 체류시간 규칙을 검증한다. */
 class VisitDurationServiceTest {
 
     private VisitDurationService visitDurationService;
 
     @BeforeEach
     void setUp() {
+        // 상태가 없는 계산 서비스이므로 테스트마다 새 인스턴스를 사용한다.
         visitDurationService = new VisitDurationService();
     }
 

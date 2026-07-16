@@ -16,9 +16,13 @@ import java.time.LocalDate;
 @AllArgsConstructor
 public class CourseSavePlaceDto {
 
+    // 장소 식별자와 날짜별 방문 순서이다.
     private Long placeId;
     private LocalDate visitDate;
     private Integer visitOrder;
+
+    // 해당 장소의 체류시간과 바로 이전 장소에서 이동해 온 거리·시간이다.
+    // 날짜별 첫 장소는 이전 장소가 없으므로 거리와 이동시간을 0으로 전달한다.
     private Integer expectedVisitMinutes;
     private Double distanceFromPreviousKm;
     private Double travelTimeFromPreviousMinutes;

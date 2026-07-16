@@ -21,6 +21,7 @@ import java.time.LocalDate;
 @AllArgsConstructor
 public class OptimizedPlaceDto {
 
+    // 원본 후보에서 유지되는 장소·추천·좌표·날짜 정보이다.
     private Long placeId;
     private String placeName;
     private String category;
@@ -28,6 +29,8 @@ public class OptimizedPlaceDto {
     private Double latitude;
     private Double longitude;
     private LocalDate visitDate;
+
+    // 최적화 단계에서 새로 계산되는 체류시간·방문 순서·이동 정보이다.
     private Integer expectedVisitMinutes;
     private Integer visitOrder;
     private Double distanceFromPreviousKm;

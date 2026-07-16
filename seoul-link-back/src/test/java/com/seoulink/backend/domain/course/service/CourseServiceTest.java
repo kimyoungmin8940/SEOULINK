@@ -1,6 +1,7 @@
 package com.seoulink.backend.domain.course.service;
 
 import com.seoulink.backend.domain.course.dto.response.CourseDetailResponse;
+import com.seoulink.backend.domain.course.dto.response.CourseRecommendationResponse;
 import com.seoulink.backend.domain.course.entity.CourseDetail;
 import com.seoulink.backend.domain.course.entity.TravelCourse;
 import com.seoulink.backend.domain.course.repository.CourseDetailRepository;
@@ -20,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+/** 저장 엔티티가 상세 응답과 목록 카드 응답으로 올바르게 변환되는지 검증한다. */
 class CourseServiceTest {
 
     private TravelCourseRepository travelCourseRepository;
@@ -28,6 +30,7 @@ class CourseServiceTest {
 
     @BeforeEach
     void setUp() {
+        // 조회 순서와 응답 변환만 확인할 수 있도록 Repository를 mock으로 구성한다.
         travelCourseRepository = mock(TravelCourseRepository.class);
         courseDetailRepository = mock(CourseDetailRepository.class);
         courseService = new CourseService(
@@ -97,6 +100,81 @@ class CourseServiceTest {
         );
     }
 
+    @Test
+    @DisplayName("회원의 SURVEY 추천 코스만 최신순으로 조회한다")
+    void getRecommendedCourses() {
+        TravelCourse recommended = TravelCourse.builder()
+                .courseId(20L)
+                .memberId(1L)
+                .title("서울 추천 코스")
+                .description("설문 기반 추천 코스")
+                .courseType("SURVEY")
+                .region("서울 종로구")
+                .totalDistanceKm(2.5)
+                .totalTravelTimeMinutes(30.0)
+                .totalVisitTimeMinutes(180)
+                .totalCourseTimeMinutes(210.0)
+                .build();
+        List<CourseDetail> details = List.of(
+                detail(200L, 20L, 1L, 1, 1,
+                        LocalDate.of(2026, 7, 20), 90, 0.0, 0.0),
+                detail(201L, 20L, 2L, 2, 1,
+                        LocalDate.of(2026, 7, 21), 90, 0.0, 0.0)
+        );
+
+        when(travelCourseRepository
+                .findByMemberIdAndCourseTypeOrderByCreatedAtDesc(1L, "SURVEY"))
+                .thenReturn(List.of(recommended));
+        when(courseDetailRepository
+                .findByCourseIdOrderByDayNoAscPlaceOrderAsc(20L))
+                .thenReturn(details);
+
+        List<CourseRecommendationResponse> response =
+                courseService.getRecommendedCourses(1L);
+
+        assertEquals(1, response.size());
+        assertEquals(20L, response.get(0).getCourseId());
+        assertEquals(2, response.get(0).getPlaceCount());
+        assertEquals(2, response.get(0).getDayCount());
+        assertEquals(List.of("서울 종로구"), response.get(0).getRegions());
+    }
+
+    @Test
+    @DisplayName("회원의 모든 유형 코스를 최신순으로 조회한다")
+    void getMemberCourses() {
+        TravelCourse custom = TravelCourse.builder()
+                .courseId(30L)
+                .memberId(1L)
+                .title("내 서울 코스")
+                .courseType("CUSTOM")
+                .build();
+
+        when(travelCourseRepository.findByMemberIdOrderByCreatedAtDesc(1L))
+                .thenReturn(List.of(custom));
+        when(courseDetailRepository
+                .findByCourseIdOrderByDayNoAscPlaceOrderAsc(30L))
+                .thenReturn(List.of(detail(
+                        300L,
+                        30L,
+                        1L,
+                        1,
+                        1,
+                        LocalDate.of(2026, 7, 20),
+                        90,
+                        0.0,
+                        0.0
+                )));
+
+        List<CourseRecommendationResponse> response =
+                courseService.getMemberCourses(1L);
+
+        assertEquals(1, response.size());
+        assertEquals(30L, response.get(0).getCourseId());
+        assertEquals("내 서울 코스", response.get(0).getTitle());
+        assertEquals(1, response.get(0).getPlaceCount());
+    }
+
+    /** 날짜와 순서가 다른 상세 장소 엔티티를 만드는 테스트 헬퍼이다. */
     private CourseDetail detail(
             Long detailId,
             Long courseId,

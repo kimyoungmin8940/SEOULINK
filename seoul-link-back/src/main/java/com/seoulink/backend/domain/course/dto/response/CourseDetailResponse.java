@@ -18,6 +18,7 @@ import java.util.List;
 @AllArgsConstructor
 public class CourseDetailResponse {
 
+    // 저장된 코스의 기본 정보와 공개 상태이다.
     private Long courseId;
     private String title;
     private String description;
@@ -27,6 +28,8 @@ public class CourseDetailResponse {
     private String region;
     private Boolean publicCourse;
     private Long viewCount;
+
+    // 코스 전체의 장소·일수·거리·시간 집계값이다.
     private Integer placeCount;
     private Integer dayCount;
     private Double totalDistanceKm;
@@ -36,6 +39,7 @@ public class CourseDetailResponse {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
+    // 날짜와 방문 순서대로 정렬된 상세 장소 목록이다.
     @Builder.Default
     private List<CoursePlaceResponse> places = new ArrayList<>();
 }

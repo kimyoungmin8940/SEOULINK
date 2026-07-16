@@ -16,6 +16,7 @@ import java.time.LocalDate;
 @AllArgsConstructor
 public class CoursePlaceResponse {
 
+    // COURSE_DETAILS와 PLACES를 연결하는 식별자이다.
     private Long detailId;
     private Long placeId;
 
@@ -28,12 +29,15 @@ public class CoursePlaceResponse {
     private Double latitude;
     private Double longitude;
 
+    // 저장된 일정 정보이다. dayNo는 1일차·2일차 표시, visitOrder는 하루 안의 순서이다.
     private Integer dayNo;
     private LocalDate visitDate;
     private Integer visitOrder;
     private String memo;
     private String visitTime;
     private Integer expectedVisitMinutes;
+
+    // 같은 날짜의 첫 장소는 이전 장소가 없으므로 두 값이 0이다.
     private Double distanceFromPreviousKm;
     private Double travelTimeFromPreviousMinutes;
 }

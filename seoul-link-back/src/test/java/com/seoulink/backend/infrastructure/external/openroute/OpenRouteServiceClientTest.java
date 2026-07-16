@@ -20,6 +20,7 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
+/** Matrix API 요청 형식과 거리·시간 단위 변환, API 키 검증을 확인한다. */
 class OpenRouteServiceClientTest {
 
     @Test

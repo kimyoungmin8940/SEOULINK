@@ -19,6 +19,7 @@ import java.util.List;
 @Component
 public class OpenRouteServiceClient {
 
+    // Matrix API에 거리와 시간을 함께 요청하고 거리 응답 단위는 km로 고정한다.
     private static final List<String> MATRIX_METRICS = List.of("distance", "duration");
     private static final String DISTANCE_UNIT = "km";
 
@@ -52,6 +53,7 @@ public class OpenRouteServiceClient {
     public RouteMatrixResult calculateMatrix(List<RouteCoordinate> coordinates) {
         validateRequest(coordinates);
 
+        // OpenRouteService 규격은 일반적인 위도·경도 표기와 반대로 [경도, 위도] 순서이다.
         List<List<Double>> locations = coordinates.stream()
                 .map(coordinate -> List.of(
                         coordinate.longitude(),
@@ -66,6 +68,7 @@ public class OpenRouteServiceClient {
         );
 
         try {
+            // 선택한 이동 프로필(기본 foot-walking)에 대해 하루 좌표 전체를 한 번에 요청한다.
             MatrixResponse response = restClient.post()
                     .uri("/v2/matrix/{profile}", profile)
                     .header(HttpHeaders.AUTHORIZATION, apiKey)
@@ -83,6 +86,7 @@ public class OpenRouteServiceClient {
         }
     }
 
+    /** API 키·이동 프로필·최소 좌표 개수를 외부 요청 전에 검증한다. */
     private void validateRequest(List<RouteCoordinate> coordinates) {
         if (!isConfigured()) {
             throw new IllegalStateException(
@@ -97,6 +101,7 @@ public class OpenRouteServiceClient {
         }
     }
 
+    /** API 응답 행렬을 서비스가 사용하는 km·분 단위 결과로 변환한다. */
     private RouteMatrixResult convertResponse(MatrixResponse response, int expectedSize) {
         if (response == null) {
             throw new IllegalStateException("OpenRouteService 응답이 비어 있습니다.");
@@ -108,6 +113,7 @@ public class OpenRouteServiceClient {
                 "distances",
                 1.0
         );
+        // durations는 초 단위이므로 60으로 나누어 분 단위로 변환한다.
         double[][] travelTimesMinutes = copyMatrix(
                 response.durations(),
                 expectedSize,
@@ -118,6 +124,7 @@ public class OpenRouteServiceClient {
         return new RouteMatrixResult(distancesKm, travelTimesMinutes);
     }
 
+    /** 응답 행렬의 크기와 값을 검증하면서 primitive 배열로 복사하고 단위를 변환한다. */
     private double[][] copyMatrix(
             List<List<Double>> source,
             int expectedSize,
@@ -147,6 +154,7 @@ public class OpenRouteServiceClient {
         return result;
     }
 
+    /** 잘못된 외부 응답을 동일한 예외 형식으로 변환한다. */
     private IllegalStateException invalidResponse(String fieldName) {
         return new IllegalStateException(
                 "OpenRouteService 응답의 " + fieldName + " 행렬이 올바르지 않습니다."

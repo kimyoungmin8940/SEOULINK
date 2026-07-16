@@ -13,6 +13,7 @@ import java.util.Locale;
 @Service
 public class VisitDurationService {
 
+    // PLACES의 4개 기본 카테고리별 체류시간이며, 알 수 없는 값은 60분으로 처리한다.
     private static final int ATTRACTION_MINUTES = 90;
     private static final int RESTAURANT_MINUTES = 60;
     private static final int CAFE_MINUTES = 60;
@@ -32,6 +33,7 @@ public class VisitDurationService {
 
         String normalizedCategory = category.trim().toLowerCase(Locale.ROOT);
 
+        // 팀 데이터 통합 과정에서 들어올 수 있는 영문·한글 별칭을 같은 분류로 처리한다.
         return switch (normalizedCategory) {
             case "tour", "관광지", "attraction", "tourist_attraction" ->
                     ATTRACTION_MINUTES;

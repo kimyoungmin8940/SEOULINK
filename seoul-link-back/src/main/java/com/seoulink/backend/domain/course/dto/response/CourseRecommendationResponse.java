@@ -23,6 +23,7 @@ import java.util.List;
 @AllArgsConstructor
 public class CourseRecommendationResponse {
 
+    // 추천 카드와 목록 화면에 표시할 코스 기본 정보이다.
     private Long courseId;
     private String title;
     private String description;
@@ -34,11 +35,14 @@ public class CourseRecommendationResponse {
     @Builder.Default
     private List<String> tags = new ArrayList<>();
 
+    // 카드에서 소요 규모를 보여 주기 위한 코스 집계값이다.
     private Integer placeCount;
     private Integer dayCount;
     private Double totalDistanceKm;
     private Double totalTravelTimeMinutes;
     private Integer totalVisitTimeMinutes;
     private Double totalCourseTimeMinutes;
+
+    // 하트 도메인 연동 전에는 조회 서비스가 false로 채우는 임시 필드이다.
     private Boolean liked;
 }
