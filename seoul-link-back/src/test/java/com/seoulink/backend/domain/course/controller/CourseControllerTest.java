@@ -127,6 +127,9 @@ class CourseControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
+                                  "resultId": 101,
+                                  "travelCode": "ATLSR",
+                                  "dailyStartTime": "10:00",
                                   "placeCandidates": [
                                     {
                                       "placeId": 1,
@@ -135,7 +138,9 @@ class CourseControllerTest {
                                       "recommendationScore": 100.0,
                                       "latitude": 37.5665,
                                       "longitude": 126.9780,
-                                      "visitDate": "2026-07-20"
+                                      "visitDate": "2026-07-20",
+                                      "themePalaceCultureYn": "Y",
+                                      "alternativeCandidates": []
                                     },
                                     {
                                       "placeId": 2,
@@ -144,18 +149,19 @@ class CourseControllerTest {
                                       "recommendationScore": 90.0,
                                       "latitude": 37.5854,
                                       "longitude": 126.9780,
-                                      "visitDate": "2026-07-20"
-                                    }
-                                  ],
-                                  "alternativeCandidates": [
-                                    {
-                                      "placeId": 3,
-                                      "placeName": "덕수궁",
-                                      "category": "관광지",
-                                      "recommendationScore": 85.0,
-                                      "latitude": 37.5658,
-                                      "longitude": 126.9751,
-                                      "visitDate": "2026-07-20"
+                                      "visitDate": "2026-07-20",
+                                      "themePalaceCultureYn": "Y",
+                                      "alternativeCandidates": [
+                                        {
+                                          "placeId": 3,
+                                          "placeName": "덕수궁",
+                                          "category": "관광지",
+                                          "recommendationScore": 85.0,
+                                          "latitude": 37.5658,
+                                          "longitude": 126.9751,
+                                          "themePalaceCultureYn": "Y"
+                                        }
+                                      ]
                                     }
                                   ]
                                 }
@@ -339,6 +345,7 @@ class CourseControllerTest {
         when(courseRecommendationService.recommend(any()))
                 .thenReturn(CourseRecommendResponse.builder()
                         .resultId(101L)
+                        .travelCode("ATLSR")
                         .dailyStartTime(java.time.LocalTime.of(10, 0))
                         .weatherStatus("RAIN")
                         .temperature(27.5)
@@ -356,6 +363,7 @@ class CourseControllerTest {
                         .content("""
                                 {
                                   "resultId": 101,
+                                  "travelCode": "ATLSR",
                                   "dailyStartTime": "10:00",
                                   "weatherStatus": "RAIN",
                                   "temperature": 27.5,
@@ -433,6 +441,7 @@ class CourseControllerTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.resultId").value(101))
+                .andExpect(jsonPath("$.travelCode").value("ATLSR"))
                 .andExpect(jsonPath("$.dailyStartTime").value("10:00"))
                 .andExpect(jsonPath("$.weatherStatus").value("RAIN"))
                 .andExpect(jsonPath("$.temperature").value(27.5))

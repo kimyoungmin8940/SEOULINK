@@ -504,7 +504,7 @@ public class CourseOptimizationService {
 
     /**
      * 각 원본 장소에 포함된 전용 대체 후보를 검증하고 장소 ID별 후보 풀로 만든다.
-     * 전용 후보는 부모 장소와 같은 날짜여야 하며 다른 장소 교체에는 사용하지 않는다.
+     * 대체 후보 JSON에는 방문 날짜가 없어도 되며 부모 장소의 날짜를 자동 상속한다.
      */
     private Map<Long, List<PlaceCandidateDto>> createNestedAlternativePools(
             List<PlaceCandidateDto> candidates
@@ -512,25 +512,66 @@ public class CourseOptimizationService {
         Map<Long, List<PlaceCandidateDto>> pools = new LinkedHashMap<>();
 
         for (PlaceCandidateDto candidate : candidates) {
-            List<PlaceCandidateDto> alternatives = validateAndRemoveDuplicates(
-                    candidate.getAlternativeCandidates()
-            );
-            if (alternatives.isEmpty()) {
-                continue;
+            List<PlaceCandidateDto> datedAlternatives = new ArrayList<>();
+            for (PlaceCandidateDto alternative : alternativesOf(candidate)) {
+                datedAlternatives.add(inheritVisitDate(
+                        alternative,
+                        candidate.getVisitDate()
+                ));
             }
 
-            for (PlaceCandidateDto alternative : alternatives) {
-                if (!candidate.getVisitDate().equals(alternative.getVisitDate())) {
-                    throw new IllegalArgumentException(
-                            "대체 후보는 원본 장소와 방문 날짜가 같아야 합니다. placeId="
-                                    + candidate.getPlaceId()
-                    );
-                }
+            List<PlaceCandidateDto> alternatives = validateAndRemoveDuplicates(
+                    datedAlternatives
+            );
+            if (!alternatives.isEmpty()) {
+                pools.put(candidate.getPlaceId(), alternatives);
             }
-            pools.put(candidate.getPlaceId(), alternatives);
         }
 
         return pools;
+    }
+
+    /** JSON에서 대체 후보 배열이 null로 들어와도 빈 목록으로 처리한다. */
+    private List<PlaceCandidateDto> alternativesOf(PlaceCandidateDto candidate) {
+        return candidate.getAlternativeCandidates() == null
+                ? Collections.emptyList()
+                : candidate.getAlternativeCandidates();
+    }
+
+    /** 대체 후보가 원본 장소의 방문 날짜를 상속하도록 새 객체로 복사한다. */
+    private PlaceCandidateDto inheritVisitDate(
+            PlaceCandidateDto alternative,
+            LocalDate visitDate
+    ) {
+        if (alternative == null) {
+            throw new IllegalArgumentException("장소 후보는 null일 수 없습니다.");
+        }
+        if (alternative.getVisitDate() != null
+                && !visitDate.equals(alternative.getVisitDate())) {
+            throw new IllegalArgumentException(
+                    "대체 후보의 방문 날짜는 원본 장소와 같아야 합니다. placeId="
+                            + alternative.getPlaceId()
+            );
+        }
+
+        return PlaceCandidateDto.builder()
+                .placeId(alternative.getPlaceId())
+                .placeName(alternative.getPlaceName())
+                .category(alternative.getCategory())
+                .recommendationScore(alternative.getRecommendationScore())
+                .latitude(alternative.getLatitude())
+                .longitude(alternative.getLongitude())
+                .visitDate(visitDate)
+                .themePalaceCultureYn(alternative.getThemePalaceCultureYn())
+                .themeNatureHangangYn(alternative.getThemeNatureHangangYn())
+                .themeDateYn(alternative.getThemeDateYn())
+                .themeFoodTourYn(alternative.getThemeFoodTourYn())
+                .themeCafeTourYn(alternative.getThemeCafeTourYn())
+                .themeShoppingHotplaceYn(alternative.getThemeShoppingHotplaceYn())
+                .themeNightViewYn(alternative.getThemeNightViewYn())
+                .themeHotelStayYn(alternative.getThemeHotelStayYn())
+                .alternativeCandidates(alternativesOf(alternative))
+                .build();
     }
 
     /**

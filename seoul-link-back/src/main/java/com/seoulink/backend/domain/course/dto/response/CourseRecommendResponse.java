@@ -19,8 +19,9 @@ import java.util.List;
 @AllArgsConstructor
 public class CourseRecommendResponse {
 
-    // 요청과 결과를 연결하는 설문 결과 식별자와 공통 일정 시작 시각이다.
+    // 요청과 결과를 연결하는 설문 결과 식별자·여행 유형 코드·공통 시작 시각이다.
     private Long resultId;
+    private String travelCode;
 
     @JsonFormat(pattern = "HH:mm")
     private LocalTime dailyStartTime;

@@ -37,15 +37,23 @@ public class PlaceCandidateDto {
     private Double longitude;
     private LocalDate visitDate;
 
-    // 지도 코스 만들기에서 사용하는 8개 테마 여부이다.
-    private String themePalaceCultureYn;
-    private String themeNatureHangangYn;
-    private String themeDateYn;
-    private String themeFoodTourYn;
-    private String themeCafeTourYn;
-    private String themeShoppingHotplaceYn;
-    private String themeNightViewYn;
-    private String themeHotelStayYn;
+    // 한 장소가 여러 테마에 동시에 해당할 수 있으므로 각각 Y/N으로 전달한다.
+    @Builder.Default
+    private String themePalaceCultureYn = "N";
+    @Builder.Default
+    private String themeNatureHangangYn = "N";
+    @Builder.Default
+    private String themeDateYn = "N";
+    @Builder.Default
+    private String themeFoodTourYn = "N";
+    @Builder.Default
+    private String themeCafeTourYn = "N";
+    @Builder.Default
+    private String themeShoppingHotplaceYn = "N";
+    @Builder.Default
+    private String themeNightViewYn = "N";
+    @Builder.Default
+    private String themeHotelStayYn = "N";
 
     // 이 원본 장소가 먼 구간으로 판정됐을 때만 검토할 전용 대체 후보이다.
     @Builder.Default

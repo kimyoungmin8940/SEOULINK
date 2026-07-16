@@ -293,15 +293,17 @@ class CourseOptimizationServiceTest {
     @DisplayName("대체 후보의 좌표가 누락되어도 최적화를 중단한다")
     void optimizeRejectsAlternativeWithoutCoordinates() {
         LocalDate visitDate = LocalDate.of(2026, 7, 20);
+        PlaceCandidateDto original = place(
+                1L, "서울시청", "TOUR", 100.0,
+                37.5665, 126.9780, visitDate
+        );
+        original.setAlternativeCandidates(List.of(place(
+                2L, "좌표 없는 대체 후보", "TOUR", 90.0,
+                null, 126.9751, null
+        )));
+
         CourseOptimizeRequest request = CourseOptimizeRequest.builder()
-                .placeCandidates(List.of(place(
-                        1L, "서울시청", "TOUR", 100.0,
-                        37.5665, 126.9780, visitDate
-                )))
-                .alternativeCandidates(List.of(place(
-                        2L, "좌표 없는 대체 후보", "TOUR", 90.0,
-                        null, 126.9751, visitDate
-                )))
+                .placeCandidates(List.of(original))
                 .build();
 
         IllegalArgumentException exception = assertThrows(
@@ -405,7 +407,7 @@ class CourseOptimizationServiceTest {
         distantPlace.setAlternativeCandidates(List.of(
                 // 이 후보는 먼 관광지 전용이며 다른 원본 장소 교체에는 사용하지 않는다.
                 place(3L, "덕수궁", "관광지", 85.0,
-                        37.5658, 126.9751, visitDate)
+                        37.5658, 126.9751, null)
         ));
 
         CourseOptimizeRequest request = CourseOptimizeRequest.builder()
@@ -427,6 +429,10 @@ class CourseOptimizationServiceTest {
         );
         assertTrue(response.getTotalDistanceKm() < 2.0);
         assertTrue(response.getTotalTravelTimeMinutes() < 30.0);
+        assertEquals(
+                visitDate,
+                response.getOptimizedPlaces().get(1).getVisitDate()
+        );
         assertEquals(
                 response.getOptimizedPlaces().get(1).getDistanceFromPreviousKm(),
                 response.getTotalDistanceKm(),
@@ -468,16 +474,20 @@ class CourseOptimizationServiceTest {
                 new VisitDurationService()
         );
         LocalDate visitDate = LocalDate.of(2026, 7, 20);
+        PlaceCandidateDto distantCafe = place(
+                2L, "이동이 오래 걸리는 카페", "CAFE", 90.0,
+                37.5670, 126.9790, visitDate
+        );
+        distantCafe.setAlternativeCandidates(List.of(
+                place(3L, "가까운 대체 카페", "CAFE", 80.0,
+                        37.5680, 126.9780, null)
+        ));
+
         CourseOptimizeRequest request = CourseOptimizeRequest.builder()
                 .placeCandidates(List.of(
                         place(1L, "출발 장소", "CAFE", 100.0,
                                 37.5665, 126.9780, visitDate),
-                        place(2L, "이동이 오래 걸리는 카페", "CAFE", 90.0,
-                                37.5670, 126.9790, visitDate)
-                ))
-                .alternativeCandidates(List.of(
-                        place(3L, "가까운 대체 카페", "CAFE", 80.0,
-                                37.5680, 126.9780, visitDate)
+                        distantCafe
                 ))
                 .build();
 
@@ -497,17 +507,21 @@ class CourseOptimizationServiceTest {
     @DisplayName("조건을 만족하는 대체 후보가 없으면 원래 장소와 경로를 유지한다")
     void keepOriginalPlaceWhenNoUsableAlternativeExists() {
         LocalDate visitDate = LocalDate.of(2026, 7, 20);
+        PlaceCandidateDto distantPlace = place(
+                2L, "서울숲", "TOUR", 90.0,
+                37.5444, 127.0374, visitDate
+        );
+        distantPlace.setAlternativeCandidates(List.of(
+                // 카테고리가 다르므로 관광지 교체 후보로 사용할 수 없다.
+                place(3L, "가까운 카페", "CAFE", 95.0,
+                        37.5658, 126.9751, null)
+        ));
+
         CourseOptimizeRequest request = CourseOptimizeRequest.builder()
                 .placeCandidates(List.of(
                         place(1L, "서울시청", "TOUR", 100.0,
                                 37.5665, 126.9780, visitDate),
-                        place(2L, "서울숲", "TOUR", 90.0,
-                                37.5444, 127.0374, visitDate)
-                ))
-                .alternativeCandidates(List.of(
-                        // 카테고리가 다르므로 관광지 교체 후보로 사용할 수 없다.
-                        place(3L, "가까운 카페", "CAFE", 95.0,
-                                37.5658, 126.9751, visitDate)
+                        distantPlace
                 ))
                 .build();
 
@@ -526,17 +540,21 @@ class CourseOptimizationServiceTest {
     @DisplayName("현재 코스와 같은 장소 ID의 대체 후보는 중복 삽입하지 않는다")
     void ignoreAlternativeAlreadyIncludedInCourse() {
         LocalDate visitDate = LocalDate.of(2026, 7, 20);
+        PlaceCandidateDto distantPlace = place(
+                2L, "서울숲", "TOUR", 90.0,
+                37.5444, 127.0374, visitDate
+        );
+        distantPlace.setAlternativeCandidates(List.of(
+                // 장소 ID 2는 이미 코스에 있으므로 좌표가 가까워도 대체 후보로 쓰지 않는다.
+                place(2L, "중복 대체 후보", "TOUR", 95.0,
+                        37.5658, 126.9751, null)
+        ));
+
         CourseOptimizeRequest request = CourseOptimizeRequest.builder()
                 .placeCandidates(List.of(
                         place(1L, "서울시청", "TOUR", 100.0,
                                 37.5665, 126.9780, visitDate),
-                        place(2L, "서울숲", "TOUR", 90.0,
-                                37.5444, 127.0374, visitDate)
-                ))
-                .alternativeCandidates(List.of(
-                        // 장소 ID 2는 이미 코스에 있으므로 좌표가 가까워도 대체 후보로 쓰지 않는다.
-                        place(2L, "중복 대체 후보", "TOUR", 95.0,
-                                37.5658, 126.9751, visitDate)
+                        distantPlace
                 ))
                 .build();
 
@@ -557,22 +575,32 @@ class CourseOptimizationServiceTest {
     void replaceDistantPlacesForMultipleDays() {
         LocalDate firstDay = LocalDate.of(2026, 7, 20);
         LocalDate secondDay = LocalDate.of(2026, 7, 21);
+        PlaceCandidateDto firstDayDistantPlace = place(
+                2L, "첫날 먼 장소", "TOUR", 90.0,
+                37.5854, 126.9780, firstDay
+        );
+        firstDayDistantPlace.setAlternativeCandidates(List.of(
+                place(5L, "첫날 가까운 관광지", "TOUR", 85.0,
+                        37.5658, 126.9751, null)
+        ));
+
+        PlaceCandidateDto secondDayDistantPlace = place(
+                4L, "둘째날 먼 카페", "CAFE", 90.0,
+                37.5761, 126.9254, secondDay
+        );
+        secondDayDistantPlace.setAlternativeCandidates(List.of(
+                place(6L, "둘째날 가까운 카페", "CAFE", 85.0,
+                        37.5580, 126.9270, null)
+        ));
+
         CourseOptimizeRequest request = CourseOptimizeRequest.builder()
                 .placeCandidates(List.of(
                         place(1L, "첫날 출발", "TOUR", 100.0,
                                 37.5665, 126.9780, firstDay),
-                        place(2L, "첫날 먼 장소", "TOUR", 90.0,
-                                37.5854, 126.9780, firstDay),
+                        firstDayDistantPlace,
                         place(3L, "둘째날 출발", "CAFE", 100.0,
                                 37.5572, 126.9254, secondDay),
-                        place(4L, "둘째날 먼 카페", "CAFE", 90.0,
-                                37.5761, 126.9254, secondDay)
-                ))
-                .alternativeCandidates(List.of(
-                        place(5L, "첫날 가까운 관광지", "TOUR", 85.0,
-                                37.5658, 126.9751, firstDay),
-                        place(6L, "둘째날 가까운 카페", "CAFE", 85.0,
-                                37.5580, 126.9270, secondDay)
+                        secondDayDistantPlace
                 ))
                 .build();
 

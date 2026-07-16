@@ -104,6 +104,7 @@ public class CourseRecommendationService {
 
         return CourseRecommendResponse.builder()
                 .resultId(request.getResultId())
+                .travelCode(request.getTravelCode())
                 .dailyStartTime(request.getDailyStartTime())
                 .weatherStatus(validated.weatherStatus())
                 .temperature(validated.temperature())

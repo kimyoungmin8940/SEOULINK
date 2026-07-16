@@ -1,19 +1,25 @@
 package com.seoulink.backend.domain.course.dto.request;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 추천 장소 후보의 방문 순서를 최적화할 때 사용하는 요청 DTO이다.
+ * 1번 담당자가 날짜를 배정한 코스 초안을 받아 방문 순서와 먼 장소 교체를 계산하는 요청 DTO이다.
  *
- * <p>회원 ID나 설문 결과 ID처럼 DB 저장에 필요한 값은 DB 통합 단계에서 추가하고,
- * 현재는 거리 계산과 방문 순서 정렬에 필요한 장소 후보만 전달받는다.</p>
+ * <p>각 장소의 {@code alternativeCandidates}에는 해당 장소가 먼 이동 구간으로 판정됐을 때만
+ * 사용할 전용 대체 후보를 담는다. 대체 후보는 {@code visitDate}를 생략할 수 있으며,
+ * 실제 교체 시 부모 장소의 방문 날짜를 자동으로 상속한다.</p>
+ *
+ * <p>{@code alternativeCandidates} 최상위 필드는 이전 테스트·호출부와의 호환을 위해 남겨두며,
+ * 신규 요청은 반드시 각 장소 내부의 중첩 필드를 사용한다.</p>
  */
 @Getter
 @Setter
@@ -22,17 +28,23 @@ import java.util.List;
 @AllArgsConstructor
 public class CourseOptimizeRequest {
 
-    // 실제 코스에 우선 배치할 장소 목록이다.
+    // 설문 결과와 여행 유형을 최적화 요청까지 추적하기 위한 전달 메타데이터이다.
+    private Long resultId;
+    private String travelCode;
+
+    // 식사시간 배치가 확정되기 전에는 전달만 받고 현재 거리 최적화 계산에는 사용하지 않는다.
+    @JsonFormat(pattern = "HH:mm")
+    private LocalTime dailyStartTime;
+
+    // 실제 코스에 배치할 장소 목록이며, 각 장소 내부에 전용 대체 후보를 포함한다.
     @Builder.Default
     private List<PlaceCandidateDto> placeCandidates = new ArrayList<>();
 
     /**
-     * 이동거리 2km 또는 이동시간 30분을 초과한 장소를 바꿀 때 사용할 예비 후보이다.
-     *
-     * <p>대체 후보는 교체 대상과 방문 날짜·기본 카테고리가 같아야 하며,
-     * 실제 코스 장소와 중복되지 않는 후보만 사용한다. 후보가 없거나 기준을 만족하는
-     * 후보가 없으면 원래 장소를 유지한다.</p>
+     * 이전 최상위 대체 후보 요청과의 임시 호환 필드이다.
+     * 신규 JSON에서는 사용하지 않고 {@code placeCandidates[].alternativeCandidates}를 사용한다.
      */
+    @Deprecated
     @Builder.Default
     private List<PlaceCandidateDto> alternativeCandidates = new ArrayList<>();
 }

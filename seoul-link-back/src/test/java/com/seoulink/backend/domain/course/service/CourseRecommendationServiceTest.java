@@ -48,6 +48,7 @@ class CourseRecommendationServiceTest {
         LocalDate secondDate = LocalDate.of(2026, 7, 21);
         CourseRecommendRequest request = CourseRecommendRequest.builder()
                 .resultId(101L)
+                .travelCode("ATLSR")
                 .dailyStartTime(LocalTime.of(10, 0))
                 .weatherStatus("rain")
                 .temperature(27.5)
@@ -86,6 +87,7 @@ class CourseRecommendationServiceTest {
                 courseRecommendationService.recommend(request);
 
         assertEquals(101L, response.getResultId());
+        assertEquals("ATLSR", response.getTravelCode());
         assertEquals(LocalTime.of(10, 0), response.getDailyStartTime());
         assertEquals("RAIN", response.getWeatherStatus());
         assertEquals(27.5, response.getTemperature());

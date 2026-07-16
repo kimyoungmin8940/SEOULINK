@@ -25,8 +25,9 @@ import java.util.List;
 @AllArgsConstructor
 public class CourseRecommendRequest {
 
-    // 추천의 기준이 된 SURVEY_RESULT 식별자이다.
+    // 추천의 기준이 된 SURVEY_RESULT 식별자와 5자리 여행 유형 코드이다.
     private Long resultId;
+    private String travelCode;
 
     // 모든 날짜 일정의 공통 시작 시각이다.
     @JsonFormat(pattern = "HH:mm")

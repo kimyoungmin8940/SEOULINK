@@ -29,6 +29,9 @@ DB에 저장하지 않고 최근접 이웃과 2-opt로 방문 순서와 이동�
 
 ```json
 {
+  "resultId": 101,
+  "travelCode": "ATLSR",
+  "dailyStartTime": "10:00",
   "placeCandidates": [
     {
       "placeId": 1,
@@ -37,7 +40,16 @@ DB에 저장하지 않고 최근접 이웃과 2-opt로 방문 순서와 이동�
       "recommendationScore": 100.0,
       "latitude": 37.5665,
       "longitude": 126.978,
-      "visitDate": "2026-07-20"
+      "visitDate": "2026-07-20",
+      "themePalaceCultureYn": "Y",
+      "themeNatureHangangYn": "N",
+      "themeDateYn": "N",
+      "themeFoodTourYn": "N",
+      "themeCafeTourYn": "N",
+      "themeShoppingHotplaceYn": "N",
+      "themeNightViewYn": "N",
+      "themeHotelStayYn": "N",
+      "alternativeCandidates": []
     },
     {
       "placeId": 2,
@@ -46,22 +58,42 @@ DB에 저장하지 않고 최근접 이웃과 2-opt로 방문 순서와 이동�
       "recommendationScore": 90.0,
       "latitude": 37.5854,
       "longitude": 126.978,
-      "visitDate": "2026-07-20"
-    }
-  ],
-  "alternativeCandidates": [
-    {
-      "placeId": 3,
-      "placeName": "덕수궁",
-      "category": "TOUR",
-      "recommendationScore": 85.0,
-      "latitude": 37.5658,
-      "longitude": 126.9751,
-      "visitDate": "2026-07-20"
+      "visitDate": "2026-07-20",
+      "themePalaceCultureYn": "Y",
+      "themeNatureHangangYn": "N",
+      "themeDateYn": "N",
+      "themeFoodTourYn": "N",
+      "themeCafeTourYn": "N",
+      "themeShoppingHotplaceYn": "N",
+      "themeNightViewYn": "N",
+      "themeHotelStayYn": "N",
+      "alternativeCandidates": [
+        {
+          "placeId": 3,
+          "placeName": "덕수궁",
+          "category": "TOUR",
+          "recommendationScore": 85.0,
+          "latitude": 37.5658,
+          "longitude": 126.9751,
+          "themePalaceCultureYn": "Y",
+          "themeNatureHangangYn": "N",
+          "themeDateYn": "N",
+          "themeFoodTourYn": "N",
+          "themeCafeTourYn": "N",
+          "themeShoppingHotplaceYn": "N",
+          "themeNightViewYn": "N",
+          "themeHotelStayYn": "N"
+        }
+      ]
     }
   ]
 }
 ```
+
+- 대체 후보는 교체 대상 장소의 `alternativeCandidates` 안에 넣는다.
+- 대체 후보의 `visitDate`는 생략하며, 교체 시 원본 장소의 날짜를 자동 상속한다.
+- 한 장소가 여러 테마에 해당하면 여러 `theme*Yn` 필드가 동시에 `Y`일 수 있다.
+- 최상위 `alternativeCandidates`는 이전 호출부 호환용이며 신규 요청에서는 사용하지 않는다.
 
 ### 성공 응답 `200 OK`
 
@@ -115,6 +147,7 @@ DB에 저장하지 않고 최근접 이웃과 2-opt로 방문 순서와 이동�
 | 필드 | 타입 | 필수 | 설명 |
 |---|---|---:|---|
 | `resultId` | number | Y | 설문 결과 ID |
+| `travelCode` | string | N | 5자리 여행 유형 코드. 전달되면 응답에 그대로 포함 |
 | `dailyStartTime` | string | Y | 매일 일정 시작 시각, `HH:mm` |
 | `weatherStatus` | string | N | 추천 시점 날씨 상태. 공백 제거 후 대문자로 응답 |
 | `temperature` | number | N | 추천 시점 기온, -100.0~100.0 |
@@ -135,6 +168,7 @@ DB에 저장하지 않고 최근접 이웃과 2-opt로 방문 순서와 이동�
 ```json
 {
   "resultId": 101,
+  "travelCode": "ATLSR",
   "dailyStartTime": "10:00",
   "weatherStatus": "RAIN",
   "temperature": 27.5,
