@@ -11,6 +11,8 @@ import com.seoulink.backend.domain.course.repository.TravelCourseRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -150,14 +152,60 @@ public class CourseService {
         }
 
         return detailsByDay.entrySet().stream()
-                .map(entry -> CourseDayResponse.builder()
-                        .dayNo(entry.getKey())
-                        .visitDate(entry.getValue().get(0).getVisitDate())
-                        .places(entry.getValue().stream()
-                                .map(this::toPlaceResponse)
-                                .toList())
-                        .build())
+                .map(entry -> toDayResponse(entry.getKey(), entry.getValue()))
                 .toList();
+    }
+
+    /** 한 날짜의 상세 장소와 거리·시간 합계를 날짜별 응답으로 변환한다. */
+    private CourseDayResponse toDayResponse(
+            Integer dayNo,
+            List<CourseDetail> dailyDetails
+    ) {
+        double dailyDistanceKm = dailyDetails.stream()
+                .mapToDouble(detail -> valueOrZero(
+                        detail.getDistanceFromPreviousKm()
+                ))
+                .sum();
+        double dailyTravelTimeMinutes = dailyDetails.stream()
+                .mapToDouble(detail -> valueOrZero(
+                        detail.getTravelTimeFromPreviousMinutes()
+                ))
+                .sum();
+        int dailyVisitTimeMinutes = dailyDetails.stream()
+                .mapToInt(detail -> valueOrZero(detail.getStayMinutes()))
+                .sum();
+
+        return CourseDayResponse.builder()
+                .dayNo(dayNo)
+                .visitDate(dailyDetails.get(0).getVisitDate())
+                .dailyDistanceKm(round(dailyDistanceKm, 3))
+                .dailyTravelTimeMinutes(round(dailyTravelTimeMinutes, 2))
+                .dailyVisitTimeMinutes(dailyVisitTimeMinutes)
+                .dailyCourseTimeMinutes(round(
+                        dailyVisitTimeMinutes + dailyTravelTimeMinutes,
+                        2
+                ))
+                .places(dailyDetails.stream()
+                        .map(this::toPlaceResponse)
+                        .toList())
+                .build();
+    }
+
+    /** null일 수 있는 소수 저장값을 날짜별 합산에서 안전하게 0으로 처리한다. */
+    private double valueOrZero(Double value) {
+        return value == null ? 0.0 : value;
+    }
+
+    /** null일 수 있는 체류시간을 날짜별 합산에서 안전하게 0으로 처리한다. */
+    private int valueOrZero(Integer value) {
+        return value == null ? 0 : value;
+    }
+
+    /** 날짜별 거리와 시간 합계를 전체 코스 저장 기준과 같은 자릿수로 반올림한다. */
+    private double round(double value, int scale) {
+        return BigDecimal.valueOf(value)
+                .setScale(scale, RoundingMode.HALF_UP)
+                .doubleValue();
     }
 
     /** 상세 장소 엔티티의 저장 필드를 프론트 조회 응답 필드로 변환한다. */

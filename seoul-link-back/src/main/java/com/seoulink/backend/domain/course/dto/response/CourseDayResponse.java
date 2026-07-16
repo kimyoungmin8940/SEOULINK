@@ -22,6 +22,12 @@ public class CourseDayResponse {
     private Integer dayNo;
     private LocalDate visitDate;
 
+    // 해당 날짜에 포함된 장소들의 거리·시간 합계이다.
+    private Double dailyDistanceKm;
+    private Double dailyTravelTimeMinutes;
+    private Integer dailyVisitTimeMinutes;
+    private Double dailyCourseTimeMinutes;
+
     // 해당 날짜 안에서 visitOrder 오름차순으로 정렬된 장소 목록이다.
     @Builder.Default
     private List<CoursePlaceResponse> places = new ArrayList<>();

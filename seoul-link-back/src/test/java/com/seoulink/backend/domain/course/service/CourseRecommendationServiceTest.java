@@ -139,6 +139,18 @@ class CourseRecommendationServiceTest {
         assertEquals(1, response.getDays().size());
         assertEquals(1, response.getDays().get(0).getDayNo());
         assertEquals(visitDate, response.getDays().get(0).getVisitDate());
+        assertEquals(0.0, response.getDays().get(0).getDailyDistanceKm(), 0.000001);
+        assertEquals(
+                0.0,
+                response.getDays().get(0).getDailyTravelTimeMinutes(),
+                0.000001
+        );
+        assertEquals(90, response.getDays().get(0).getDailyVisitTimeMinutes());
+        assertEquals(
+                90.0,
+                response.getDays().get(0).getDailyCourseTimeMinutes(),
+                0.000001
+        );
         assertEquals(1L, response.getDays().get(0).getPlaces().get(0).getPlaceId());
         assertEquals(
                 92.0,

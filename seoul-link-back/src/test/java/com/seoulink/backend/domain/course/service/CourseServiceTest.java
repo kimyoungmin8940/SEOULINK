@@ -54,10 +54,10 @@ class CourseServiceTest {
                 .region("서울 종로구")
                 .publicStatus("Y")
                 .viewCount(12L)
-                .totalDistanceKm(2.63)
-                .totalTravelTimeMinutes(31.67)
+                .totalDistanceKm(0.27)
+                .totalTravelTimeMinutes(3.56)
                 .totalVisitTimeMinutes(270)
-                .totalCourseTimeMinutes(301.67)
+                .totalCourseTimeMinutes(273.56)
                 .createdAt(createdAt)
                 .updatedAt(createdAt)
                 .build();
@@ -98,6 +98,29 @@ class CourseServiceTest {
         assertEquals(
                 90,
                 response.getDays().get(0).getPlaces().get(0).getExpectedVisitMinutes()
+        );
+        assertEquals(
+                0.27,
+                response.getDays().get(0).getDailyDistanceKm(),
+                0.000001
+        );
+        assertEquals(
+                3.56,
+                response.getDays().get(0).getDailyTravelTimeMinutes(),
+                0.000001
+        );
+        assertEquals(180, response.getDays().get(0).getDailyVisitTimeMinutes());
+        assertEquals(
+                183.56,
+                response.getDays().get(0).getDailyCourseTimeMinutes(),
+                0.000001
+        );
+        assertEquals(0.0, response.getDays().get(1).getDailyDistanceKm(), 0.000001);
+        assertEquals(90, response.getDays().get(1).getDailyVisitTimeMinutes());
+        assertEquals(
+                90.0,
+                response.getDays().get(1).getDailyCourseTimeMinutes(),
+                0.000001
         );
     }
 

@@ -13,6 +13,8 @@ import com.seoulink.backend.domain.course.dto.response.OptimizedPlaceDto;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -108,12 +110,40 @@ public class CourseRecommendationService {
         int dayNo = 1;
         for (Map.Entry<LocalDate, List<OptimizedPlaceDto>> entry
                 : placesByDate.entrySet()) {
-            List<CoursePlaceResponse> places = entry.getValue().stream()
+            List<OptimizedPlaceDto> dailyOptimizedPlaces = entry.getValue();
+            List<CoursePlaceResponse> places = dailyOptimizedPlaces.stream()
                     .map(this::toPlaceResponse)
                     .toList();
+
+            double dailyDistanceKm = dailyOptimizedPlaces.stream()
+                    .mapToDouble(place -> valueOrZero(
+                            place.getDistanceFromPreviousKm()
+                    ))
+                    .sum();
+            double dailyTravelTimeMinutes = dailyOptimizedPlaces.stream()
+                    .mapToDouble(place -> valueOrZero(
+                            place.getTravelTimeFromPreviousMinutes()
+                    ))
+                    .sum();
+            int dailyVisitTimeMinutes = dailyOptimizedPlaces.stream()
+                    .mapToInt(place -> valueOrZero(
+                            place.getExpectedVisitMinutes()
+                    ))
+                    .sum();
+
             days.add(CourseDayResponse.builder()
                     .dayNo(dayNo++)
                     .visitDate(entry.getKey())
+                    .dailyDistanceKm(round(dailyDistanceKm, 3))
+                    .dailyTravelTimeMinutes(round(
+                            dailyTravelTimeMinutes,
+                            2
+                    ))
+                    .dailyVisitTimeMinutes(dailyVisitTimeMinutes)
+                    .dailyCourseTimeMinutes(round(
+                            dailyVisitTimeMinutes + dailyTravelTimeMinutes,
+                            2
+                    ))
                     .places(places)
                     .build());
         }
@@ -136,6 +166,23 @@ public class CourseRecommendationService {
                         place.getTravelTimeFromPreviousMinutes()
                 )
                 .build();
+    }
+
+    /** null일 수 있는 소수 계산값을 날짜별 합산에서 안전하게 0으로 처리한다. */
+    private double valueOrZero(Double value) {
+        return value == null ? 0.0 : value;
+    }
+
+    /** null일 수 있는 방문 시간을 날짜별 합산에서 안전하게 0으로 처리한다. */
+    private int valueOrZero(Integer value) {
+        return value == null ? 0 : value;
+    }
+
+    /** 거리와 시간 합계를 전체 코스 저장 기준과 같은 자릿수로 반올림한다. */
+    private double round(double value, int scale) {
+        return BigDecimal.valueOf(value)
+                .setScale(scale, RoundingMode.HALF_UP)
+                .doubleValue();
     }
 
     /** 최적화 장소 중 DB 상세 행에 필요한 값만 추려 저장 DTO로 변환한다. */
