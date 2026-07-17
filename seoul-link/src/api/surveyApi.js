@@ -1,5 +1,5 @@
 import { apiClient } from './apiClient';
 
 export const getSurveyQuestions = () => apiClient.get('/surveys/questions');
-export const submitSurvey = (answers) => apiClient.post('/surveys/submit', { answers });
-export const getMySurveyResult = () => apiClient.get('/surveys/result/me');
+export const submitGuestSurvey = (requestData) => apiClient.post('/surveys/guest', requestData);
+export const getSurveyResult = (surveyId) => apiClient.get(`/surveys/${surveyId}/result`);

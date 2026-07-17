@@ -35,6 +35,32 @@ function getToday() {
     return localToday.toISOString().slice(0, 10);
 }
 
+function getMaximumEndDate(startDate) {
+    if (!startDate) {
+        return '';
+    }
+
+    const maximumEndDate =
+        new Date(`${startDate}T00:00:00`);
+
+    // 시작일 포함 7일이므로 6일을 더한다.
+    maximumEndDate.setDate(
+        maximumEndDate.getDate() + 6
+    );
+
+    const localMaximumEndDate =
+        new Date(
+            maximumEndDate.getTime() -
+            maximumEndDate.getTimezoneOffset() *
+            60 *
+            1000
+        );
+
+    return localMaximumEndDate
+        .toISOString()
+        .slice(0, 10);
+}
+
 function getInitialTravelInfo() {
     try {
         const storedTravelInfo = sessionStorage.getItem(TRAVEL_INFO_STORAGE_KEY);
@@ -43,7 +69,7 @@ function getInitialTravelInfo() {
             return JSON.parse(storedTravelInfo);
         }
     } catch {
-        // 임시 저장값을 읽을 수 없으면 빈 입력 상태로 시작합니다.
+        // 임시 저장값을 읽을 수 없으면 빈 입력 상태로 시작
     }
 
     return {
@@ -58,6 +84,14 @@ function TravelInfoPage() {
     const [travelInfo, setTravelInfo] = useState(getInitialTravelInfo);
     const [errorMessage, setErrorMessage] = useState('');
     const today = useMemo(() => getToday(), []);
+
+    const maximumEndDate = useMemo(
+        () =>
+            getMaximumEndDate(
+                travelInfo.startDate
+            ),
+        [travelInfo.startDate]
+    );
 
     const travelDays = useMemo(() => {
         if (!travelInfo.startDate || !travelInfo.endDate) {
@@ -83,28 +117,38 @@ function TravelInfoPage() {
         event.preventDefault();
 
         if (!travelInfo.startDate || !travelInfo.endDate) {
-            setErrorMessage('여행 시작일과 종료일을 모두 선택해주세요.');
+            setErrorMessage('여행 시작일과 종료일을 모두 선택해주세요');
             return;
         }
 
         if (travelDays < 1) {
-            setErrorMessage('여행 종료일은 시작일과 같거나 이후여야 합니다.');
+            setErrorMessage(
+                '여행 종료일은 시작일과 같거나 이후여야 합니다'
+            );
+            return;
+        }
+
+        if (travelDays > 7) {
+            setErrorMessage(
+                '여행 기간은 최대 7일까지 선택할 수 있습니다'
+            );
             return;
         }
 
         if (!travelInfo.companionType) {
-            setErrorMessage('누구와 여행하는지 선택해주세요.');
+            setErrorMessage('누구와 여행하는지 선택해주세요');
             return;
         }
 
         if (!travelInfo.transportType) {
-            setErrorMessage('주로 이용할 이동 수단을 선택해주세요.');
+            setErrorMessage('주로 이용할 이동 수단을 선택해주세요');
             return;
         }
 
         sessionStorage.setItem(
             TRAVEL_INFO_STORAGE_KEY,
             JSON.stringify({
+                region: '서울',
                 ...travelInfo,
                 travelDays,
             }),
@@ -119,7 +163,7 @@ function TravelInfoPage() {
                 <div className="travel-info-heading">
                     <p className="survey-flow-eyebrow">나만의 서울 여행 준비</p>
                     <h1 id="travel-info-title">여행 기본 정보를 알려주세요</h1>
-                    <p>입력한 정보는 여행 일정과 장소 이동 순서를 추천할 때 사용됩니다.</p>
+                    <p>입력한 정보는 여행 일정과 장소 이동 순서를 추천할 때 사용됩니다</p>
                 </div>
 
                 <form className="travel-info-form" onSubmit={handleSubmit} noValidate>
@@ -130,7 +174,7 @@ function TravelInfoPage() {
                             </span>
                             <span>
                                 여행 일정
-                                <small>서울에서 머무를 날짜를 선택해주세요.</small>
+                                <small>서울에서 머무를 날짜를 선택해주세요</small>
                             </span>
                         </legend>
 
@@ -152,8 +196,14 @@ function TravelInfoPage() {
                                 <input
                                     type="date"
                                     min={travelInfo.startDate || today}
+                                    max={maximumEndDate || undefined}
                                     value={travelInfo.endDate}
-                                    onChange={(event) => updateTravelInfo('endDate', event.target.value)}
+                                    onChange={(event) =>
+                                        updateTravelInfo(
+                                            'endDate',
+                                            event.target.value
+                                        )
+                                    }
                                 />
                             </label>
 
@@ -201,7 +251,7 @@ function TravelInfoPage() {
                             </span>
                             <span>
                                 주 이동 수단
-                                <small>장소 간 이동 시간을 계산하는 데 사용됩니다.</small>
+                                <small>장소 간 이동 시간을 계산하는 데 사용됩니다</small>
                             </span>
                         </legend>
 
