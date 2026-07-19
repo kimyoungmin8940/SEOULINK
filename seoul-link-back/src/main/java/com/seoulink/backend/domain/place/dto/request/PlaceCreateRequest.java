@@ -97,4 +97,28 @@ public class PlaceCreateRequest {
 
     @Pattern(regexp = "Y|N")
     private String tagPacked;
+
+    @Pattern(regexp = "Y|N")
+    private String themePalaceCultureYn;
+
+    @Pattern(regexp = "Y|N")
+    private String themeNatureHangangYn;
+
+    @Pattern(regexp = "Y|N")
+    private String themeDateYn;
+
+    @Pattern(regexp = "Y|N")
+    private String themeFoodTourYn;
+
+    @Pattern(regexp = "Y|N")
+    private String themeCafeTourYn;
+
+    @Pattern(regexp = "Y|N")
+    private String themeShoppingHotplaceYn;
+
+    @Pattern(regexp = "Y|N")
+    private String themeNightViewYn;
+
+    @Pattern(regexp = "Y|N")
+    private String themeHotelStayYn;
 }

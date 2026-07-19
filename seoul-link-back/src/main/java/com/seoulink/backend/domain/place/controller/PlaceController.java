@@ -55,10 +55,18 @@ public class PlaceController {
     @GetMapping("/recommend")
     public PlaceRecommendationListResponse recommendPlaces(
             @RequestParam String travelCode,
+            @RequestParam(required = false) String region,
             @RequestParam(required = false) Integer limit,
+            @RequestParam(required = false) Integer limitPerCategory,
             @RequestParam(required = false) Integer alternativeLimit
     ) {
-        return placeRecommendationService.recommend(travelCode, limit, alternativeLimit);
+        return placeRecommendationService.recommend(
+                travelCode,
+                region,
+                limit,
+                limitPerCategory,
+                alternativeLimit
+        );
     }
 
     @PostMapping

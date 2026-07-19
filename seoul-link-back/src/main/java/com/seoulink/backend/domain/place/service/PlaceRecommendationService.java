@@ -4,13 +4,19 @@ import com.seoulink.backend.domain.place.dto.response.PlaceAlternativeResponse;
 import com.seoulink.backend.domain.place.dto.response.PlaceRecommendationListResponse;
 import com.seoulink.backend.domain.place.dto.response.PlaceRecommendationResponse;
 import com.seoulink.backend.domain.place.entity.Place;
+import com.seoulink.backend.domain.place.exception.InvalidTravelCodeException;
 import com.seoulink.backend.domain.place.repository.PlaceRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Service
@@ -23,9 +29,23 @@ public class PlaceRecommendationService {
     // 대표 추천 장소 하나당 함께 반환할 대체 후보 수
     private static final int DEFAULT_ALTERNATIVE_LIMIT = 3;
 
+    private static final int MAX_LIMIT = 50;
+    private static final int MAX_LIMIT_PER_CATEGORY = 20;
+
+    private static final Pattern DISTRICT_PATTERN = Pattern.compile("([가-힣]+구)");
+    private static final Pattern NEIGHBORHOOD_PATTERN = Pattern.compile("([가-힣0-9]+동)");
+
     // 여행 코드 한 글자와 장소의 성향 태그가 일치할 때 얻는 점수
     // 5개 성향이 모두 일치하면 18점 * 5개 = 90점이다.
     private static final double CODE_MATCH_SCORE = 18.0;
+
+    // 역할 1이 카테고리별 목표 개수를 정할 수 있도록 대표 후보에 기본 장소 종류를 고르게 포함한다.
+    private static final List<String> SUPPORTED_CATEGORIES = List.of(
+            "TOUR",
+            "RESTAURANT",
+            "CAFE",
+            "HOTEL"
+    );
 
     private final PlaceRepository placeRepository;
 
@@ -43,49 +63,68 @@ public class PlaceRecommendationService {
      * 5. 대표 장소마다 겹치지 않는 대체 후보를 붙인다.
      */
     public PlaceRecommendationListResponse recommend(String travelCode, Integer limit, Integer alternativeLimit) {
+        return recommend(travelCode, null, limit, null, alternativeLimit);
+    }
+
+    /**
+     * 역할 1이 지역과 필요한 후보 규모를 지정해 호출하는 최종 추천 진입점이다.
+     * limitPerCategory가 있으면 각 카테고리에서 해당 개수만큼 반환하고,
+     * 없으면 기존 호환 방식대로 전체 limit 안에서 카테고리 대표를 우선 확보한다.
+     */
+    public PlaceRecommendationListResponse recommend(
+            String travelCode,
+            String region,
+            Integer limit,
+            Integer limitPerCategory,
+            Integer alternativeLimit
+    ) {
         // 예: " atbsp " -> "ATBSP"
         String normalizedTravelCode = normalizeTravelCode(travelCode);
+        String normalizedRegion = normalizeRegion(region);
 
         // limit 값이 없거나 0 이하이면 기본값을 사용하고, 최대 50개까지만 허용한다.
         int resolvedLimit = resolveLimit(limit, DEFAULT_LIMIT);
+        Integer resolvedLimitPerCategory = resolveLimitPerCategory(limitPerCategory);
         int resolvedAlternativeLimit = resolveLimit(alternativeLimit, DEFAULT_ALTERNATIVE_LIMIT);
 
         // 추천 대상으로 사용하도록 설정된 활성 장소만 가져온다.
-        List<ScoredPlace> scoredPlaces = placeRepository.findByIsActive("Y")
+        List<ScoredPlace> scoredPlaces = findActivePlaces(normalizedRegion)
                 .stream()
 
                 // Place와 계산된 점수를 한 쌍으로 묶는다.
                 // DB의 PLACES 테이블에 사용자별 점수를 저장하지 않고 요청할 때마다 계산한다.
-                .map(place -> new ScoredPlace(place, calculateScore(place, normalizedTravelCode)))
+                .map(place -> scorePlace(place, normalizedTravelCode))
 
-                // 0점인 장소는 추천 후보에서 제외한다.
-                // 현재 평점과 리뷰도 점수에 포함되므로 취향 태그가 일치하지 않아도
-                // 평점 또는 리뷰가 있으면 0점보다 커져 후보에 남을 수 있다.
-                .filter(scoredPlace -> scoredPlace.score() > 0)
+                // 평점이 높더라도 여행 코드 태그가 하나도 맞지 않으면 추천 대상에서 제외한다.
+                .filter(scoredPlace -> scoredPlace.preferenceScore() > 0)
 
                 // 추천 점수 -> 평점 -> 리뷰 수 -> placeId 순서로 정렬한다.
                 .sorted(scoreComparator())
                 .toList();
 
-        // 정렬된 전체 후보 중 앞에서부터 limit개를 대표 추천 장소로 선택한다.
-        List<ScoredPlace> recommended = scoredPlaces.stream()
-                .limit(resolvedLimit)
-                .toList();
+        List<ScoredPlace> recommended = resolvedLimitPerCategory == null
+                ? selectCategoryBalancedPlaces(scoredPlaces, resolvedLimit)
+                : selectPlacesPerCategory(scoredPlaces, resolvedLimitPerCategory);
 
         // 대표 추천 장소가 다른 장소의 대체 후보로 다시 들어가지 않도록 ID를 모아 둔다.
-        Set<Long> recommendedPlaceIds = recommended.stream()
+        Set<Long> unavailableAlternativeIds = recommended.stream()
                 .map(scoredPlace -> scoredPlace.place().getPlaceId())
                 .collect(Collectors.toSet());
 
-        // 대표 장소마다 alternativeCandidates를 만들어 최종 응답 DTO로 변환한다.
-        List<PlaceRecommendationResponse> recommendedPlaces = recommended.stream()
-                .map(scoredPlace -> toRecommendationResponse(
-                        scoredPlace,
-                        scoredPlaces,
-                        recommendedPlaceIds,
-                        resolvedAlternativeLimit
-                ))
-                .toList();
+        // 한 대체 장소가 여러 대표 장소에 반복되지 않도록 앞에서 사용한 ID를 계속 누적한다.
+        List<PlaceRecommendationResponse> recommendedPlaces = new ArrayList<>();
+        for (ScoredPlace scoredPlace : recommended) {
+            PlaceRecommendationResponse response = toRecommendationResponse(
+                    scoredPlace,
+                    scoredPlaces,
+                    unavailableAlternativeIds,
+                    resolvedAlternativeLimit
+            );
+            recommendedPlaces.add(response);
+            response.getAlternativeCandidates().forEach(
+                    alternative -> unavailableAlternativeIds.add(alternative.getPlaceId())
+            );
+        }
 
         // 최종 JSON: { "travelCode": "ATBSP", "recommendedPlaces": [...] }
         return new PlaceRecommendationListResponse(normalizedTravelCode, recommendedPlaces);
@@ -97,7 +136,7 @@ public class PlaceRecommendationService {
     private PlaceRecommendationResponse toRecommendationResponse(
             ScoredPlace recommendedPlace,
             List<ScoredPlace> scoredPlaces,
-            Set<Long> recommendedPlaceIds,
+            Set<Long> unavailableAlternativeIds,
             int alternativeLimit
     ) {
         List<PlaceAlternativeResponse> alternatives = scoredPlaces.stream()
@@ -106,9 +145,9 @@ public class PlaceRecommendationService {
                 .filter(candidate -> !candidate.place().getPlaceId().equals(recommendedPlace.place().getPlaceId()))
 
                 // 이미 대표 추천 목록에 들어간 장소도 대체 후보에서는 제외한다.
-                .filter(candidate -> !recommendedPlaceIds.contains(candidate.place().getPlaceId()))
+                .filter(candidate -> !unavailableAlternativeIds.contains(candidate.place().getPlaceId()))
 
-                // 대표 장소와 테마가 하나 이상 겹치거나 기본 카테고리가 같은 장소만 남긴다.
+                // 코스 교체 후에도 식당이 관광지로 바뀌지 않도록 같은 기본 카테고리만 남긴다.
                 .filter(candidate -> isAlternativeFor(recommendedPlace.place(), candidate.place()))
 
                 // 겹치는 테마 수 -> 추천 점수 -> placeId 순서로 대체 후보를 정렬한다.
@@ -136,20 +175,32 @@ public class PlaceRecommendationService {
      * 예: 코드 4개 일치 72점 + 평점 보너스 5.64점 + 리뷰 보너스 3.54점
      *     = 81.18점 -> 소수점 첫째 자리로 반올림하여 81.2점
      */
-    private double calculateScore(Place place, String travelCode) {
-        double score = 0.0;
-
-        // 여행 코드 5글자를 하나씩 읽어 장소 태그와 일치하는지 확인한다.
-        for (int i = 0; i < travelCode.length(); i++) {
-            score += calculateCodeScore(place, travelCode.charAt(i));
-        }
+    private ScoredPlace scorePlace(Place place, String travelCode) {
+        double preferenceScore = calculatePreferenceScore(place, travelCode);
+        double score = preferenceScore;
 
         // 취향 코드 점수 외에 장소 자체의 신뢰도 지표를 보너스로 더한다.
         score += calculateRatingBonus(place);
         score += calculateReviewBonus(place);
 
         // 100점을 넘으면 100점으로 제한하고 소수점 첫째 자리로 반올림한다.
-        return roundOneDecimal(Math.min(score, 100.0));
+        return new ScoredPlace(
+                place,
+                roundOneDecimal(Math.min(score, 100.0)),
+                preferenceScore
+        );
+    }
+
+    /**
+     * 위치별 의미가 확정된 5글자 코드와 장소 태그를 비교한다.
+     * 1=A/H, 2=T/M, 3=L/B, 4=S/D, 5=P/R 순서이며 각 위치는 최대 18점이다.
+     */
+    private double calculatePreferenceScore(Place place, String travelCode) {
+        return calculateCodeScore(place, travelCode.charAt(0))
+                + calculateCodeScore(place, travelCode.charAt(1))
+                + calculateCodeScore(place, travelCode.charAt(2))
+                + calculateCodeScore(place, travelCode.charAt(3))
+                + calculateCodeScore(place, travelCode.charAt(4));
     }
 
     /**
@@ -169,7 +220,7 @@ public class PlaceRecommendationService {
      * R -> TAG_RELAX    : 여유로운 일정에 맞는 장소
      *
      * A와 D는 TAG_DOPAMINE을, H와 R은 TAG_RELAX을 함께 사용한다.
-     * 현재는 코드의 위치가 아니라 글자 자체만 보고 점수를 계산한다.
+     * normalizeTravelCode에서 각 위치의 허용 문자를 먼저 검증한 뒤 이 메서드가 호출된다.
      */
     private double calculateCodeScore(Place place, char code) {
         return switch (code) {
@@ -188,12 +239,70 @@ public class PlaceRecommendationService {
     }
 
     /**
-     * 대체 후보 자격을 검사한다.
-     * 8개 서비스 테마 중 하나라도 겹치거나 category 값이 같으면 true이다.
+     * 대체 후보 자격을 검사한다. 대체 후에도 하루 카테고리 목표가 유지되어야 하므로
+     * TOUR·RESTAURANT·CAFE·HOTEL 기본 카테고리가 같은 장소만 허용한다.
      */
     private boolean isAlternativeFor(Place basePlace, Place candidatePlace) {
-        return countThemeOverlap(basePlace, candidatePlace) > 0
-                || safeEquals(basePlace.getCategory(), candidatePlace.getCategory());
+        return sameCategory(basePlace.getCategory(), candidatePlace.getCategory());
+    }
+
+    /**
+     * 카테고리별 최고점 장소를 먼저 확보하고 나머지를 전체 점수 순으로 채운다.
+     * 최종 응답은 다시 점수순으로 정렬하므로 recommendedPlaces의 순서 의미도 유지된다.
+     */
+    private List<ScoredPlace> selectCategoryBalancedPlaces(List<ScoredPlace> scoredPlaces, int limit) {
+        if (limit <= 0 || scoredPlaces.isEmpty()) {
+            return List.of();
+        }
+
+        List<ScoredPlace> selected = new ArrayList<>();
+        Set<Long> selectedIds = new HashSet<>();
+
+        List<ScoredPlace> categoryLeaders = SUPPORTED_CATEGORIES.stream()
+                .map(category -> scoredPlaces.stream()
+                        .filter(candidate -> sameCategory(candidate.place().getCategory(), category))
+                        .findFirst()
+                        .orElse(null))
+                .filter(candidate -> candidate != null)
+                .sorted(scoreComparator())
+                .toList();
+
+        for (ScoredPlace candidate : categoryLeaders) {
+            if (selected.size() >= limit) break;
+            addIfAbsent(selected, selectedIds, candidate);
+        }
+
+        for (ScoredPlace candidate : scoredPlaces) {
+            if (selected.size() >= limit) break;
+            addIfAbsent(selected, selectedIds, candidate);
+        }
+
+        return selected.stream()
+                .sorted(scoreComparator())
+                .toList();
+    }
+
+    /** 각 기본 카테고리에서 점수가 높은 후보를 동일한 상한으로 선별한다. */
+    private List<ScoredPlace> selectPlacesPerCategory(List<ScoredPlace> scoredPlaces, int limitPerCategory) {
+        return SUPPORTED_CATEGORIES.stream()
+                .flatMap(category -> scoredPlaces.stream()
+                        .filter(candidate -> sameCategory(candidate.place().getCategory(), category))
+                        .limit(limitPerCategory))
+                .sorted(scoreComparator())
+                .toList();
+    }
+
+    private List<Place> findActivePlaces(String region) {
+        if (region == null) {
+            return placeRepository.findByIsActive("Y");
+        }
+        return placeRepository.findByRegionContainingAndIsActive(region, "Y");
+    }
+
+    private void addIfAbsent(List<ScoredPlace> selected, Set<Long> selectedIds, ScoredPlace candidate) {
+        if (selectedIds.add(candidate.place().getPlaceId())) {
+            selected.add(candidate);
+        }
     }
 
     /**
@@ -269,16 +378,22 @@ public class PlaceRecommendationService {
 
     /**
      * 입력된 여행 코드의 공백을 제거하고 대문자로 통일한다.
-     * 현재는 길이가 5글자인지만 검사하며, 각 위치에 허용되는 글자인지는 검사하지 않는다.
+     * 각 위치는 팀에서 확정한 A/H, T/M, L/B, S/D, P/R 중 하나여야 한다.
      */
     private String normalizeTravelCode(String travelCode) {
         if (travelCode == null || travelCode.isBlank()) {
-            throw new IllegalArgumentException("여행 유형 코드는 필수입니다.");
+            throw new InvalidTravelCodeException("여행 유형 코드는 필수입니다.");
         }
 
-        String normalized = travelCode.trim().toUpperCase();
+        String normalized = travelCode.trim().toUpperCase(Locale.ROOT);
         if (normalized.length() != 5) {
-            throw new IllegalArgumentException("여행 유형 코드는 5글자여야 합니다.");
+            throw new InvalidTravelCodeException("여행 유형 코드는 5글자여야 합니다.");
+        }
+
+        if (!normalized.matches("[AH][TM][LB][SD][PR]")) {
+            throw new InvalidTravelCodeException(
+                    "여행 유형 코드는 A/H, T/M, L/B, S/D, P/R 순서여야 합니다."
+            );
         }
 
         return normalized;
@@ -289,7 +404,49 @@ public class PlaceRecommendationService {
         if (value == null || value <= 0) {
             return defaultValue;
         }
-        return Math.min(value, 50);
+        return Math.min(value, MAX_LIMIT);
+    }
+
+    private Integer resolveLimitPerCategory(Integer value) {
+        if (value == null) {
+            return null;
+        }
+        if (value <= 0) {
+            return 1;
+        }
+        return Math.min(value, MAX_LIMIT_PER_CATEGORY);
+    }
+
+    /** 서울 전체 선택은 필터링하지 않고, 구·동처럼 구체적인 지역만 DB 조회에 적용한다. */
+    private String normalizeRegion(String region) {
+        if (region == null || region.isBlank()) {
+            return null;
+        }
+
+        String normalized = region.trim();
+        String compact = normalized.replaceAll("\\s+", "");
+        if (compact.equals("서울")
+                || compact.equals("서울특별시")
+                || compact.equals("서울전체")
+                || compact.equals("전체")) {
+            return null;
+        }
+
+        String localArea = compact
+                .replaceFirst("^서울특별시", "")
+                .replaceFirst("^서울시", "")
+                .replaceFirst("^서울", "");
+
+        Matcher districtMatcher = DISTRICT_PATTERN.matcher(localArea);
+        if (districtMatcher.find()) {
+            return districtMatcher.group(1);
+        }
+
+        Matcher neighborhoodMatcher = NEIGHBORHOOD_PATTERN.matcher(localArea);
+        if (neighborhoodMatcher.find()) {
+            return neighborhoodMatcher.group(1);
+        }
+        return normalized;
     }
 
     // 두 값이 모두 "Y"인지 확인한다. 테마 중복 개수를 셀 때 사용한다.
@@ -302,12 +459,8 @@ public class PlaceRecommendationService {
         return "Y".equalsIgnoreCase(value);
     }
 
-    // null끼리도 안전하게 비교할 수 있는 문자열 비교 함수이다.
-    private boolean safeEquals(String left, String right) {
-        if (left == null) {
-            return right == null;
-        }
-        return left.equals(right);
+    private boolean sameCategory(String left, String right) {
+        return left != null && right != null && left.equalsIgnoreCase(right);
     }
 
     // 평점이 null이면 계산 중 오류가 나지 않도록 0.0으로 바꾼다.
@@ -327,6 +480,6 @@ public class PlaceRecommendationService {
 
     // 장소와 계산된 점수를 함께 전달하기 위한 서비스 내부 전용 자료형이다.
     // DB 테이블이나 API JSON에는 ScoredPlace라는 이름으로 노출되지 않는다.
-    private record ScoredPlace(Place place, Double score) {
+    private record ScoredPlace(Place place, Double score, Double preferenceScore) {
     }
 }
