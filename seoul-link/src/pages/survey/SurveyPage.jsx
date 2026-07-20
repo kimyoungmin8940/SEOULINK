@@ -14,7 +14,7 @@ import {
 
 const TRAVEL_INFO_STORAGE_KEY = 'seoulinkTravelInfo';
 const SURVEY_RESULT_STORAGE_KEY = 'seoulinkSurveyResult';
-const GUEST_TOKEN_STORAGE_KEY = 'seoulinkGuestToken';
+const GUEST_TOKEN_STORAGE_KEY = 'guestToken';
 const SURVEY_ID_STORAGE_KEY = 'seoulinkSurveyId';
 
 //TravelInfoPage에서 저장한 여행 정보를 읽는다.
@@ -266,15 +266,15 @@ function SurveyPage() {
                 );
 
                 sessionStorage.setItem(
-                    GUEST_TOKEN_STORAGE_KEY,
-                    response.guestToken
-                );
-
-                sessionStorage.setItem(
                     SURVEY_ID_STORAGE_KEY,
                     String(
                         response.surveyId
                     )
+                );
+
+                localStorage.setItem(
+                    GUEST_TOKEN_STORAGE_KEY,
+                    response.guestToken
                 );
 
                 //백엔드 DB 저장이 성공했으므로 여행 정보 임시값은 제거

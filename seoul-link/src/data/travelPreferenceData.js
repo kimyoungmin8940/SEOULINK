@@ -20,7 +20,7 @@ export const travelCodeDimensions = [
                 icon: 'walk',
                 color: 'blue',
             },
-            R: {
+            H: {
                 label: '휴식형',
                 answer: '천천히 머무는 휴식형',
                 short: '느긋하게 머물기',

@@ -35,7 +35,7 @@ const traitIconMap = {
 };
 
 function PreferenceResultPage({
-    result = sampleSurveyResult,
+    result,
     onRecommend,
     onRestart,
 }) {

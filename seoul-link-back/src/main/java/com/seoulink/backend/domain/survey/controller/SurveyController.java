@@ -2,6 +2,7 @@ package com.seoulink.backend.domain.survey.controller;
 
 import com.seoulink.backend.domain.survey.dto.response.SurveyQuestionResponse;
 import com.seoulink.backend.domain.survey.service.SurveyService;
+import com.seoulink.backend.domain.survey.dto.response.SurveyResultResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -11,6 +12,7 @@ import com.seoulink.backend.domain.survey.dto.request.GuestSurveySubmitRequest;
 import com.seoulink.backend.domain.survey.dto.response.GuestSurveySubmitResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 
@@ -54,5 +56,15 @@ public class SurveyController {
         return ResponseEntity
                 .status(HttpStatus.CREATED)
                 .body(response);
+    }
+
+    @GetMapping("/{surveyId}/result")
+    public ResponseEntity<SurveyResultResponse> getSurveyResult(
+            @PathVariable Long surveyId
+    ) {
+        SurveyResultResponse response =
+                surveyService.getSurveyResult(surveyId);
+
+        return ResponseEntity.ok(response);
     }
 }
