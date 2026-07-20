@@ -29,6 +29,12 @@ public class PlaceService {
                 .stream().map(PlaceResponse::new).toList();
     }
 
+    public List<PlaceResponse> searchPlaces(String keyword) {
+        if (keyword == null || keyword.isBlank()) return List.of();
+        return placeRepository.searchActive(keyword.trim(), org.springframework.data.domain.PageRequest.of(0, 8))
+                .stream().map(PlaceResponse::new).toList();
+    }
+
     public List<PlaceResponse> getPlacesInBounds(
             Double minLat,
             Double maxLat,

@@ -7,10 +7,8 @@ import java.time.LocalDate;
 import java.util.List;
 
 @Getter @Setter
-public class ReviewCreateRequest {
+public class ReviewUpdateRequest {
     @NotNull private Long memberId;
-    private Long placeId;
-    private Long courseId;
     @NotBlank @Size(max = 200) private String reviewTitle;
     @NotBlank @Size(max = 4000) private String reviewContent;
     @NotNull @DecimalMin("1.0") @DecimalMax("5.0") private Double rating;

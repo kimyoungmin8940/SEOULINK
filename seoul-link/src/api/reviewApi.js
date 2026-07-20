@@ -1,8 +1,11 @@
 import { apiClient } from './apiClient';
-
-export const getReviews = () => apiClient.get('/reviews');
-export const getReviewDetail = (reviewId) => apiClient.get(`/reviews/${reviewId}`);
+const query = (params) => new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString();
+export const getReviews = (params = {}) => apiClient.get(`/reviews?${query({ page: 0, size: 9, sort: 'date', ...params })}`);
+export const getReviewDetail = (reviewId, memberId) => apiClient.get(`/reviews/${reviewId}?${query({ memberId })}`);
+export const getPopularTags = () => apiClient.get('/reviews/popular-tags');
+export const getReviewComments = (reviewId) => apiClient.get(`/reviews/${reviewId}/comments`);
 export const createReview = (data) => apiClient.post('/reviews', data);
 export const updateReview = (reviewId, data) => apiClient.patch(`/reviews/${reviewId}`, data);
-export const deleteReview = (reviewId) => apiClient.delete(`/reviews/${reviewId}`);
-export const likeReview = (reviewId) => apiClient.post(`/reviews/${reviewId}/likes`);
+export const deleteReview = (reviewId, memberId) => apiClient.delete(`/reviews/${reviewId}?${query({ memberId })}`);
+export const likeReview = (reviewId, memberId) => apiClient.post(`/reviews/${reviewId}/likes?memberId=${memberId}`);
+export const createComment = (reviewId, data) => apiClient.post(`/reviews/${reviewId}/comments`, data);

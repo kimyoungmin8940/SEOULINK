@@ -6,6 +6,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.LocalDateTime;
+import java.time.LocalDate;
 
 @Entity
 @Table(name = "REVIEW")
@@ -38,6 +39,15 @@ public class Review {
     @Column(name = "IMAGE_URL")
     private String imageUrl;
 
+    @Column(name = "COURSE_ID")
+    private Long courseId;
+
+    @Column(name = "VISIT_DATE")
+    private LocalDate visitDate;
+
+    @Column(name = "COMPANION")
+    private String companion;
+
     @Column(name = "VIEW_COUNT", nullable = false)
     private Integer viewCount = 0;
 
@@ -57,6 +67,16 @@ public class Review {
         this.reviewContent = reviewContent;
         this.rating = rating;
         this.imageUrl = imageUrl;
+    }
+
+    public void update(String reviewTitle, String reviewContent, Double rating, String imageUrl, LocalDate visitDate, String companion) {
+        this.reviewTitle = reviewTitle;
+        this.reviewContent = reviewContent;
+        this.rating = rating;
+        this.imageUrl = imageUrl;
+        this.visitDate = visitDate;
+        this.companion = companion;
+        this.updatedAt = LocalDateTime.now();
     }
 
     public void increaseViewCount() {

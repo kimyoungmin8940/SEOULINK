@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Bot, CircleHelp, Coffee, Compass, MessageCircle, Moon, Paperclip, Plus, Send, Sparkles, Umbrella, UserRound, UsersRound } from 'lucide-react';
 import Header from '../../components/common/Header';
 import { askChatbot, getChatbotHistory } from '../../api/chatbotApi';
@@ -12,7 +12,6 @@ const prompts = [
   { text: '야경 데이트', icon: Moon },
 ];
 
-const fallbackHistory = ['서울 1일 여행 코스 추천', '성수동 데이트 코스 추천', '아이와 가볼 만한 곳', '비 오는 날 실내 코스'];
 const initialMessages = [{
   role: 'bot',
   text: '안녕하세요. 서울 여행 AI 플래너예요.\n여행 날짜, 인원, 원하는 분위기를 알려주시면 바로 맞춤 코스를 제안해 드릴게요.',
@@ -47,10 +46,7 @@ function ChatbotPage() {
     }
   }, [messages, loading, error]);
 
-  const historyItems = useMemo(
-    () => (histories.length ? histories.slice(0, 5) : fallbackHistory.map((question) => ({ question }))),
-    [histories],
-  );
+  const historyItems = histories.slice(0, 5);
 
   const submit = async (value = input) => {
     const question = value.trim();
@@ -115,6 +111,7 @@ function ChatbotPage() {
           <section className="chatbot-history-section">
             <header><span>최근 대화</span><small>{histories.length ? `${histories.length}개` : '최근'}</small></header>
             <div className="chatbot-history-list">
+              {historyItems.length === 0 && <p className="empty-history">아직 대화 내역이 없습니다.</p>}
               {historyItems.map((item, index) => (
                 <button key={`${item.question}-${index}`} type="button" className={activeHistoryIndex === index ? 'active' : ''} onClick={() => openHistory(item, index)}>
                   <MessageCircle /><span>{item.question}</span>

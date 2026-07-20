@@ -7,4 +7,5 @@ import java.util.List;
 
 public interface ReviewCommentRepository extends JpaRepository<ReviewComment, Long> {
     List<ReviewComment> findByReviewIdAndIsDeletedOrderByCreatedAtAsc(Long reviewId, String isDeleted);
+    Long countByReviewIdAndIsDeleted(Long reviewId, String isDeleted);
 }

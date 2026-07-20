@@ -26,6 +26,11 @@ public class PlaceController {
         return placeService.getPlaces(region, category);
     }
 
+    @GetMapping("/search")
+    public List<PlaceResponse> searchPlaces(@RequestParam String keyword) {
+        return placeService.searchPlaces(keyword);
+    }
+
     @GetMapping("/bounds")
     public List<PlaceResponse> getPlacesInBounds(
             @RequestParam Double minLat,

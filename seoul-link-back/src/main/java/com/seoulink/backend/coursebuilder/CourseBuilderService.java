@@ -724,8 +724,8 @@ public class CourseBuilderService {
                     MEMO,
                     VISIT_TIME,
                     STAY_MINUTES,
-                    MOVE_DISTANCE_M,
-                    MOVE_DURATION_MIN
+                    DISTANCE_FROM_PREV_KM,
+                    TRAVEL_MINUTES_FROM_PREV
                 )
                 VALUES (
                     :courseId,
@@ -735,8 +735,8 @@ public class CourseBuilderService {
                     :memo,
                     :visitTime,
                     :stayMinutes,
-                    :moveDistanceM,
-                    :moveDurationMin
+                    :distanceFromPrevKm,
+                    :travelMinutesFromPrev
                 )
                 """;
 
@@ -748,8 +748,12 @@ public class CourseBuilderService {
                 .addValue("memo", blankToNull(place.memo()))
                 .addValue("visitTime", blankToNull(place.visitTime()))
                 .addValue("stayMinutes", place.stayMinutes())
-                .addValue("moveDistanceM", place.moveDistanceM())
-                .addValue("moveDurationMin", place.moveDurationMin());
+                .addValue("distanceFromPrevKm", place.moveDistanceM() == null
+                        ? 0D
+                        : place.moveDistanceM() / 1000D)
+                .addValue("travelMinutesFromPrev", place.moveDurationMin() == null
+                        ? 0D
+                        : place.moveDurationMin().doubleValue());
 
         jdbcTemplate.update(sql, params);
     }
