@@ -338,22 +338,34 @@
 }
 
 .preference-hero-note {
-  min-height: 190px;
+  min-height: 0;
   border-radius: 16px;
-  padding: 28px 28px 0;
-  background: linear-gradient(135deg, #f3f9ff 0%, #ffffff 62%, #eaf8ef 100%);
+  padding: 24px;
+  background:
+          linear-gradient(
+                  135deg,
+                  #f3f9ff 0%,
+                  #ffffff 62%,
+                  #eaf8ef 100%
+          );
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 260px;
-  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 240px);
+  align-items: start;
+  gap: 24px;
   overflow: hidden;
 }
 
+.preference-hero-note > div {
+  min-width: 0;
+}
+
 .preference-hero-note h3 {
-  margin: 0 0 14px;
+  margin: 0 0 16px;
   color: var(--primary-blue);
   font-size: 20px;
-  line-height: 1.35;
+  line-height: 1.4;
   font-weight: 900;
+  word-break: keep-all;
 }
 
 .preference-hero-note p {
@@ -362,14 +374,21 @@
   font-size: 16px;
   line-height: 1.75;
   font-weight: 650;
+  text-align: left;
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
 .preference-hero-note img {
-  width: 100%;
-  height: 190px;
-  object-fit: cover;
-  align-self: end;
-  border-radius: 16px 16px 0 0;
+  width: auto;
+  max-width: 100%;
+  height: 240px;
+  border-radius: 16px;
+  object-fit: contain;
+  object-position: center;
+  align-self: start;
+  justify-self: end;
+  display: block;
 }
 
 .preference-summary-card {
@@ -1324,12 +1343,13 @@
   }
 
   .preference-hero-note {
-    grid-template-columns: 1fr;
-    padding-bottom: 0;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .preference-hero-note img {
-    height: 160px;
+    width: 100%;
+    height: 240px;
+    justify-self: stretch;
   }
 
   .analysis-row {
@@ -1397,7 +1417,6 @@
     width: 100px;
   }
 
-  .travel-code-row,
   .style-tile-grid,
   .theme-card-row {
     grid-template-columns: 1fr;
@@ -1410,7 +1429,7 @@
   .matched-region-card,
   .recommendation-cta-card,
   .side-panel {
-    padding: 22px;
+    padding: 18px;
   }
 
   .course-result-hero {
@@ -1428,5 +1447,167 @@
 
   .course-card-actions {
     padding: 0 22px 22px;
+  }
+}
+
+/* 결과 페이지의 긴 문장이 글자 단위로 깨지지 않게 처리 */
+.preference-title-block h1,
+.preference-title-block p,
+.preference-card-heading h2,
+.preference-hero-note h3,
+.preference-hero-note p,
+.analysis-copy strong,
+.analysis-copy span,
+.analysis-row p,
+.style-tile strong,
+.style-tile p,
+.recommendation-cta-card h2,
+.recommendation-cta-card p {
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+
+/* Grid 내부 콘텐츠가 부모 너비를 밀어내지 않도록 처리 */
+.preference-dashboard > *,
+.preference-lower-grid > *,
+.preference-hero-note > *,
+.analysis-row > *,
+.recommendation-cta-card > * {
+  min-width: 0;
+}
+
+@media (max-width: 1180px) {
+  /*
+   * SurveyFlowLayout 안의 결과 페이지에도 동일한 우선순위로
+   * 반응형 1열 구조를 적용합니다.
+   */
+  .survey-flow-shell
+  .travel-analysis-page--embedded
+  .preference-dashboard,
+  .survey-flow-shell
+  .travel-analysis-page--embedded
+  .preference-lower-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .survey-flow-shell
+  .travel-analysis-page--embedded
+  .travel-analysis-main {
+    width: 100%;
+  }
+}
+
+@media (max-width: 860px) {
+  .preference-title-block h1 {
+    font-size: clamp(24px, 6vw, 28px);
+    line-height: 1.35;
+  }
+
+  .preference-title-block p {
+    font-size: 15px;
+    line-height: 1.65;
+  }
+
+  .preference-card-heading {
+    flex-wrap: wrap;
+  }
+
+  .preference-hero-note {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .preference-hero-note img {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .recommend-primary-button {
+    width: 100%;
+    white-space: normal;
+    text-align: center;
+    line-height: 1.4;
+    padding: 14px 18px;
+  }
+}
+
+@media (max-width: 560px) {
+  .survey-flow-shell
+  .travel-analysis-page--embedded
+  .travel-analysis-main {
+    margin-top: 24px;
+  }
+
+  .preference-title-block {
+    margin-bottom: 20px;
+  }
+
+  .preference-title-block h1 {
+    font-size: 23px;
+  }
+
+  .travel-code-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .travel-code-box {
+    min-height: 96px;
+  }
+
+  .travel-code-box strong {
+    font-size: 42px;
+  }
+
+  .preference-hero-note {
+    padding: 20px;
+    gap: 20px;
+  }
+
+  .preference-hero-note img {
+    height: 200px;
+  }
+
+  .preference-hero-note h3 {
+    font-size: 19px;
+  }
+
+  .preference-hero-note p {
+    font-size: 14px;
+    line-height: 1.7;
+  }
+
+  .analysis-row {
+    grid-template-columns: 42px minmax(0, 1fr) 38px;
+    gap: 10px;
+  }
+
+  .analysis-icon {
+    width: 42px;
+    height: 42px;
+  }
+
+  .analysis-code {
+    width: 38px;
+    height: 38px;
+    font-size: 20px;
+  }
+
+  .analysis-row p {
+    grid-column: 2 / 4;
+    font-size: 14px;
+  }
+
+  .preference-action-bar {
+    padding: 12px;
+    gap: 10px;
+  }
+
+  .preference-ghost-button,
+  .preference-solid-button {
+    width: 100%;
+    white-space: normal;
+    text-align: center;
+    line-height: 1.4;
+    padding: 12px 14px;
   }
 }
