@@ -1,12 +1,726 @@
-import PagePlaceholder from '../../components/common/PagePlaceholder';
+import { useEffect, useMemo, useState } from 'react';
+import {
+    ArrowLeft,
+    Bookmark,
+    CalendarDays,
+    Check,
+    ChevronLeft,
+    ChevronRight,
+    Clock3,
+    Heart,
+    Info,
+    MapPinned,
+    RefreshCw,
+    Route,
+    Share2,
+    Sparkles,
+    Timer,
+    X,
+} from 'lucide-react';
 
-function CourseDetailPage() {
+import Header from '../../components/common/Header';
+import Footer from '../../components/common/Footer';
+import CoursePlaceList from '../../components/course/CoursePlaceList';
+import KakaoCourseMap from '../../components/course/KakaoCourseMap';
+import { getCourseDetail } from '../../api/courseApi';
+import { findCachedRecommendedCourse } from '../../utils/courseHistory';
+import recommendationPreview from '../../mocks/courseRecommendation.json';
+import { mockThemeCourseListResponse } from '../../mocks/homeMockData';
+import hanokImage from '../../assets/images/moods/mood-hanok-photo.png';
+import walkingImage from '../../assets/images/moods/mood-walking-alley.png';
+import localFoodImage from '../../assets/images/moods/mood-local-food.png';
+import rainyCafeImage from '../../assets/images/moods/mood-rainy-cafe.png';
+import sunsetImage from '../../assets/images/moods/mood-sunset-seoul.png';
+
+const placeFallbackImages = [
+    hanokImage,
+    walkingImage,
+    localFoodImage,
+    rainyCafeImage,
+    sunsetImage,
+];
+
+const themeFields = [
+    ['themePalaceCultureYn', '역사·문화'],
+    ['themeNatureHangangYn', '자연·한강'],
+    ['themeDateYn', '감성 여행'],
+    ['themeFoodTourYn', '맛집 탐방'],
+    ['themeCafeTourYn', '카페 투어'],
+    ['themeShoppingHotplaceYn', '쇼핑·핫플'],
+    ['themeNightViewYn', '야경'],
+    ['themeHotelStayYn', '숙소'],
+];
+
+const travelTypeTones = ['blue', 'purple', 'green', 'orange', 'pink'];
+const COURSE_DETAIL_ENTRY_KEY = 'seoulinkCourseDetailEntry';
+
+/** 경량 라우터의 마지막 경로 조각에서 조회할 courseId를 구합니다. */
+function getCourseId() {
+    const lastPathSegment = window.location.pathname.split('/').filter(Boolean).pop();
+    const courseId = Number(lastPathSegment);
+
+    return Number.isInteger(courseId) && courseId > 0 ? courseId : null;
+}
+
+function toFiniteNumber(value, fallback = 0) {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : fallback;
+}
+
+/** 목록에서 상세로 이동할 때 함께 저장한 요약과 돌아갈 경로를 읽습니다. */
+function readCourseDetailEntry(courseId) {
+    try {
+        const entry = JSON.parse(sessionStorage.getItem(COURSE_DETAIL_ENTRY_KEY));
+        return entry?.detailId === courseId ? entry : null;
+    } catch {
+        return null;
+    }
+}
+
+function parseDurationMinutes(value) {
+    if (!value) return null;
+
+    const hours = Number(String(value).match(/(\d+)\s*시간/)?.[1] || 0);
+    const minutes = Number(String(value).match(/(\d+)\s*분/)?.[1] || 0);
+    const totalMinutes = (hours * 60) + minutes;
+    return totalMinutes > 0 ? totalMinutes : null;
+}
+
+function extractTime(value) {
+    if (!value) return null;
+
+    const match = String(value).match(/(?:^|T|\s)([01]\d|2[0-3]):([0-5]\d)/);
+    return match ? `${match[1]}:${match[2]}` : null;
+}
+
+function timeToMinutes(value) {
+    const normalizedTime = extractTime(value);
+    if (!normalizedTime) return null;
+
+    const [hours, minutes] = normalizedTime.split(':').map(Number);
+    return (hours * 60) + minutes;
+}
+
+function minutesToTime(value) {
+    const normalizedMinutes = ((Math.round(value) % 1440) + 1440) % 1440;
+    const hours = Math.floor(normalizedMinutes / 60);
+    const minutes = normalizedMinutes % 60;
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+/** 날짜별 장소를 방문 순서로 정렬하고 누락된 표시 시각·이미지·합계를 보완합니다. */
+function normalizeDays(rawDays) {
+    return (Array.isArray(rawDays) ? rawDays : []).map((day, dayIndex) => {
+        let timeCursor = 10 * 60;
+        const sortedPlaces = [...(Array.isArray(day?.places) ? day.places : [])]
+            .sort((first, second) => (
+                toFiniteNumber(first.visitOrder, 999) - toFiniteNumber(second.visitOrder, 999)
+            ));
+
+        const places = sortedPlaces.map((place, placeIndex) => {
+            const explicitTime = extractTime(place.expectedVisitTimeHHmm || place.visitTime);
+
+            // 서버가 예상 시각을 주지 않으면 10:00부터 이동·체류시간을 누적해 표시합니다.
+            if (explicitTime) {
+                timeCursor = timeToMinutes(explicitTime);
+            } else if (placeIndex > 0) {
+                timeCursor += toFiniteNumber(place.travelTimeFromPreviousMinutes);
+            }
+
+            const displayVisitTime = explicitTime || minutesToTime(timeCursor);
+            const fallbackImageUrl = placeFallbackImages[
+                (placeIndex + dayIndex) % placeFallbackImages.length
+            ];
+
+            timeCursor = (timeToMinutes(displayVisitTime) ?? timeCursor)
+                + toFiniteNumber(place.expectedVisitMinutes);
+
+            return {
+                ...place,
+                visitOrder: toFiniteNumber(place.visitOrder, placeIndex + 1),
+                expectedVisitMinutes: toFiniteNumber(place.expectedVisitMinutes),
+                distanceFromPreviousKm: toFiniteNumber(place.distanceFromPreviousKm),
+                travelTimeFromPreviousMinutes: toFiniteNumber(
+                    place.travelTimeFromPreviousMinutes,
+                ),
+                displayVisitTime,
+                fallbackImageUrl,
+                displayImageUrl: place.imageUrl
+                    || place.placeImageUrl
+                    || place.thumbnailUrl
+                    || fallbackImageUrl,
+            };
+        });
+
+        const derivedDistance = places.reduce(
+            (sum, place) => sum + place.distanceFromPreviousKm,
+            0,
+        );
+        const derivedTravelTime = places.reduce(
+            (sum, place) => sum + place.travelTimeFromPreviousMinutes,
+            0,
+        );
+        const derivedVisitTime = places.reduce(
+            (sum, place) => sum + place.expectedVisitMinutes,
+            0,
+        );
+
+        return {
+            ...day,
+            dayNo: toFiniteNumber(day.dayNo, dayIndex + 1),
+            visitDate: day.visitDate || places[0]?.visitDate || null,
+            dailyDistanceKm: toFiniteNumber(day.dailyDistanceKm, derivedDistance),
+            dailyTravelTimeMinutes: toFiniteNumber(
+                day.dailyTravelTimeMinutes,
+                derivedTravelTime,
+            ),
+            dailyVisitTimeMinutes: toFiniteNumber(day.dailyVisitTimeMinutes, derivedVisitTime),
+            dailyCourseTimeMinutes: toFiniteNumber(
+                day.dailyCourseTimeMinutes,
+                derivedTravelTime + derivedVisitTime,
+            ),
+            places,
+        };
+    });
+}
+
+/** 상세 API와 미리보기 데이터를 하나의 안전한 상세 화면 모델로 변환합니다. */
+function normalizeCourseDetail(rawCourse) {
+    const days = normalizeDays(rawCourse?.days);
+    const places = days.flatMap((day) => day.places);
+    const sumDays = (field) => days.reduce(
+        (sum, day) => sum + toFiniteNumber(day[field]),
+        0,
+    );
+
+    return {
+        ...rawCourse,
+        title: rawCourse?.title || '서울 맞춤 추천 코스',
+        description: rawCourse?.description
+            || '취향과 장소 간 이동 거리를 반영해 만든 서울 여행 코스입니다.',
+        coverImageUrl: rawCourse?.coverImageUrl
+            || places.find((place) => place.imageUrl)?.imageUrl
+            || hanokImage,
+        travelCode: /^[A-Z]{5}$/.test(rawCourse?.travelCode || '')
+            ? rawCourse.travelCode
+            : null,
+        courseType: rawCourse?.courseType || 'SURVEY',
+        placeCount: toFiniteNumber(rawCourse?.placeCount, places.length),
+        dayCount: toFiniteNumber(rawCourse?.dayCount, days.length),
+        totalDistanceKm: toFiniteNumber(rawCourse?.totalDistanceKm, sumDays('dailyDistanceKm')),
+        totalTravelTimeMinutes: toFiniteNumber(
+            rawCourse?.totalTravelTimeMinutes,
+            sumDays('dailyTravelTimeMinutes'),
+        ),
+        totalVisitTimeMinutes: toFiniteNumber(
+            rawCourse?.totalVisitTimeMinutes,
+            sumDays('dailyVisitTimeMinutes'),
+        ),
+        totalCourseTimeMinutes: toFiniteNumber(
+            rawCourse?.totalCourseTimeMinutes,
+            sumDays('dailyCourseTimeMinutes'),
+        ),
+        days,
+    };
+}
+
+/** 목록 카드에서만 유지되는 이미지·태그는 상세 API의 null 값을 덮지 않는 범위에서 보존합니다. */
+function normalizeApiCourseDetail(response, courseId) {
+    const summary = readCourseDetailEntry(courseId)?.summary
+        || findCachedRecommendedCourse(courseId)
+        || {};
+    const responseTags = Array.isArray(response?.tags) ? response.tags.filter(Boolean) : [];
+    const summaryTags = Array.isArray(summary?.tags) ? summary.tags.filter(Boolean) : [];
+    const summaryRegions = Array.isArray(summary?.regions)
+        ? summary.regions.filter(Boolean)
+        : [];
+
+    return normalizeCourseDetail({
+        ...summary,
+        ...response,
+        coverImageUrl: response?.coverImageUrl
+            || summary?.coverImageUrl
+            || summary?.imageUrl
+            || null,
+        region: response?.region
+            || summary?.region
+            || summary?.area
+            || summaryRegions.join(' · ')
+            || null,
+        tags: responseTags.length > 0 ? responseTags : summaryTags,
+        liked: response?.liked ?? summary?.liked ?? false,
+    });
+}
+
+/** API 오류 시에도 레이아웃을 확인할 수 있도록 캐시·더미 데이터로 미리보기를 만듭니다. */
+function buildPreviewCourse(courseId) {
+    const entrySummary = readCourseDetailEntry(courseId)?.summary
+        || findCachedRecommendedCourse(courseId)
+        || null;
+    const mockSummary = mockThemeCourseListResponse.data.find(
+        (candidate) => candidate.courseId === courseId,
+    );
+    const summary = entrySummary || mockSummary;
+    const optionIndexByTheme = {
+        SUNSET: 2,
+        RAINY_CAFE: 1,
+        HANOK_PHOTO: 0,
+        WALKING_ALLEY: 0,
+        NIGHT_DATE: 2,
+        LOCAL_FOOD: 2,
+    };
+    const previewOption = recommendationPreview.courseOptions[
+        optionIndexByTheme[summary?.themeCode] ?? 0
+    ];
+    const summaryDurationMinutes = parseDurationMinutes(summary?.duration);
+
+    return normalizeCourseDetail({
+        ...previewOption,
+        courseId: courseId || summary?.courseId || null,
+        title: summary?.title || previewOption.title,
+        description: summary?.description || previewOption.description,
+        coverImageUrl: summary?.coverImageUrl || summary?.imageUrl || hanokImage,
+        travelCode: summary ? null : recommendationPreview.travelCode,
+        courseType: summary?.themeCode ? 'THEME' : 'SURVEY',
+        region: summary?.area || '서울',
+        tags: summary?.tags || [],
+        liked: summary?.liked ?? false,
+        publicCourse: true,
+        totalCourseTimeMinutes: summaryDurationMinutes
+            ?? previewOption.totalCourseTimeMinutes,
+    });
+}
+
+function formatMinutes(value) {
+    const minutes = Math.max(0, Math.round(toFiniteNumber(value)));
+    const hours = Math.floor(minutes / 60);
+    const restMinutes = minutes % 60;
+
+    if (hours === 0) return `${restMinutes}분`;
+    return restMinutes === 0 ? `${hours}시간` : `${hours}시간 ${restMinutes}분`;
+}
+
+function parseDate(value) {
+    if (!value) return null;
+
+    const date = new Date(`${value}T00:00:00`);
+    return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function formatDate(value, { compact = false } = {}) {
+    const date = parseDate(value);
+    if (!date) return '날짜 미정';
+
+    if (compact) {
+        return new Intl.DateTimeFormat('ko-KR', {
+            month: '2-digit',
+            day: '2-digit',
+            weekday: 'short',
+        }).format(date);
+    }
+
+    return new Intl.DateTimeFormat('ko-KR', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        weekday: 'short',
+    }).format(date);
+}
+
+function getDateRange(days) {
+    const dates = days.map((day) => day.visitDate).filter(Boolean).sort();
+    if (dates.length === 0) return '여행 날짜 미정';
+    if (dates.length === 1) return formatDate(dates[0]);
+
+    return `${formatDate(dates[0])} ~ ${formatDate(dates[dates.length - 1])}`;
+}
+
+/** 목록에서 전달한 태그를 우선 사용하고, 없으면 장소별 8개 테마 값으로 생성합니다. */
+function getThemeTags(course) {
+    const summaryTags = Array.isArray(course.tags)
+        ? [...new Set(course.tags.filter(Boolean))]
+        : [];
+
+    if (summaryTags.length > 0) return summaryTags;
+
+    const places = course.days.flatMap((day) => day.places);
+    const tags = themeFields
+        .filter(([field]) => places.some((place) => place?.[field] === 'Y'))
+        .map(([, label]) => label);
+
+    if (tags.length > 0) return tags;
+    return course.region ? [course.region, '서울 여행'] : ['서울 여행'];
+}
+
+function getCourseTypeLabel(courseType) {
+    return {
+        SURVEY: '취향 맞춤 코스',
+        CUSTOM: '직접 만든 코스',
+        CHATBOT: 'AI 추천 코스',
+        THEME: '테마 추천 코스',
+    }[courseType] || '서울 여행 코스';
+}
+
+/** 현재 선택된 일차의 장소만 지도에 전달하는 상세 화면 지도 카드입니다. */
+function CourseRouteMap({ day }) {
     return (
-        <PagePlaceholder
-            title="코스 상세"
-            description="코스에 포함된 관광지, 식당, 카페, 숙소를 순서대로 보여줄 자리입니다."
-            links={[{ href: '/courses', label: '코스 목록으로' }]}
-        />
+        <section className="course-detail-map-card">
+            <div className="course-detail-side-heading">
+                <div>
+                    <MapPinned size={20} aria-hidden="true" />
+                    <h2>코스 지도</h2>
+                </div>
+            </div>
+
+            <div className="course-detail-map-canvas">
+                <KakaoCourseMap
+                    places={day?.places || []}
+                    ariaLabel={`DAY ${day?.dayNo || 1} 장소 방문 순서가 표시된 카카오 지도`}
+                />
+            </div>
+        </section>
+    );
+}
+
+/** 저장 코스를 조회해 날짜별 일정·합계·지도 정보를 보여주는 상세 화면입니다. */
+function CourseDetailPage() {
+    const courseId = useMemo(() => getCourseId(), []);
+    const previewCourse = useMemo(() => buildPreviewCourse(courseId), [courseId]);
+    const [course, setCourse] = useState(courseId ? null : previewCourse);
+    const [status, setStatus] = useState(courseId ? 'loading' : 'success');
+    const [source, setSource] = useState(courseId ? 'api' : 'preview');
+    const [errorMessage, setErrorMessage] = useState('');
+    const [reloadKey, setReloadKey] = useState(0);
+    const [activeDayNo, setActiveDayNo] = useState(previewCourse.days[0]?.dayNo ?? 1);
+    // 북마크 API가 연결되기 전까지 상세 화면 안에서 선택 상태만 표시합니다.
+    const [isBookmarked, setIsBookmarked] = useState(
+        previewCourse.bookmarked ?? previewCourse.liked ?? false,
+    );
+    const [toast, setToast] = useState(null);
+
+    useEffect(() => {
+        if (!courseId) return undefined;
+
+        const controller = new AbortController();
+
+        // 목록 요약이 아닌 저장 코스 상세 API를 기준으로 일정과 이동 정보를 갱신합니다.
+        getCourseDetail(courseId, { signal: controller.signal })
+            .then((response) => {
+                const normalizedCourse = normalizeApiCourseDetail(response, courseId);
+                setCourse(normalizedCourse);
+                setActiveDayNo(normalizedCourse.days[0]?.dayNo ?? 1);
+                setSource('api');
+                setStatus('success');
+            })
+            .catch((error) => {
+                if (error?.name === 'AbortError') return;
+                setErrorMessage(error?.message || '코스 상세 정보를 불러오지 못했습니다.');
+                setStatus('error');
+            });
+
+        return () => controller.abort();
+    }, [courseId, reloadKey]);
+
+    const activeDay = course?.days.find((day) => day.dayNo === activeDayNo)
+        || course?.days[0]
+        || null;
+    const activeDayIndex = course?.days.findIndex(
+        (day) => day.dayNo === activeDay?.dayNo,
+    ) ?? -1;
+    const themeTags = course ? getThemeTags(course) : [];
+    const dateRange = course ? getDateRange(course.days) : '';
+
+    const moveActiveDay = (offset) => {
+        const targetDay = course?.days[activeDayIndex + offset];
+        if (targetDay) setActiveDayNo(targetDay.dayNo);
+    };
+
+    const showPreview = () => {
+        setCourse(previewCourse);
+        setActiveDayNo(previewCourse.days[0]?.dayNo ?? 1);
+        setSource('preview');
+        setStatus('success');
+        setErrorMessage('');
+    };
+
+    const retryCourseDetail = () => {
+        setStatus('loading');
+        setErrorMessage('');
+        setReloadKey((value) => value + 1);
+    };
+
+    const handleShare = async () => {
+        const shareData = {
+            title: course?.title || 'SEOULINK 추천 코스',
+            text: course?.description || '서울 여행 추천 코스를 확인해보세요.',
+            url: window.location.href,
+        };
+
+        try {
+            if (navigator.share) {
+                await navigator.share(shareData);
+                return;
+            }
+
+            await navigator.clipboard.writeText(window.location.href);
+            setToast({ tone: 'success', message: '코스 링크를 복사했어요.' });
+        } catch (error) {
+            if (error?.name !== 'AbortError') {
+                setToast({ tone: 'error', message: '링크를 복사하지 못했어요.' });
+            }
+        }
+    };
+
+    const handleReturnToCourseList = () => {
+        const entry = readCourseDetailEntry(courseId);
+        const returnPath = entry?.returnPath;
+
+        if (typeof returnPath === 'string' && /^\/(?!\/)/.test(returnPath)) {
+            window.location.href = returnPath;
+            return;
+        }
+
+        if (document.referrer.startsWith(window.location.origin)) {
+            window.history.back();
+            return;
+        }
+
+        window.location.href = window.location.pathname.startsWith('/courses/recommendations/')
+            ? '/courses/recommendations'
+            : '/courses/list';
+    };
+
+    return (
+        <div className="page course-detail-page">
+            <Header variant="default" />
+
+            <main className="course-detail-shell">
+                <div className="course-detail-toolbar">
+                    <button type="button" className="course-detail-back-link" onClick={handleReturnToCourseList}>
+                        <ArrowLeft size={18} aria-hidden="true" />
+                        돌아가기
+                    </button>
+
+                    {status === 'success' && (
+                        <div className="course-detail-toolbar-actions">
+                            <button
+                                className={isBookmarked ? 'is-active' : ''}
+                                type="button"
+                                aria-label={isBookmarked ? '북마크 해제' : '북마크 추가'}
+                                aria-pressed={isBookmarked}
+                                onClick={() => setIsBookmarked((previous) => !previous)}
+                            >
+                                <Bookmark
+                                    size={17}
+                                    fill={isBookmarked ? 'currentColor' : 'none'}
+                                    aria-hidden="true"
+                                />
+                                북마크
+                            </button>
+                            <button type="button" onClick={handleShare}>
+                                <Share2 size={17} aria-hidden="true" />
+                                공유하기
+                            </button>
+                        </div>
+                    )}
+                </div>
+
+                {status === 'loading' && (
+                    <section className="course-detail-state-card" aria-live="polite">
+                        <span className="course-detail-spinner" aria-hidden="true" />
+                        <h1>코스 상세 정보를 불러오고 있어요</h1>
+                        <p>날짜별 일정과 이동 동선을 정리하는 중입니다.</p>
+                    </section>
+                )}
+
+                {status === 'error' && (
+                    <section className="course-detail-state-card" role="alert">
+                        <span className="course-detail-state-icon error"><Info size={25} aria-hidden="true" /></span>
+                        <h1>코스를 불러오지 못했어요</h1>
+                        <p>{errorMessage}</p>
+                        <div>
+                            <button type="button" onClick={retryCourseDetail}>
+                                <RefreshCw size={16} aria-hidden="true" /> 다시 불러오기
+                            </button>
+                            <button className="secondary" type="button" onClick={showPreview}>
+                                화면 미리보기
+                            </button>
+                        </div>
+                    </section>
+                )}
+
+                {status === 'success' && course && (
+                    <>
+                        <div className="course-detail-content-grid">
+                            <div className="course-detail-main-column">
+                                <section className="course-detail-hero">
+                            <div className="course-detail-hero-copy">
+                                {source === 'preview' && (
+                                    <span className="course-detail-preview-label">
+                                        <Info size={13} aria-hidden="true" /> UI 미리보기
+                                    </span>
+                                )}
+
+                                <h1>{course.title}</h1>
+
+                                <div className="course-detail-tags" aria-label="코스 테마">
+                                    {themeTags.slice(0, 4).map((tag) => <span key={tag}>{tag}</span>)}
+                                </div>
+
+                                <p>{course.description}</p>
+
+                                <div className="course-detail-hero-meta">
+                                    <span><CalendarDays size={17} aria-hidden="true" />{dateRange}</span>
+                                    <span><Route size={17} aria-hidden="true" />{course.dayCount}일 코스</span>
+                                    <span><Sparkles size={17} aria-hidden="true" />{getCourseTypeLabel(course.courseType)}</span>
+                                </div>
+                            </div>
+
+                            <div className="course-detail-hero-image">
+                                <img
+                                    src={course.coverImageUrl}
+                                    alt={`${course.title} 대표 이미지`}
+                                    onError={(event) => {
+                                        if (event.currentTarget.src !== hanokImage) {
+                                            event.currentTarget.src = hanokImage;
+                                        }
+                                    }}
+                                />
+                            </div>
+                                </section>
+
+                                <section className="course-detail-metrics" aria-label="코스 요약">
+                            <article>
+                                <span><MapPinned size={21} aria-hidden="true" /></span>
+                                <div><small>이동 거리</small><strong>약 {course.totalDistanceKm.toFixed(1)}km</strong></div>
+                            </article>
+                            <article>
+                                <span><Clock3 size={21} aria-hidden="true" /></span>
+                                <div><small>전체 소요 시간</small><strong>약 {formatMinutes(course.totalCourseTimeMinutes)}</strong></div>
+                            </article>
+                            <article>
+                                <span><Timer size={21} aria-hidden="true" /></span>
+                                <div><small>장소 체류 시간</small><strong>약 {formatMinutes(course.totalVisitTimeMinutes)}</strong></div>
+                            </article>
+                            <article>
+                                <span><Route size={21} aria-hidden="true" /></span>
+                                <div><small>방문 장소</small><strong>{course.placeCount}곳</strong></div>
+                            </article>
+                                </section>
+
+                                <section className="course-detail-schedule-card">
+                                <div className="course-detail-schedule-heading">
+                                    <div>
+                                        <span>
+                                            {activeDay
+                                                ? `DAY ${activeDay.dayNo} · ${formatDate(activeDay.visitDate, { compact: true })}`
+                                                : '저장된 코스'}
+                                        </span>
+                                        <h2>상세 일정</h2>
+                                    </div>
+
+                                    {course.days.length > 1 && (
+                                        <div className="course-detail-day-selector">
+                                            <button
+                                                className="course-detail-day-arrow"
+                                                type="button"
+                                                onClick={() => moveActiveDay(-1)}
+                                                disabled={activeDayIndex <= 0}
+                                                aria-label="이전 날짜 일정"
+                                            >
+                                                <ChevronLeft size={18} aria-hidden="true" />
+                                            </button>
+
+                                            <div className="course-detail-day-tabs" aria-label="일차 선택">
+                                                {course.days.slice(0, 7).map((day) => (
+                                                    <button
+                                                        className={day.dayNo === activeDay?.dayNo ? 'active' : ''}
+                                                        type="button"
+                                                        key={`${day.dayNo}-${day.visitDate}`}
+                                                        onClick={() => setActiveDayNo(day.dayNo)}
+                                                    >
+                                                        DAY {day.dayNo}
+                                                        <small>{formatDate(day.visitDate, { compact: true })}</small>
+                                                    </button>
+                                                ))}
+                                            </div>
+
+                                            <button
+                                                className="course-detail-day-arrow"
+                                                type="button"
+                                                onClick={() => moveActiveDay(1)}
+                                                disabled={activeDayIndex >= Math.min(course.days.length, 7) - 1}
+                                                aria-label="다음 날짜 일정"
+                                            >
+                                                <ChevronRight size={18} aria-hidden="true" />
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <CoursePlaceList day={activeDay} />
+
+                                <p className="course-detail-schedule-note">
+                                    <Info size={14} aria-hidden="true" />
+                                    위 일정은 예상 이동 거리와 시간을 바탕으로 구성된 추천 동선입니다. 실시간 교통 상황과 장소 운영 시간은 반영되지 않아 실제 일정과 다를 수 있습니다.
+                                </p>
+                                </section>
+                            </div>
+
+                            <aside className="course-detail-sidebar">
+                                <CourseRouteMap day={activeDay} />
+
+                                <section className="course-detail-overview-card">
+                                    <div className="course-detail-side-heading">
+                                        <div><Sparkles size={20} aria-hidden="true" /><h2>코스 한눈에 보기</h2></div>
+                                    </div>
+
+                                    <dl>
+                                        <div>
+                                            <dt><CalendarDays size={18} aria-hidden="true" />여행 기간</dt>
+                                            <dd>{dateRange}</dd>
+                                        </div>
+                                        <div>
+                                            <dt><Route size={18} aria-hidden="true" />코스 구성</dt>
+                                            <dd>{course.dayCount}일 · {course.placeCount}곳 · {getCourseTypeLabel(course.courseType)}</dd>
+                                        </div>
+                                        <div>
+                                            <dt><Heart size={18} aria-hidden="true" />여행 테마</dt>
+                                            <dd>{themeTags.join(', ')}</dd>
+                                        </div>
+                                        <div>
+                                            <dt><Sparkles size={18} aria-hidden="true" />추천 이유</dt>
+                                            <dd>{course.description}</dd>
+                                        </div>
+                                    </dl>
+
+                                    {course.travelCode && (
+                                        <div className="course-detail-travel-code" aria-label={`여행 유형 ${course.travelCode}`}>
+                                            {course.travelCode.split('').map((letter, index) => (
+                                                <span className={travelTypeTones[index]} key={`${letter}-${index}`}>{letter}</span>
+                                            ))}
+                                        </div>
+                                    )}
+                                </section>
+
+                            </aside>
+                        </div>
+                    </>
+                )}
+            </main>
+
+            <Footer />
+
+            {toast && (
+                <div className={`course-detail-toast ${toast.tone}`} role="status">
+                    <span>{toast.tone === 'success' ? <Check size={17} aria-hidden="true" /> : <Info size={17} aria-hidden="true" />}</span>
+                    <p>{toast.message}</p>
+                    <button type="button" aria-label="알림 닫기" onClick={() => setToast(null)}>
+                        <X size={15} aria-hidden="true" />
+                    </button>
+                </div>
+            )}
+        </div>
     );
 }
 

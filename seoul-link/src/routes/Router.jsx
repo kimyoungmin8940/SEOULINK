@@ -61,6 +61,8 @@ function isProtectedPath(pathname) {
         pathname === '/travel-info' ||
         pathname === '/survey' ||
         pathname === '/survey/result' ||
+        // 회원 기능 연동 전에도 추천 생성 화면은 확인할 수 있게 둡니다.
+        pathname === '/courses' ||
         pathname === '/reviews' ||
         pathname === '/courses/themes' ||
         pathname.startsWith('/courses/themes/') ||
@@ -73,7 +75,6 @@ function isProtectedPath(pathname) {
     // 추천 코스 생성/조회, 후기 작성/수정, 지도, 마이페이지, 챗봇, 결제는 로그인 필요
     // 취향 검사와 검사 결과 확인은 비로그인 사용자도 접근할 수 있습니다.
     return (
-        pathname === '/courses' ||
         pathname === '/courses/list' ||
         pathname === '/courses/recommendations' ||
         pathname.startsWith('/courses/recommendations/') ||
@@ -110,7 +111,7 @@ function Router() {
 
         '/courses': <CourseRecommendPage />,
         '/courses/list': <CourseListPage />,
-        '/courses/recommendations': <CourseRecommendPage />,
+        '/courses/recommendations': <CourseListPage />,
         '/courses/themes': <CourseListPage />,
 
         '/map-course': <MapCourseBuilderPage />,

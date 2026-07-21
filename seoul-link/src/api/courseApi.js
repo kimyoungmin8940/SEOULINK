@@ -1,5 +1,7 @@
 import { ApiError, apiClient } from './apiClient';
+import { normalizeCourseRecommendRequest } from '../utils/courseRecommendationHandoff';
 
+/** URL이나 쿼리 문자열에 들어갈 식별자를 API 호출 전에 공통 검증합니다. */
 function requirePositiveId(value, fieldName) {
     if (!Number.isInteger(value) || value < 1) {
         throw new ApiError(
@@ -11,6 +13,7 @@ function requirePositiveId(value, fieldName) {
     return value;
 }
 
+/** 단일 일정 최적화의 선택 필드가 누락돼도 백엔드에는 빈 배열로 전달합니다. */
 function withAlternativeCandidates(data) {
     return {
         ...data,
@@ -31,14 +34,15 @@ export const optimizeCourse = (data, options = {}) => apiClient.post(
 );
 
 /**
- * 추천 후보 최적화와 SURVEY 코스 저장을 한 번에 처리합니다.
+ * 추천 후보를 최적화해 PREFERENCE/MIN_DISTANCE/BALANCED 3개 옵션을 받습니다.
+ * 이 단계에서는 저장하지 않고, 사용자가 결과 화면에서 선택한 한 코스만 saveCourse로 저장합니다.
  * @param {import('../types/course').CourseRecommendRequest} data
  * @param {RequestInit} [options]
  * @returns {Promise<import('../types/course').CourseRecommendResponse>}
  */
 export const recommendCourse = (data, options = {}) => apiClient.post(
     '/courses/recommend',
-    withAlternativeCandidates(data),
+    normalizeCourseRecommendRequest(data),
     options,
 );
 

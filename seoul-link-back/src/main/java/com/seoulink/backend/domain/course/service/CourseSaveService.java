@@ -128,6 +128,7 @@ public class CourseSaveService {
         }
 
         Map<LocalDate, Integer> dayNumbers = createDayNumbers(validated.places());
+        // 장소명·주소 같은 표시 정보는 중복 저장하지 않고 PLACE_ID만 보관해 조회 시 PLACES와 연결한다.
         List<CourseDetail> details = validated.places().stream()
                 .map(place -> CourseDetail.builder()
                         .courseId(savedCourse.getCourseId())

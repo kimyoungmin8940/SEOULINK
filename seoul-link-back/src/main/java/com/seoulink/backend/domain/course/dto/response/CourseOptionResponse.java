@@ -21,6 +21,11 @@ public class CourseOptionResponse {
     private Integer optionNo;
     private String optionType;
     private String optionName;
+    private String title;
+    private String description;
+
+    // 같은 취향으로 다시 추천할 때 이 코스 조합을 제외하는 데 사용하는 키이다.
+    private String recommendationKey;
 
     // 이 코스에 실제 포함된 장소·일수와 전체 합계이다.
     private Integer placeCount;

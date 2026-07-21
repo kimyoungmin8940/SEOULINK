@@ -312,6 +312,24 @@
   gap: 2px;
 }
 
+/*
+  화면이 넓을 때는 상단 메뉴 4개가 이미 보이므로 사이드 메뉴에서 숨깁니다.
+  1120px 이하에서는 미디어 쿼리로 다시 표시합니다.
+*/
+.side-primary-menu {
+  display: none;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* 반응형 주요 메뉴와 개인 메뉴 사이 구분선 */
+.side-primary-divider {
+  width: calc(100% - 20px);
+  height: 1px;
+  margin: 8px auto 6px;
+  background: rgba(220, 235, 250, 0.9);
+}
+
 /* 사이드 메뉴 한 줄 메뉴 아이템 스타일 */
 .side-nav a {
   height: 39px;
@@ -370,8 +388,9 @@
 
 /* 메뉴 아이템 hover 시 배경과 글자색을 변경 */
 .side-nav a:hover {
-  background: rgba(var(--main-blue-rgb), 0.08);
-  color: var(--main-blue);
+  /* 기존 메뉴 hover 색상: 연한 파란 배경 + 선명한 파란 글자 */
+  background: #ECF4FC;
+  color: #1378D8;
 }
 
 /* 사이드 메뉴 아이콘의 크기 고정 및 색상 기준*/
@@ -385,14 +404,24 @@
 
 /* 메뉴 hover 시 아이콘 색상을 글자색과 같이 변경 */
 .side-nav a:hover .side-icon {
-  color: var(--main-blue);
+  color: #1378D8;
 }
 
 
-/* 화면 폭이 좁아지면 기존 헤더 틀은 유지하고 가운데 주요 메뉴만 숨김 */
+/* 화면 폭이 좁아지면 상단 주요 메뉴를 숨기고 햄버거 메뉴 안에 표시 */
 @media (max-width: 1120px) {
   .header-main-nav {
     display: none;
+  }
+
+  .side-primary-menu {
+    display: flex;
+  }
+
+  /* 메뉴 항목이 늘어나도 낮은 화면에서 잘리지 않도록 내부 스크롤 허용 */
+  .side-menu {
+    max-height: calc(100vh - 114px);
+    overflow-y: auto;
   }
 }
 

@@ -21,10 +21,13 @@ import java.time.LocalDate;
 @AllArgsConstructor
 public class OptimizedPlaceDto {
 
-    // 원본 후보에서 유지되는 장소·추천·좌표·날짜 정보이다.
+    // 원본 후보에서 유지되는 장소 표시·추천·좌표·날짜 정보이다.
     private Long placeId;
     private String placeName;
     private String category;
+    private String address;
+    private String roadAddress;
+    private String imageUrl;
     private Double recommendationScore;
     private Double latitude;
     private Double longitude;

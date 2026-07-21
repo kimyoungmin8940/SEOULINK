@@ -38,7 +38,10 @@ public class CourseService {
 
     /**
      * 코스 기본정보와 날짜·방문 순서대로 정렬된 장소를 함께 반환한다.
-     * 장소명·주소·이미지는 PLACES 도메인 통합 후 placeId로 보강한다.
+     *
+     * <p>현재 Place 엔티티와 Repository가 구현 전이므로 COURSE_DETAILS에 저장된
+     * 일정 정보만 반환한다. 장소 도메인 통합 시 placeId 목록으로 PLACES를 일괄 조회해
+     * 장소명·카테고리·주소·이미지·좌표·테마를 함께 채워야 한다.</p>
      */
     public CourseDetailResponse getCourse(Long courseId) {
         if (courseId == null || courseId < 1) {
@@ -208,7 +211,12 @@ public class CourseService {
                 .doubleValue();
     }
 
-    /** 상세 장소 엔티티의 저장 필드를 프론트 조회 응답 필드로 변환한다. */
+    /**
+     * 상세 장소 엔티티의 저장 필드를 프론트 조회 응답 필드로 변환한다.
+     *
+     * <p>TODO: PlaceRepository 구현 후 N+1 조회가 생기지 않도록 getCourse에서
+     * placeId를 모아 한 번에 조회하고, 이 응답의 장소 표시 필드를 보강한다.</p>
+     */
     private CoursePlaceResponse toPlaceResponse(CourseDetail detail) {
         return CoursePlaceResponse.builder()
                 .detailId(detail.getDetailId())

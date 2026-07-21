@@ -103,6 +103,9 @@ class CourseRecommendationServiceTest {
             assertEquals(8, option.getPlaceCount());
             assertEquals(2, option.getDayCount());
             assertEquals(2, option.getDays().size());
+            assertTrue(option.getTitle().endsWith(option.getOptionName()));
+            assertTrue(!option.getDescription().isBlank());
+            assertTrue(!option.getRecommendationKey().isBlank());
 
             for (CourseDayResponse day : option.getDays()) {
                 assertEquals(4, day.getPlaces().size());
@@ -110,6 +113,16 @@ class CourseRecommendationServiceTest {
                 assertEquals(1, countCategory(day, "RESTAURANT"));
                 assertEquals(1, countCategory(day, "CAFE"));
                 assertEquals("10:00", day.getPlaces().get(0).getVisitTime());
+                day.getPlaces().forEach(place -> {
+                    assertEquals(
+                            "서울 " + place.getPlaceName(),
+                            place.getAddress()
+                    );
+                    assertEquals(
+                            "https://example.com/places/" + place.getPlaceId() + ".jpg",
+                            place.getImageUrl()
+                    );
+                });
             }
 
             String signature = option.getDays().stream()
@@ -123,6 +136,52 @@ class CourseRecommendationServiceTest {
         assertEquals(3, optionSignatures.size());
         assertTrue(response.getCourseOptions().stream()
                 .allMatch(option -> option.getTotalCourseTimeMinutes() > 0));
+    }
+
+    @Test
+    @DisplayName("같은 취향으로 다시 추천하면 직전 세 코스를 제외한 새 코스를 반환한다")
+    void recommendAgainExcludesPreviousOptions() {
+        CourseRecommendRequest request = CourseRecommendRequest.builder()
+                .resultId(101L)
+                .travelCode("ATLSR")
+                .dailyStartTime(LocalTime.of(10, 0))
+                .dailyPlans(List.of(DailyPlanRequest.builder()
+                        .visitDate(LocalDate.of(2026, 7, 20))
+                        .targetPlaceCount(2)
+                        .categoryTargets(Map.of(
+                                "TOUR", 1,
+                                "RESTAURANT", 1,
+                                "CAFE", 0,
+                                "HOTEL", 0
+                        ))
+                        .placeCandidates(List.of(
+                                candidate(1L, "관광지 1", "TOUR", 96.0, 37.50, 127.00),
+                                candidate(2L, "관광지 2", "TOUR", 92.0, 37.51, 127.01),
+                                candidate(3L, "관광지 3", "TOUR", 88.0, 37.52, 127.02),
+                                candidate(4L, "관광지 4", "TOUR", 84.0, 37.53, 127.03),
+                                candidate(11L, "식당 1", "RESTAURANT", 95.0, 37.50, 127.01),
+                                candidate(12L, "식당 2", "RESTAURANT", 90.0, 37.51, 127.02),
+                                candidate(13L, "식당 3", "RESTAURANT", 85.0, 37.52, 127.03)
+                        ))
+                        .build()))
+                .build();
+
+        CourseRecommendResponse firstResponse =
+                courseRecommendationService.recommend(request);
+        Set<String> firstKeys = firstResponse.getCourseOptions().stream()
+                .map(CourseOptionResponse::getRecommendationKey)
+                .collect(java.util.stream.Collectors.toSet());
+
+        request.setExcludedRecommendationKeys(List.copyOf(firstKeys));
+        CourseRecommendResponse secondResponse =
+                courseRecommendationService.recommend(request);
+        Set<String> secondKeys = secondResponse.getCourseOptions().stream()
+                .map(CourseOptionResponse::getRecommendationKey)
+                .collect(java.util.stream.Collectors.toSet());
+
+        assertEquals(3, firstKeys.size());
+        assertEquals(3, secondKeys.size());
+        assertTrue(firstKeys.stream().noneMatch(secondKeys::contains));
     }
 
     @Test
@@ -241,6 +300,9 @@ class CourseRecommendationServiceTest {
                 .placeId(placeId)
                 .placeName(placeName)
                 .category(category)
+                .address("서울 " + placeName)
+                .roadAddress("서울로 " + placeId)
+                .imageUrl("https://example.com/places/" + placeId + ".jpg")
                 .recommendationScore(score)
                 .latitude(latitude)
                 .longitude(longitude)

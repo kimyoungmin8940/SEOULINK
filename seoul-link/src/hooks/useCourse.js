@@ -34,6 +34,7 @@ export function useCourseRequest(
     }, []);
 
     const run = useCallback(async (...args) => {
+        // 새 요청을 시작할 때 이전 요청을 취소해 늦게 도착한 응답이 최신 화면을 덮지 않게 합니다.
         cancel();
         const controller = new AbortController();
         const requestId = ++requestIdRef.current;
@@ -43,6 +44,7 @@ export function useCourseRequest(
 
         try {
             const data = await request(controller.signal, ...args);
+            // 요청 번호가 같은 경우에만 상태를 반영해 요청 간 경합을 한 번 더 방지합니다.
             if (mountedRef.current && requestId === requestIdRef.current) {
                 setState(createResolvedState(data, isEmpty));
             }
@@ -69,6 +71,7 @@ export function useCourseRequest(
     );
 
     const reset = useCallback(() => {
+        // 진행 중인 요청의 번호를 무효화한 뒤 초기 상태로 되돌립니다.
         requestIdRef.current += 1;
         cancel();
         setState(createIdleState());
@@ -87,8 +90,15 @@ export function useCourseRequest(
             return undefined;
         }
 
-        run().catch(() => {});
-        return cancel;
+        // effect 본문에서 바로 상태를 변경하지 않고 다음 작업 큐에서 자동 조회합니다.
+        const timeoutId = window.setTimeout(() => {
+            run().catch(() => {});
+        }, 0);
+
+        return () => {
+            window.clearTimeout(timeoutId);
+            cancel();
+        };
     }, [cancel, enabled, run]);
 
     return {

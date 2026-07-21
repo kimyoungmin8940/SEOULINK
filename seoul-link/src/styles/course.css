@@ -93,7 +93,7 @@
   transition: 0.18s ease;
 }
 
-/* 카드 상단 이미지와 찜 버튼이 들어가는 영역 */
+/* 카드 상단 이미지와 북마크 버튼이 들어가는 영역 */
 .course-img-wrap {
   height: clamp(190px, 12vw, 235px);
   position: relative;
@@ -109,8 +109,8 @@
   display: block;
 }
 
-/* 이미지 오른쪽 위 찜하기 버튼*/
-.heart-btn {
+/* 이미지 오른쪽 위 북마크 버튼 */
+.bookmark-btn {
   position: absolute;
   top: 12px;
   right: 14px;
@@ -135,8 +135,8 @@
   transition: 0.18s ease;
 }
 
-/* 찜하기 아이콘의 기본 색상 */
-.heart-btn svg {
+/* 북마크 아이콘의 기본 색상 */
+.bookmark-btn svg {
   width: 24px;
   height: 24px;
   fill: none;
@@ -147,15 +147,15 @@
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.45));
 }
 
-/* 찜 버튼 hover 효과 */
-.heart-btn:hover {
+/* 북마크 버튼 hover 효과 */
+.bookmark-btn:hover {
   transform: scale(1.08);
 }
 
-/* 로그인 후 찜한 상태 */
-.heart-btn.is-liked svg {
-  fill: #ec4c8a;
-  stroke: #ec4c8a;
+/* 로그인 후 북마크한 상태 */
+.bookmark-btn.is-bookmarked svg {
+  fill: var(--primary-blue);
+  stroke: var(--primary-blue);
 }
 
 /* 카드 하단 텍스트 정보 영역*/

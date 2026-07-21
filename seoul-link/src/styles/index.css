@@ -21,6 +21,14 @@
 @import './survey.css';
 @import './category.css';
 @import './course.css';
+/* 취향 검사 완료 후 표시되는 맞춤 추천 결과 화면 */
+@import './course-recommend.css';
+/* 저장된 코스의 날짜별 동선과 장소 정보를 보여주는 상세 화면 */
+@import './course-detail.css';
+/* 코스 화면에서 공통으로 사용하는 실제 카카오 지도 */
+@import './kakao-course-map.css';
+/* 사용자가 지금까지 추천받은 코스를 모아보는 전체 목록 화면 */
+@import './course-list.css';
 @import './mood.css';
 @import './mood-carousel-fix.css';
 @import './review.css';

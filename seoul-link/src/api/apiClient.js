@@ -2,7 +2,9 @@
 // VITE_API_BASE_URL은 기존 프로젝트 규칙대로 `/api`까지 포함합니다.
 
 export const API_BASE_URL = (
-    import.meta.env?.VITE_API_BASE_URL || 'http://localhost:8080/api'
+    // 개발 환경에서는 Vite가 /api를 Spring Boot(8080)로 프록시합니다.
+    // 프론트와 백을 서로 다른 포트로 실행해도 브라우저 CORS 오류 없이 호출됩니다.
+    import.meta.env?.VITE_API_BASE_URL || '/api'
 ).replace(/\/+$/, '');
 
 /** 화면에서 HTTP 상태와 백엔드 오류 코드를 함께 구분할 수 있는 공통 오류입니다. */

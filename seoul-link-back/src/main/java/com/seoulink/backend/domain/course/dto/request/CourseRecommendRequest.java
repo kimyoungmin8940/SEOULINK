@@ -38,6 +38,10 @@ public class CourseRecommendRequest {
     private Double temperature;
     private Integer rainProbability;
 
+    // 다시 추천할 때 직전 화면에 표시된 코스 조합을 제외하기 위한 서버 발급 키 목록이다.
+    @Builder.Default
+    private List<String> excludedRecommendationKeys = new ArrayList<>();
+
     // 날짜별 방문 후보와 장소별 대체 후보를 담은 목록이다.
     @Builder.Default
     private List<DailyPlanRequest> dailyPlans = new ArrayList<>();

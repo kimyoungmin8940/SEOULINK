@@ -19,13 +19,14 @@ import logoText from '../../assets/images/logo-text.png';
 
 // 헤더 가운데에 항상 노출하는 주요 기능 4개
 const headerMenuItems = [
-    { href: '/courses', label: '추천 코스', Icon: Heart, requiresLogin: true },
+    { href: '/courses/recommendations', label: '추천 코스', Icon: Heart, requiresLogin: true },
     { href: '/map-course', label: '지도 코스 만들기', Icon: MapPin, requiresLogin: true },
     { href: '/reviews', label: '방문 후기', Icon: MessageSquareText, requiresLogin: false },
     { href: '/chatbot', label: 'AI 여행 챗봇', Icon: Bot, requiresLogin: true },
 ];
 
-// 햄버거 메뉴에는 헤더로 이동하지 않은 개인 메뉴만 표시
+// 개인 메뉴는 모든 화면 크기에서 햄버거 메뉴에 표시합니다.
+// 주요 메뉴 4개는 화면이 좁아져 상단 메뉴가 숨겨질 때만 햄버거 메뉴에 표시합니다.
 const sideMenuItems = [
     { href: '/mypage/courses', label: '내 코스 보기', Icon: Route, requiresLogin: true },
     { href: '/mypage', label: '마이페이지', Icon: UserRound, requiresLogin: true },
@@ -186,6 +187,25 @@ function Header({ variant = 'simple' }) {
                         </button>
 
                         <nav className="side-nav">
+                            {/*
+                              PC에서는 상단에 주요 메뉴가 보이므로 숨기고,
+                              1120px 이하에서 상단 메뉴가 사라질 때만 이 목록을 노출합니다.
+                            */}
+                            <div className="side-primary-menu">
+                                {headerMenuItems.map(({ href, label, Icon, requiresLogin }) => (
+                                    <a
+                                        href={href}
+                                        key={`responsive-${href}`}
+                                        onClick={(event) => handleProtectedMenuClick(event, requiresLogin, true)}
+                                    >
+                                        <Icon className="side-icon" size={16} strokeWidth={1.9} />
+                                        <span>{label}</span>
+                                    </a>
+                                ))}
+
+                                <div className="side-primary-divider" />
+                            </div>
+
                             {sideMenuItems.map(({ href, label, Icon, requiresLogin }) => (
                                 <a
                                     href={href}

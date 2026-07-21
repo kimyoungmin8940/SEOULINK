@@ -1,0 +1,192 @@
+/* 추천 결과와 코스 상세에서 함께 사용하는 실제 카카오 지도 */
+.kakao-course-map {
+  width: 100%;
+  height: 100%;
+  min-height: inherit;
+  position: relative;
+  overflow: hidden;
+  background: #edf4f8;
+}
+
+.kakao-course-map-surface {
+  width: 100%;
+  height: 100%;
+  min-height: inherit;
+}
+
+/* 지도 선택 후 잠시 오른쪽 아래에 나타나는 확대·축소 버튼 */
+.kakao-course-map-zoom-control {
+  position: absolute;
+  bottom: 24px;
+  right: 14px;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid rgba(41, 63, 82, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 3px 10px rgba(35, 58, 77, 0.18);
+}
+
+.kakao-course-map-zoom-control button {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #34495a;
+  font-family: Arial, sans-serif;
+  font-size: 23px;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.kakao-course-map-zoom-control button + button {
+  border-top: 1px solid rgba(41, 63, 82, 0.15);
+}
+
+.kakao-course-map-zoom-control button:hover,
+.kakao-course-map-zoom-control button:focus-visible {
+  background: #eef8fd;
+  color: #1677da;
+  outline: none;
+}
+
+.kakao-course-map-state {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  padding: 22px;
+  background:
+    linear-gradient(135deg, rgba(242, 249, 253, 0.97), rgba(232, 244, 250, 0.97));
+  color: #688096;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.kakao-course-map-state-icon {
+  width: 30px;
+  height: 30px;
+  margin-bottom: 10px;
+  border: 4px solid rgba(22, 119, 218, 0.18);
+  border-top-color: #1677da;
+  border-radius: 50%;
+  animation: kakao-course-map-spin 0.8s linear infinite;
+}
+
+.kakao-course-map-state.empty .kakao-course-map-state-icon,
+.kakao-course-map-state.missing-key .kakao-course-map-state-icon,
+.kakao-course-map-state.error .kakao-course-map-state-icon {
+  width: 34px;
+  height: 34px;
+  border: 0;
+  background:
+    radial-gradient(circle at 50% 38%, #ffffff 0 4px, transparent 5px),
+    linear-gradient(145deg, #40aee4, #1677da);
+  box-shadow: 0 7px 15px rgba(22, 119, 218, 0.2);
+  animation: none;
+  clip-path: polygon(50% 100%, 13% 47%, 13% 35%, 18% 19%, 31% 7%, 50% 3%, 69% 7%, 82% 19%, 87% 35%, 87% 47%);
+}
+
+.kakao-course-map-state strong {
+  color: #38556d;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.kakao-course-map-state p {
+  max-width: 290px;
+  margin: 5px 0 0;
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1.5;
+}
+
+.kakao-course-map-marker {
+  width: 28px;
+  height: 28px;
+  position: relative;
+  border: 3px solid #ffffff;
+  border-radius: 50%;
+  background: #1677da;
+  color: #ffffff;
+  font-family: Pretendard, sans-serif;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 22px;
+  text-align: center;
+  box-shadow: 0 5px 12px rgba(31, 73, 107, 0.3);
+  cursor: default;
+}
+
+.kakao-course-map-marker::before {
+  content: attr(data-place-name);
+  max-width: 150px;
+  overflow: hidden;
+  position: absolute;
+  bottom: 31px;
+  left: 50%;
+  padding: 6px 9px;
+  border: 1px solid #d9e7f1;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.97);
+  color: #314e65;
+  font-size: 10px;
+  font-weight: 750;
+  line-height: 1.25;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(4px);
+  transition: opacity 140ms ease, transform 140ms ease;
+  box-shadow: 0 6px 16px rgba(31, 73, 107, 0.15);
+}
+
+.kakao-course-map-marker:hover::before {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.kakao-course-map-marker.marker-2 {
+  background: #2563eb;
+}
+
+.kakao-course-map-marker.marker-3 {
+  background: #ef8c2f;
+}
+
+.kakao-course-map-marker.marker-4 {
+  background: #9651cb;
+}
+
+.kakao-course-map-marker.marker-5 {
+  background: #2b9a49;
+}
+
+.kakao-course-map-accessible-list {
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@keyframes kakao-course-map-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kakao-course-map-state-icon {
+    animation: none;
+  }
+}

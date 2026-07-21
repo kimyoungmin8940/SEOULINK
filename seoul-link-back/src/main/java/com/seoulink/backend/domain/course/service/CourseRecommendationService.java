@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -40,6 +41,7 @@ public class CourseRecommendationService {
     private static final int OPTION_COUNT = 3;
     private static final int MAX_DAILY_SELECTIONS = 10_000;
     private static final int MAX_GLOBAL_SELECTIONS = 10_000;
+    private static final int MAX_EXCLUDED_RECOMMENDATIONS = 60;
     private static final double FALLBACK_WALKING_SPEED_KM_PER_HOUR = 4.5;
 
     private final CourseOptimizationService courseOptimizationService;
@@ -77,8 +79,22 @@ public class CourseRecommendationService {
             throw new IllegalArgumentException("조건에 맞는 추천 코스 조합을 만들 수 없습니다.");
         }
 
+        Set<String> excludedSignatures = validated.excludedRecommendationKeys();
+        if (!excludedSignatures.isEmpty()) {
+            long remainingSelectionCount = globalSelections.stream()
+                    .map(GlobalSelection::signature)
+                    .distinct()
+                    .filter(signature -> !excludedSignatures.contains(signature))
+                    .count();
+            if (remainingSelectionCount < OPTION_COUNT) {
+                throw new IllegalArgumentException(
+                        "같은 취향으로 새롭게 추천할 다른 코스 조합이 부족합니다."
+                );
+            }
+        }
+
         List<CourseOptionResponse> courseOptions = new ArrayList<>();
-        Set<String> usedSignatures = new HashSet<>();
+        Set<String> usedSignatures = new HashSet<>(excludedSignatures);
         int optionNo = 1;
 
         for (OptionStrategy strategy : OptionStrategy.values()) {
@@ -98,7 +114,8 @@ public class CourseRecommendationService {
                     optionNo++,
                     strategy,
                     optimized,
-                    request.getDailyStartTime()
+                    request.getDailyStartTime(),
+                    selected.signature()
             ));
         }
 
@@ -144,6 +161,9 @@ public class CourseRecommendationService {
         Integer rainProbability = validateRainProbability(
                 request.getRainProbability()
         );
+        Set<String> excludedRecommendationKeys = normalizeExcludedRecommendationKeys(
+                request.getExcludedRecommendationKeys()
+        );
 
         Map<LocalDate, ValidatedDailyPlan> plansByDate = new TreeMap<>();
         for (DailyPlanRequest dailyPlan : request.getDailyPlans()) {
@@ -163,8 +183,33 @@ public class CourseRecommendationService {
                 new ArrayList<>(plansByDate.values()),
                 weatherStatus,
                 temperature,
-                rainProbability
+                rainProbability,
+                excludedRecommendationKeys
         );
+    }
+
+    /** 재추천 요청의 제외 키를 검증하고 중복을 제거한다. */
+    private Set<String> normalizeExcludedRecommendationKeys(List<String> source) {
+        if (source == null || source.isEmpty()) {
+            return Set.of();
+        }
+        if (source.size() > MAX_EXCLUDED_RECOMMENDATIONS) {
+            throw new IllegalArgumentException(
+                    "excludedRecommendationKeys는 최대 "
+                            + MAX_EXCLUDED_RECOMMENDATIONS + "개까지 보낼 수 있습니다."
+            );
+        }
+
+        Set<String> normalized = new LinkedHashSet<>();
+        for (String key : source) {
+            if (key == null || key.isBlank()) {
+                throw new IllegalArgumentException(
+                        "excludedRecommendationKeys에는 빈 값을 넣을 수 없습니다."
+                );
+            }
+            normalized.add(key.trim());
+        }
+        return Set.copyOf(normalized);
     }
 
     /** 날짜 한 건의 목표 수량과 후보 풀을 검증한다. */
@@ -633,7 +678,8 @@ public class CourseRecommendationService {
             int optionNo,
             OptionStrategy strategy,
             CourseOptimizeResponse optimized,
-            LocalTime dailyStartTime
+            LocalTime dailyStartTime,
+            String recommendationKey
     ) {
         List<CourseDayResponse> days = toDayResponses(
                 optimized.getOptimizedPlaces(),
@@ -643,6 +689,9 @@ public class CourseRecommendationService {
                 .optionNo(optionNo)
                 .optionType(strategy.name())
                 .optionName(strategy.optionName())
+                .title(buildOptionTitle(strategy, optimized.getOptimizedPlaces()))
+                .description(buildOptionDescription(strategy, optimized, days.size()))
+                .recommendationKey(recommendationKey)
                 .placeCount(optimized.getOptimizedPlaces().size())
                 .dayCount(days.size())
                 .totalDistanceKm(round(optimized.getTotalDistanceKm(), 3))
@@ -657,6 +706,82 @@ public class CourseRecommendationService {
                 ))
                 .days(days)
                 .build();
+    }
+
+    /** 실제로 선택된 장소의 대표 테마와 추천 전략을 조합해 화면용 코스 제목을 만든다. */
+    private String buildOptionTitle(
+            OptionStrategy strategy,
+            List<OptimizedPlaceDto> places
+    ) {
+        return resolveCourseTheme(places) + " " + strategy.optionName();
+    }
+
+    /** 선택 전략의 차이가 카드 설명에서도 드러나도록 계산 결과를 포함한 문구를 만든다. */
+    private String buildOptionDescription(
+            OptionStrategy strategy,
+            CourseOptimizeResponse optimized,
+            int dayCount
+    ) {
+        int placeCount = optimized.getOptimizedPlaces().size();
+        String duration = dayCount <= 1 ? "하루" : dayCount + "일";
+
+        return switch (strategy) {
+            case PREFERENCE -> "추천 점수가 높은 " + placeCount
+                    + "곳을 중심으로 취향을 가장 진하게 반영한 "
+                    + duration + " 코스예요.";
+            case MIN_DISTANCE -> "장소 사이 이동을 총 "
+                    + round(optimized.getTotalDistanceKm(), 1)
+                    + "km 동선으로 줄여 부담 없이 이어지는 "
+                    + duration + " 코스예요.";
+            case BALANCED -> "추천 점수와 이동 시간을 함께 고려해 볼거리와 동선의 균형을 맞춘 "
+                    + duration + " 코스예요.";
+        };
+    }
+
+    /** 여러 장소에 표시된 8개 테마 중 가장 많이 포함된 테마를 대표 문구로 선택한다. */
+    private String resolveCourseTheme(List<OptimizedPlaceDto> places) {
+        String[] labels = {
+                "궁궐·문화",
+                "자연·한강",
+                "데이트",
+                "서울 미식",
+                "감성 카페",
+                "쇼핑·핫플",
+                "서울 야경",
+                "호텔·스테이"
+        };
+        int[] counts = new int[labels.length];
+
+        for (OptimizedPlaceDto place : places) {
+            counts[0] += isYes(place.getThemePalaceCultureYn()) ? 1 : 0;
+            counts[1] += isYes(place.getThemeNatureHangangYn()) ? 1 : 0;
+            counts[2] += isYes(place.getThemeDateYn()) ? 1 : 0;
+            counts[3] += isYes(place.getThemeFoodTourYn()) ? 1 : 0;
+            counts[4] += isYes(place.getThemeCafeTourYn()) ? 1 : 0;
+            counts[5] += isYes(place.getThemeShoppingHotplaceYn()) ? 1 : 0;
+            counts[6] += isYes(place.getThemeNightViewYn()) ? 1 : 0;
+            counts[7] += isYes(place.getThemeHotelStayYn()) ? 1 : 0;
+        }
+
+        int bestIndex = 0;
+        for (int index = 1; index < counts.length; index++) {
+            if (counts[index] > counts[bestIndex]) {
+                bestIndex = index;
+            }
+        }
+        if (counts[bestIndex] > 0) {
+            return labels[bestIndex];
+        }
+
+        return places.stream()
+                .map(OptimizedPlaceDto::getPlaceName)
+                .filter(name -> name != null && !name.isBlank())
+                .findFirst()
+                .orElse("서울 맞춤");
+    }
+
+    private boolean isYes(String value) {
+        return "Y".equalsIgnoreCase(value);
     }
 
     /** 원본 요청을 변경하지 않고 날짜와 중첩 대체 후보를 포함한 복사본을 만든다. */
@@ -687,6 +812,9 @@ public class CourseRecommendationService {
                 .placeId(source.getPlaceId())
                 .placeName(source.getPlaceName())
                 .category(normalizeCategory(source.getCategory()))
+                .address(source.getAddress())
+                .roadAddress(source.getRoadAddress())
+                .imageUrl(source.getImageUrl())
                 .recommendationScore(source.getRecommendationScore())
                 .latitude(source.getLatitude())
                 .longitude(source.getLongitude())
@@ -808,6 +936,9 @@ public class CourseRecommendationService {
                 .placeId(place.getPlaceId())
                 .placeName(place.getPlaceName())
                 .category(place.getCategory())
+                .address(place.getAddress())
+                .roadAddress(place.getRoadAddress())
+                .imageUrl(place.getImageUrl())
                 .latitude(place.getLatitude())
                 .longitude(place.getLongitude())
                 .recommendationScore(place.getRecommendationScore())
@@ -928,7 +1059,8 @@ public class CourseRecommendationService {
             List<ValidatedDailyPlan> dailyPlans,
             String weatherStatus,
             Double temperature,
-            Integer rainProbability
+            Integer rainProbability,
+            Set<String> excludedRecommendationKeys
     ) {
     }
 

@@ -18,7 +18,10 @@ public class CoursePlaceResponse {
     private Long detailId;
     private Long placeId;
 
-    /* PLACES 도메인 통합 후 placeId로 조회해 채울 화면 표시 정보이다. */
+    /*
+     * 현재 COURSE_DETAILS에는 아래 표시값을 저장하지 않으므로 상세 조회에서 null이다.
+     * PlaceRepository 구현 후 placeId로 PLACES를 일괄 조회해 채운다.
+     */
     private String placeName;
     private String category;
     private String address;
@@ -28,7 +31,7 @@ public class CoursePlaceResponse {
     private Double longitude;
     private Double recommendationScore;
 
-    // 추천 후보에서 전달된 8개 테마 여부이다.
+    // PLACES 조회 연결 후 장소별 8개 테마 여부를 채울 필드이다.
     private String themePalaceCultureYn;
     private String themeNatureHangangYn;
     private String themeDateYn;

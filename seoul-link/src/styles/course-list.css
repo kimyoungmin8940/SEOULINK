@@ -1,0 +1,247 @@
+/* 추천받은 코스 이력 전체보기 */
+.recommended-history-page {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 7% 12%, rgba(54, 183, 242, 0.1), transparent 25%),
+    #f5f9fd;
+}
+
+.recommended-history-shell {
+  width: min(85vw, 1440px);
+  flex: 1;
+  margin: 0 auto;
+  padding: 104px 0 90px;
+}
+
+.recommended-history-back {
+  margin-bottom: 15px;
+  color: #536a7d;
+  font-size: 13px;
+  font-weight: 750;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  transition: 0.18s ease;
+}
+
+.recommended-history-back:hover {
+  color: var(--primary-blue);
+  transform: translateX(-2px);
+}
+
+.recommended-history-heading {
+  min-height: 150px;
+  margin-bottom: 22px;
+  padding: 26px 30px;
+  border: 1px solid #dbe9f4;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 13px 34px rgba(31, 68, 101, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.recommended-history-heading p {
+  margin: 0 0 7px;
+  color: var(--primary-blue);
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.recommended-history-heading h1 {
+  margin: 0;
+  color: #19354c;
+  font-size: clamp(25px, 2vw, 32px);
+  font-weight: 850;
+  letter-spacing: -0.8px;
+}
+
+.recommended-history-heading span {
+  margin-top: 9px;
+  color: #708395;
+  font-size: 14px;
+  display: block;
+}
+
+.recommended-history-heading > strong {
+  min-width: 78px;
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: #eaf4ff;
+  color: #3176af;
+  font-size: 13px;
+  font-weight: 820;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.recommended-history-grid,
+.recommended-history-loading {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(20px, 1.5vw, 28px);
+}
+
+.recommended-history-grid .course-card {
+  min-width: 0;
+}
+
+.recommended-history-pagination {
+  margin-top: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.recommended-history-pagination > div {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.recommended-history-pagination button {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 1px solid #d9e6f0;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.96);
+  color: #536a7d;
+  font-size: 13px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 7px 18px rgba(31, 68, 101, 0.06);
+  transition: 0.18s ease;
+}
+
+.recommended-history-pagination button:hover:not(:disabled),
+.recommended-history-pagination button.is-current {
+  border-color: var(--primary-blue);
+  background: var(--primary-blue);
+  color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 9px 20px rgba(var(--primary-blue-rgb), 0.22);
+}
+
+.recommended-history-pagination button:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.recommended-history-loading > span {
+  height: 410px;
+  border: 1px solid #dfeaf3;
+  border-radius: 18px;
+  background:
+    linear-gradient(100deg, transparent 25%, rgba(255, 255, 255, 0.75) 45%, transparent 65%) 0 0 / 220% 100%,
+    #eaf2f8;
+  animation: recommended-history-shimmer 1.3s linear infinite;
+}
+
+@keyframes recommended-history-shimmer {
+  to { background-position: -220% 0; }
+}
+
+.recommended-history-state {
+  min-height: 390px;
+  padding: 38px 24px;
+  border: 1px solid #dce8f2;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--primary-blue);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 13px 34px rgba(31, 68, 101, 0.07);
+}
+
+.recommended-history-state h2 {
+  margin: 15px 0 0;
+  color: #203b51;
+  font-size: 22px;
+  font-weight: 850;
+}
+
+.recommended-history-state p {
+  margin: 9px 0 0;
+  color: #718596;
+  font-size: 13px;
+}
+
+.recommended-history-state button,
+.recommended-history-state a {
+  min-height: 40px;
+  margin-top: 20px;
+  padding: 0 17px;
+  border-radius: 9px;
+  background: var(--primary-blue);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+@media (max-width: 1100px) {
+  .recommended-history-grid,
+  .recommended-history-loading {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .recommended-history-shell {
+    width: calc(100% - 32px);
+    padding: 96px 0 65px;
+  }
+
+  .recommended-history-heading {
+    min-height: 0;
+    padding: 23px 21px;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .recommended-history-heading span {
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .recommended-history-grid,
+  .recommended-history-loading {
+    grid-template-columns: 1fr;
+  }
+
+  .recommended-history-pagination {
+    margin-top: 30px;
+    gap: 7px;
+  }
+
+  .recommended-history-pagination > div {
+    gap: 6px;
+  }
+
+  .recommended-history-pagination button {
+    width: 36px;
+    height: 36px;
+  }
+}
