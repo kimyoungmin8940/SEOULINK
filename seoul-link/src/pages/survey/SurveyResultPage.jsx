@@ -4,6 +4,7 @@ import {isLoggedIn} from '../../utils/authGuard';
 import SurveyFlowLayout from '../../components/survey/SurveyFlowLayout';
 import PreferenceResultPage from '../PreferenceResultPage';
 import { getSurveyResult } from '../../api/surveyApi';
+import { getRecommendedPlaces } from '../../api/placeApi';
 
 const SURVEY_ID_STORAGE_KEY = 'seoulinkSurveyId';
 
@@ -45,15 +46,34 @@ function SurveyResultPage() {
                 const response =
                     await getSurveyResult(surveyId);
 
+                let recommendedPlaces = [];
+
+                try {
+                    const placeResponse =
+                        await getRecommendedPlaces(
+                            response.travelCode
+                        );
+
+                    recommendedPlaces =
+                        (placeResponse.recommendedPlaces || [])
+                            .map((place) => ({
+                                ...place,
+
+                                // 결과 화면이 사용하는 필드명에 맞춤
+                                name: place.placeName,
+                            }));
+                } catch (placeError) {
+                    console.error(
+                        '추천 장소 조회 실패:',
+                        placeError
+                    );
+                }
+
                 const preferenceResult = {
                     ...response,
-
-                    // 결과 페이지가 사용하는 필드 이름에 맞춰 변환
                     travelTitle: response.typeTitle,
                     description: response.typeDescription,
-
-                    // 추천 장소 기능을 연결하기 전까지 빈 배열 사용
-                    recommendedPlaces: [],
+                    recommendedPlaces,
                     recommendedItinerary: [],
                 };
 

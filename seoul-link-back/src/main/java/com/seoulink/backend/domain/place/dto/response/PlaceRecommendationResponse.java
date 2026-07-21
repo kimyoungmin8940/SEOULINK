@@ -22,6 +22,8 @@ public class PlaceRecommendationResponse {
     private final String themeShoppingHotplaceYn;
     private final String themeNightViewYn;
     private final String themeHotelStayYn;
+    private final String region;
+    private final String imageUrl;
     private final List<PlaceAlternativeResponse> alternativeCandidates;
 
     public PlaceRecommendationResponse(
@@ -43,6 +45,8 @@ public class PlaceRecommendationResponse {
         this.themeShoppingHotplaceYn = place.getThemeShoppingHotplaceYn();
         this.themeNightViewYn = place.getThemeNightViewYn();
         this.themeHotelStayYn = place.getThemeHotelStayYn();
+        this.region = place.getRegion();
+        this.imageUrl = place.getImageUrl();
         this.alternativeCandidates = alternativeCandidates;
     }
 }

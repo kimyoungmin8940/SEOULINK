@@ -398,8 +398,53 @@ export function getTravelTags(travelCode) {
 }
 
 export function getPreferredRegions(places = []) {
-    const regions = [...new Set(places.map((place) => place.region).filter(Boolean))];
-    return regions.length > 0 ? regions : ['종로구', '중구', '성북구', '마포구', '용산구'];
+    const regionStats = new Map();
+
+    places.forEach((place) => {
+        const region = place.region?.trim();
+
+        if (!region) {
+            return;
+        }
+
+        const previous =
+            regionStats.get(region) || {
+                count: 0,
+                totalScore: 0,
+            };
+
+        regionStats.set(region, {
+            count: previous.count + 1,
+            totalScore:
+                previous.totalScore +
+                (place.recommendationScore || 0),
+        });
+    });
+
+    return [...regionStats.entries()]
+        .sort((first, second) => {
+            const countDifference =
+                second[1].count -
+                first[1].count;
+
+            if (countDifference !== 0) {
+                return countDifference;
+            }
+
+            const scoreDifference =
+                second[1].totalScore -
+                first[1].totalScore;
+
+            if (scoreDifference !== 0) {
+                return scoreDifference;
+            }
+
+            return first[0].localeCompare(
+                second[0],
+                'ko'
+            );
+        })
+        .map(([region]) => region);
 }
 
 export function getPlaceByIdMap(places = []) {
