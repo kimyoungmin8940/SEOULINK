@@ -212,8 +212,8 @@ public class CourseDraftService {
      */
     private int determineCandidatePlaceCount(char scheduleType) {
         return switch (scheduleType) {
-            case 'P' -> 9;
-            case 'R' -> 7;
+            case 'P' -> 10;
+            case 'R' -> 10;
             default -> throw new IllegalArgumentException(
                     "여행 일정 유형은 P 또는 R이어야 합니다"
             );
@@ -306,6 +306,63 @@ public class CourseDraftService {
             Map<String, Integer> categoryTargets,
             Map<String, Deque<PlaceRecommendationResponse>> candidatePools
     ) {
+        List<List<PlaceRecommendationResponse>> candidatesByDay =
+                new ArrayList<>();
+
+        // 날짜별 후보 목록을 먼저 생성
+        for (int dayIndex = 0;
+             dayIndex < travelDays;
+             dayIndex++) {
+
+            candidatesByDay.add(new ArrayList<>());
+        }
+
+        /*
+         * 1차 배정
+         * 모든 날짜에 필수 카테고리 후보를 먼저 배정한다.
+         *
+         * R형:
+         * TOUR 2, RESTAURANT 1, CAFE 1
+         *
+         * P형:
+         * TOUR 2, RESTAURANT 2, CAFE 2
+         */
+        for (int dayIndex = 0;
+             dayIndex < travelDays;
+             dayIndex++) {
+
+            List<PlaceRecommendationResponse> dailyCandidates =
+                    candidatesByDay.get(dayIndex);
+
+            for (Map.Entry<String, Integer> target
+                    : categoryTargets.entrySet()) {
+
+                addCandidates(
+                        candidatePools.get(target.getKey()),
+                        target.getValue(),
+                        dailyCandidates
+                );
+            }
+        }
+
+        /*
+         * 2차 배정
+         * 모든 날짜의 필수 후보가 확보된 후,
+         * 날짜별 후보 수가 7개 또는 9개가 될 때까지 추가한다.
+         */
+        for (int dayIndex = 0;
+             dayIndex < travelDays;
+             dayIndex++) {
+
+            fillExtraCandidates(
+                    candidatePools,
+                    candidatePlaceCount,
+                    candidatesByDay.get(dayIndex),
+                    dayIndex
+            );
+        }
+
+        // 날짜별 응답 DTO 생성
         List<DailyCourseDraftResponse> dailyPlans =
                 new ArrayList<>();
 
@@ -316,34 +373,12 @@ public class CourseDraftService {
             LocalDate visitDate =
                     startDate.plusDays(dayIndex);
 
-            List<PlaceRecommendationResponse> dailyCandidates =
-                    new ArrayList<>();
-
-            // 카테고리별 목표 개수만큼 후보를 먼저 추가합니다.
-            for (Map.Entry<String, Integer> target
-                    : categoryTargets.entrySet()) {
-
-                addCandidates(
-                        candidatePools.get(target.getKey()),
-                        target.getValue(),
-                        dailyCandidates
-                );
-            }
-
-            // 목표 수보다 넉넉하게 후보를 추가합니다.
-            fillExtraCandidates(
-                    candidatePools,
-                    candidatePlaceCount,
-                    dailyCandidates,
-                    dayIndex
-            );
-
             dailyPlans.add(
                     new DailyCourseDraftResponse(
                             visitDate,
                             targetPlaceCount,
                             new LinkedHashMap<>(categoryTargets),
-                            dailyCandidates
+                            candidatesByDay.get(dayIndex)
                     )
             );
         }
