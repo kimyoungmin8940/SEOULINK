@@ -20,12 +20,12 @@ GET /api/places/recommend
 
 ### 파라미터
 
-| 이름 | 필수 | 설명 |
-|---|---:|---|
-| `travelCode` | Y | `[AH][TM][LB][SD][PR]` 규칙의 5자리 코드 |
-| `region` | N | `성동구`, `종로구` 등. 서울 전체이면 생략 |
-| `limitPerCategory` | N | TOUR·RESTAURANT·CAFE·HOTEL별 후보 수, 최대 20 |
-| `alternativeLimit` | N | 대표 후보 하나당 대체 후보 수, 기본 3 |
+| 이름 | 필수 | 설명                                              |
+|---|---:|-------------------------------------------------|
+| `travelCode` | Y | `[AH][TM][LB][SD][PR]` 규칙의 5자리 코드               |
+| `region` | N | `성동구`, `종로구` 등. 서울 전체이면 생략                      |
+| `limitPerCategory` | N | TOUR·RESTAURANT·CAFE·HOTEL별 후보 수, 최대 50         |
+| `alternativeLimit` | N | 대표 후보 하나당 대체 후보 수, 기본 3                         |
 | `limit` | N | 기존 호환용 전체 후보 수. `limitPerCategory`가 있으면 사용하지 않음 |
 
 2일 일정에 날짜별 후보 7~10개가 필요하면 `limitPerCategory=4~5`부터 시작한다.

@@ -30,7 +30,7 @@ public class PlaceRecommendationService {
     private static final int DEFAULT_ALTERNATIVE_LIMIT = 3;
 
     private static final int MAX_LIMIT = 50;
-    private static final int MAX_LIMIT_PER_CATEGORY = 20;
+    private static final int MAX_LIMIT_PER_CATEGORY = 50;
 
     private static final Pattern DISTRICT_PATTERN = Pattern.compile("([가-힣]+구)");
     private static final Pattern NEIGHBORHOOD_PATTERN = Pattern.compile("([가-힣0-9]+동)");

@@ -36,9 +36,6 @@ public class CourseDraftService {
 
     private static final int MAX_TRAVEL_DAYS = 7;
 
-    // 팀원의 장소 추천 서비스가 허용하는 카테고리별 최대 후보 수
-    private static final int LIMIT_PER_CATEGORY = 20;
-
     // 대표 장소 하나당 받을 대체 후보 수
     private static final int ALTERNATIVE_LIMIT = 3;
 
@@ -107,6 +104,12 @@ public class CourseDraftService {
         Map<String, Integer> categoryTargets =
                 determineCategoryTargets(scheduleType);
 
+        int limitPerCategory =
+                determineLimitPerCategory(
+                        scheduleType,
+                        travelDays
+                );
+
         /*
          * 3. 장소 추천 서비스를 직접 호출
          *
@@ -119,7 +122,7 @@ public class CourseDraftService {
                         travelCode,
                         survey.getRegion(),
                         null,
-                        LIMIT_PER_CATEGORY,
+                        limitPerCategory,
                         ALTERNATIVE_LIMIT
                 );
 
@@ -207,13 +210,32 @@ public class CourseDraftService {
     /**
      * 최종 목표 장소 수보다 넉넉하게 전달할 후보 수를 결정합니다.
      *
-     * P형: 목표 6곳, 후보 최대 9곳
-     * R형: 목표 4곳, 후보 최대 7곳
+     * P형과 R형 모두 날짜별 최대 10개의 후보를 전달합니다.
+     * 장소가 부족하면 확보된 후보만 반환합니다.
      */
     private int determineCandidatePlaceCount(char scheduleType) {
         return switch (scheduleType) {
-            case 'P' -> 10;
+            case 'P' -> 15;
             case 'R' -> 10;
+            default -> throw new IllegalArgumentException(
+                    "여행 일정 유형은 P 또는 R이어야 합니다"
+            );
+        };
+    }
+
+    /**
+     * 여행 일수와 일정 유형에 따라 카테고리별로 요청할 후보 수를 결정합니다.
+     *
+     * P형은 하루 TOUR 후보가 최대 7개 필요하므로 여행 일수에 7을 곱합니다.
+     * R형은 하루 TOUR 후보가 최대 4개 필요하므로 여행 일수에 4를 곱합니다.
+     */
+    private int determineLimitPerCategory(
+            char scheduleType,
+            int travelDays
+    ) {
+        return switch (scheduleType) {
+            case 'P' -> 7 * travelDays;
+            case 'R' -> 4 * travelDays;
             default -> throw new IllegalArgumentException(
                     "여행 일정 유형은 P 또는 R이어야 합니다"
             );
@@ -232,18 +254,18 @@ public class CourseDraftService {
         Map<String, Integer> targets = new LinkedHashMap<>();
 
         if (scheduleType == 'P') {
-            targets.put(TOUR, 2);
-            targets.put(RESTAURANT, 2);
-            targets.put(CAFE, 2);
+            targets.put(TOUR, 7);
+            targets.put(RESTAURANT, 4);
+            targets.put(CAFE, 4);
             targets.put(HOTEL, 0);
 
             return targets;
         }
 
         if (scheduleType == 'R') {
-            targets.put(TOUR, 2);
-            targets.put(RESTAURANT, 1);
-            targets.put(CAFE, 1);
+            targets.put(TOUR, 4);
+            targets.put(RESTAURANT, 3);
+            targets.put(CAFE, 3);
             targets.put(HOTEL, 0);
 
             return targets;
@@ -319,13 +341,13 @@ public class CourseDraftService {
 
         /*
          * 1차 배정
-         * 모든 날짜에 필수 카테고리 후보를 먼저 배정한다.
-         *
-         * R형:
-         * TOUR 2, RESTAURANT 1, CAFE 1
+         * 모든 날짜에 카테고리별 기본 후보를 먼저 배정한다.
          *
          * P형:
-         * TOUR 2, RESTAURANT 2, CAFE 2
+         * TOUR 7, RESTAURANT 4, CAFE 4 = 총 15개
+         *
+         * R형:
+         * TOUR 4, RESTAURANT 3, CAFE 3 = 총 10개
          */
         for (int dayIndex = 0;
              dayIndex < travelDays;

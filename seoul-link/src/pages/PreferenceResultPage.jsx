@@ -17,8 +17,8 @@ import {
 import {
     getCodeTraits,
     getPreferredRegions,
+    getTravelGuideItems,
     getTravelTags,
-    sampleSurveyResult,
 } from '../data/travelPreferenceData';
 
 const traitIconMap = {
@@ -42,9 +42,7 @@ function PreferenceResultPage({
     const traits = getCodeTraits(result.travelCode);
     const regions = getPreferredRegions(result.recommendedPlaces);
     const tags = getTravelTags(result.travelCode);
-    const resultImage = result.imageUrl
-        || result.recommendedPlaces?.[0]?.imageUrl
-        || sampleSurveyResult.imageUrl;
+    const guideItems = getTravelGuideItems(result.travelCode);
 
     const handleSaveResult = () => {
         const file = new Blob([JSON.stringify(result, null, 2)], {
@@ -92,11 +90,10 @@ function PreferenceResultPage({
                         </div>
 
                         <div className="preference-hero-note">
-                            <div>
+                            <div className="preference-hero-copy">
                                 <h3>{result.travelTitle}</h3>
                                 <p>{result.description}</p>
                             </div>
-                            <img src={resultImage} alt="" />
                         </div>
                     </article>
 
@@ -156,17 +153,32 @@ function PreferenceResultPage({
 
                     <article className="preference-card preference-theme-card">
                         <div className="preference-card-heading compact-heading">
-                            <h2>당신에게 추천하는 여행 테마</h2>
+                            <h2>나를 위한 여행 가이드</h2>
                         </div>
 
-                        <div className="theme-card-row">
-                            {(result.recommendedPlaces || []).slice(0, 3).map((place) => (
-                                <div className="theme-mini-card" key={place.placeId}>
-                                    <img src={place.imageUrl || resultImage} alt="" />
-                                    <strong>{place.name}</strong>
-                                    <span>{place.region} · {place.category}</span>
-                                </div>
-                            ))}
+                        <div className="travel-guide-row">
+                            {guideItems.map((guide) => {
+                                const GuideIcon =
+                                    traitIconMap[guide.icon] || Sparkles;
+
+                                return (
+                                    <div
+                                        className={`travel-guide-item ${guide.color}`}
+                                        key={guide.category}
+                                    >
+                                        <div className="travel-guide-icon">
+                                            <GuideIcon
+                                                size={25}
+                                                strokeWidth={2}
+                                            />
+                                        </div>
+
+                                        <span>{guide.category}</span>
+                                        <strong>{guide.title}</strong>
+                                        <p>{guide.description}</p>
+                                    </div>
+                                );
+                            })}
                         </div>
                     </article>
 

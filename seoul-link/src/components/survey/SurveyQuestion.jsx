@@ -77,11 +77,6 @@ function SurveyQuestion({
                             </div>
 
                             <div className="survey-option-content">
-                                <span
-                                    className="survey-radio"
-                                    aria-hidden="true"
-                                />
-
                                 <strong>
                                     {option.optionText}
                                 </strong>

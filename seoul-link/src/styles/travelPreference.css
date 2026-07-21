@@ -243,6 +243,9 @@
 
 .preference-code-card {
   padding: 30px 32px;
+
+  display: flex;
+  flex-direction: column;
 }
 
 .result-id {
@@ -283,49 +286,64 @@
   font-weight: 900;
 }
 
-.travel-code-box.blue,
-.analysis-icon.blue,
-.analysis-code.blue,
-.style-tile.blue,
-.course-code-chip-row .blue {
-  --tone-color: #1677e9;
-  --tone-bg: #e8f2ff;
+/* A: 활동형 */
+.tone-a {
+  --tone-color: #4f7df3;
+  --tone-bg: #eef3ff;
 }
 
-.travel-code-box.purple,
-.analysis-icon.purple,
-.analysis-code.purple,
-.style-tile.purple,
-.course-code-chip-row .purple {
-  --tone-color: #8c42d8;
-  --tone-bg: #f3eafb;
+/* H: 휴식형 */
+.tone-h {
+  --tone-color: #55a66a;
+  --tone-bg: #eef8f0;
 }
 
-.travel-code-box.green,
-.analysis-icon.green,
-.analysis-code.green,
-.style-tile.green,
-.course-code-chip-row .green {
-  --tone-color: #21a34a;
-  --tone-bg: #eaf8ef;
+/* T: 전통형 */
+.tone-t {
+  --tone-color: #a96f45;
+  --tone-bg: #faf1ea;
 }
 
-.travel-code-box.orange,
-.analysis-icon.orange,
-.analysis-code.orange,
-.style-tile.orange,
-.course-code-chip-row .orange {
-  --tone-color: #f28c23;
-  --tone-bg: #fff2e5;
+/* M: 현대형 */
+.tone-m {
+  --tone-color: #8267d8;
+  --tone-bg: #f3f0fc;
 }
 
-.travel-code-box.pink,
-.analysis-icon.pink,
-.analysis-code.pink,
-.style-tile.pink,
-.course-code-chip-row .pink {
-  --tone-color: #ef3c78;
-  --tone-bg: #ffeaf2;
+/* B: 가성비형 */
+.tone-b {
+  --tone-color: #2e9e93;
+  --tone-bg: #eaf8f6;
+}
+
+/* L: 프리미엄형 */
+.tone-l {
+  --tone-color: #f0d800;
+  --tone-bg: #fffbe6;
+}
+
+/* S: 안정형 */
+.tone-s {
+  --tone-color: #e4873b;
+  --tone-bg: #fff3e8;
+}
+
+/* D: 도파민형 */
+.tone-d {
+  --tone-color: #d84f7d;
+  --tone-bg: #fcecf2;
+}
+
+/* P: 계획형 */
+.tone-p {
+  --tone-color: #405c9a;
+  --tone-bg: #edf1fa;
+}
+
+/* R: 여유 일정형 */
+.tone-r {
+  --tone-color: #4ca6c8;
+  --tone-bg: #ebf7fb;
 }
 
 .travel-code-box,
@@ -338,25 +356,38 @@
 }
 
 .preference-hero-note {
+  flex: 1;
   min-height: 0;
   border-radius: 16px;
-  padding: 24px;
+  padding: 28px;
   background:
           linear-gradient(
                   135deg,
-                  #f3f9ff 0%,
-                  #ffffff 62%,
-                  #eaf8ef 100%
+                  #f3f8ff 0%,
+                  #ffffff 55%,
+                  #eef6ff 100%
           );
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(180px, 240px);
-  align-items: start;
-  gap: 24px;
+
+  display: flex;
+  align-items: center;
+
+  position: relative;
   overflow: hidden;
+  isolation: isolate;
+}
+
+.preference-hero-copy {
+  width: 100%;
+  min-width: 0;
+  position: relative;
+  z-index: 2;
 }
 
 .preference-hero-note > div {
+  width: 100%;
   min-width: 0;
+  position: relative;
+  z-index: 1;
 }
 
 .preference-hero-note h3 {
@@ -377,18 +408,6 @@
   text-align: left;
   word-break: keep-all;
   overflow-wrap: break-word;
-}
-
-.preference-hero-note img {
-  width: auto;
-  max-width: 100%;
-  height: 240px;
-  border-radius: 16px;
-  object-fit: contain;
-  object-position: center;
-  align-self: start;
-  justify-self: end;
-  display: block;
 }
 
 .preference-summary-card {
@@ -1265,6 +1284,84 @@
   font-weight: 800;
 }
 
+.travel-guide-row {
+  margin-top: 24px;
+
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.travel-guide-item {
+  min-width: 0;
+  min-height: 180px;
+  padding: 18px 14px;
+  border: 1px solid #e5edf7;
+  border-radius: 16px;
+  background: #f8fbff;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.travel-guide-icon {
+  width: 54px;
+  height: 54px;
+  margin-bottom: 12px;
+  border-radius: 50%;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.travel-guide-item > span {
+  margin-bottom: 5px;
+  color: #7b899c;
+  font-size: 12px;
+  line-height: 1.35;
+  font-weight: 750;
+}
+
+.travel-guide-item > strong {
+  color: #26364b;
+  font-size: 16px;
+  line-height: 1.35;
+  font-weight: 850;
+  word-break: keep-all;
+}
+
+.travel-guide-item > p {
+  margin: 8px 0 0;
+  color: #657489;
+  font-size: 13px;
+  line-height: 1.55;
+  font-weight: 600;
+  word-break: keep-all;
+}
+
+/* 일정 템포 */
+.travel-guide-item.blue .travel-guide-icon {
+  color: #3975dc;
+  background: #eaf2ff;
+}
+
+/* 어울리는 장소 */
+.travel-guide-item.green .travel-guide-icon {
+  color: #27956f;
+  background: #e9f8f2;
+}
+
+/* 예산 활용법 */
+.travel-guide-item.orange .travel-guide-icon {
+  color: #e58832;
+  background: #fff2e5;
+}
+
+
 @media (max-width: 1180px) {
   .travel-top-nav {
     grid-template-columns: 1fr auto;
@@ -1346,12 +1443,6 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .preference-hero-note img {
-    width: 100%;
-    height: 240px;
-    justify-self: stretch;
-  }
-
   .analysis-row {
     grid-template-columns: 46px 1fr 42px;
   }
@@ -1405,6 +1496,22 @@
 
   .timeline-step > svg {
     display: none;
+  }
+
+  .travel-guide-row {
+    grid-template-columns: 1fr;
+  }
+
+  .travel-guide-item {
+    min-height: 0;
+  }
+
+}
+
+@media (max-width: 720px) {
+  .preference-hero-note h3,
+  .preference-hero-note p {
+    max-width: 100%;
   }
 }
 
@@ -1516,11 +1623,6 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .preference-hero-note img {
-    width: 100%;
-    max-width: 100%;
-  }
-
   .recommend-primary-button {
     width: 100%;
     white-space: normal;
@@ -1561,10 +1663,6 @@
   .preference-hero-note {
     padding: 20px;
     gap: 20px;
-  }
-
-  .preference-hero-note img {
-    height: 200px;
   }
 
   .preference-hero-note h3 {
