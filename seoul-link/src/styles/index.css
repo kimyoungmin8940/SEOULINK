@@ -10,15 +10,19 @@
 @import './variables.css';
 /* 기본 초기화 스타일을 먼저 적용 */
 @import './base.css';
+/* 모든 콘텐츠 사진에 공통 메인 색 필터 적용 */
+@import './photo-filter.css';
 
 /* 아래부터는 화면 섹션별 스타일 */
 @import './header.css';
 @import './hero.css';
 @import './layout.css';
 @import './page.css';
+@import './survey.css';
 @import './category.css';
 @import './course.css';
 @import './mood.css';
+@import './mood-carousel-fix.css';
 @import './review.css';
 @import './cta.css';
 @import './footer.css';

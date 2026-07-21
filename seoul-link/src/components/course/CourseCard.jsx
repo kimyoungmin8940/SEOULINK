@@ -4,17 +4,17 @@ import { useState } from 'react';
 import { Heart, Clock3, MapPin } from 'lucide-react';
 import { requireLogin } from '../../utils/authGuard';
 
-function CourseCard({ course }) {
-    const [isLiked, setIsLiked] = useState(false);
+function CourseCard({ course, detailPath, requiresLogin = false }) {
+    const [isLiked, setIsLiked] = useState(course.liked ?? false);
 
-    // course.linkUrl이 있으면 해당 경로로 이동하고,
-    // 없으면 추천받은 코스 상세 페이지로 이동
+    // 부모 컴포넌트가 전달한 상세 경로로 이동하고,
+    // 경로가 없으면 일반 코스 상세 페이지로 이동
     const moveToRecommendedCourseDetail = () => {
-        if (course.requiresLogin && !requireLogin()) {
+        if (requiresLogin && !requireLogin()) {
             return;
         }
 
-        window.location.href = course.linkUrl || `/courses/recommendations/${course.courseId}`;
+        window.location.href = detailPath || `/courses/${course.courseId}`;
     };
 
     const handleKeyDown = (event) => {

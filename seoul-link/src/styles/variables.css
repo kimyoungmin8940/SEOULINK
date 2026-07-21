@@ -10,8 +10,17 @@
   /* 프로젝트의 대표 파란색입니다. 버튼, 아이콘, 강조 색상의 기준 */
   --main-blue: #1378D8;
   --main-blue-dark: #0A5EA8;
-  --main-blue-rgb: 19, 120, 216;
+  --main-blue-rgb: 5, 231, 255;
   --main-blue-dark-rgb: 10, 94, 168;
+
+  /*
+    콘텐츠 사진 공통 필터
+    - 메인 색을 그대로 참조하므로 --main-blue를 바꾸면 사진 필터도 함께 변경됨
+    - 투명도는 전체 사진에 동일하게 10% 적용
+  */
+  --photo-filter-color: var(--main-blue);
+  --photo-filter-opacity: 0.10;
+  --photo-filter-strength: 10%;
 
   /* 버튼/링크/아이콘 공통 파란색 - 취향 검사 시작 버튼 기준 */
   /* 버튼/링크에 사용할 색상. main-blue를 참조해 전체 톤을 통일 */

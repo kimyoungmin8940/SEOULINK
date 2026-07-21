@@ -28,3 +28,11 @@ function ReviewCard({ review, onOpen, onLike }) {
 }
 
 export default ReviewCard;
+/**
+ * TODO: 후기 목록과 마이페이지에서 재사용할 후기 요약 카드입니다.
+ *
+ * review 객체의 reviewId, 작성자, 제목, 내용 요약, 별점, 이미지,
+ * 작성일과 좋아요 수를 표시합니다. 카드 선택 시 상세 페이지로 이동하고,
+ * 좋아요 동작은 로그인 확인 후 `likeReview` API를 호출하도록 부모 콜백과
+ * 분리해 구현합니다. 내용과 이미지가 없는 경우의 기본 표시도 필요합니다.
+ */

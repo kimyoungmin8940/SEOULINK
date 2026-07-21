@@ -1,12 +1,13 @@
 package com.seoulink.backend.domain.course.repository;
 
-/**
- * 코스에 포함되는 상세 장소({@code CourseDetail})의 저장·조회 기능을 담당할 Repository이다.
- * 코스 ID와 방문 순서를 기준으로 정렬 조회한다.
- *
- * <p>Spring Data JPA 구현 시 이 인터페이스가 해당 엔티티의
- * {@code JpaRepository<엔티티, 기본키타입>}를 상속하도록 수정한다.</p>
- */
-public interface CourseDetailRepository {
-    // TODO: 엔티티 매핑 완료 후 JpaRepository 상속 및 필요한 조회 메서드를 선언한다.
+import com.seoulink.backend.domain.course.entity.CourseDetail;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.List;
+
+/** 코스에 포함된 장소의 날짜별 방문 순서 정보를 저장하고 조회한다. */
+public interface CourseDetailRepository extends JpaRepository<CourseDetail, Long> {
+
+    /** 상세 화면에 바로 사용할 수 있도록 일차와 방문 순서 기준으로 정렬해 조회한다. */
+    List<CourseDetail> findByCourseIdOrderByDayNoAscPlaceOrderAsc(Long courseId);
 }

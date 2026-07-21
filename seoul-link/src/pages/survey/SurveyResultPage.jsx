@@ -1,12 +1,23 @@
-import PagePlaceholder from '../../components/common/PagePlaceholder';
+import SurveyFlowLayout from '../../components/survey/SurveyFlowLayout';
 
 function SurveyResultPage() {
     return (
-        <PagePlaceholder
-            title="여행 유형 결과"
-            description="ATBSP, HMLDR 같은 5글자 여행 유형 코드와 해석을 보여줄 자리입니다."
-            links={[{ href: '/courses', label: '추천 코스 보기' }, { href: '/mypage/travel-type', label: '내 유형 보관함' }]}
-        />
+        <SurveyFlowLayout currentStep={3}>
+            <section className="survey-stage-card">
+                <p className="survey-flow-eyebrow">STEP 3</p>
+                <h1>여행 유형 결과</h1>
+                <p>검사 결과는 로그인 없이 확인할 수 있습니다. 맞춤 코스를 받거나 결과를 저장할 때는 로그인이 필요합니다.</p>
+
+                <div className="survey-stage-actions">
+                    <a className="survey-stage-secondary-btn" href="/survey">
+                        다시 검사하기
+                    </a>
+                    <a className="survey-stage-primary-btn" href="/courses">
+                        맞춤 추천 코스 받기
+                    </a>
+                </div>
+            </section>
+        </SurveyFlowLayout>
     );
 }
 

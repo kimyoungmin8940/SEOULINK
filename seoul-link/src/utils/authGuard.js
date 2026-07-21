@@ -1,5 +1,7 @@
 import { authStore } from "../store/authStore";
 
+let isLoginRedirecting = false;
+
 export function isLoggedIn() {
     return authStore.isLoggedIn();
 }
@@ -7,11 +9,10 @@ export function isLoggedIn() {
 export function requireLogin(
     message = "로그인이 필요한 서비스입니다. 로그인 후 이용해주세요."
 ) {
-    if (isLoggedIn()) {
-        return true;
-    }
+    if (isLoggedIn()) return true;
+    if (isLoginRedirecting) return false;
 
-    window.alert(message);
+    isLoginRedirecting = true;
 
     const returnUrl =
         window.location.pathname +
@@ -19,17 +20,15 @@ export function requireLogin(
         window.location.hash;
 
     sessionStorage.setItem("loginReturnUrl", returnUrl);
+    window.alert(message);
     window.location.href = "/login";
 
     return false;
 }
 
 export function handleProtectedLinkClick(event, message) {
-    if (isLoggedIn()) {
-        return true;
-    }
+    if (isLoggedIn()) return true;
 
     event.preventDefault();
-    requireLogin(message);
-    return false;
+    return requireLogin(message);
 }

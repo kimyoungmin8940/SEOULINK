@@ -1,0 +1,376 @@
+{
+  "resultId": 101,
+  "travelCode": "ATLSR",
+  "dailyStartTime": "10:00",
+
+  "weatherStatus": "RAIN",
+  "temperature": 27.5,
+  "rainProbability": 80,
+
+  "dailyPlans": [
+    {
+      "visitDate": "2026-07-20",
+      "targetPlaceCount": 4,
+
+      "categoryTargets": {
+        "TOUR": 2,
+        "RESTAURANT": 1,
+        "CAFE": 1,
+        "HOTEL": 0
+      },
+
+      "placeCandidates": [
+        {
+          "placeId": 10,
+          "placeName": "경복궁",
+          "category": "TOUR",
+          "recommendationScore": 92.0,
+          "latitude": 37.5796,
+          "longitude": 126.9770,
+
+          "themePalaceCultureYn": "Y",
+          "themeNatureHangangYn": "N",
+          "themeDateYn": "N",
+          "themeFoodTourYn": "N",
+          "themeCafeTourYn": "N",
+          "themeShoppingHotplaceYn": "N",
+          "themeNightViewYn": "N",
+          "themeHotelStayYn": "N",
+
+          "alternativeCandidates": [
+            {
+              "placeId": 20,
+              "placeName": "창덕궁",
+              "category": "TOUR",
+              "recommendationScore": 88.0,
+              "latitude": 37.5794,
+              "longitude": 126.9910,
+
+              "themePalaceCultureYn": "Y",
+              "themeNatureHangangYn": "N",
+              "themeDateYn": "N",
+              "themeFoodTourYn": "N",
+              "themeCafeTourYn": "N",
+              "themeShoppingHotplaceYn": "N",
+              "themeNightViewYn": "N",
+              "themeHotelStayYn": "N"
+            }
+          ]
+        },
+        {
+          "placeId": 11,
+          "placeName": "덕수궁",
+          "category": "TOUR",
+          "recommendationScore": 89.0,
+          "latitude": 37.5658,
+          "longitude": 126.9751,
+
+          "themePalaceCultureYn": "Y",
+          "themeNatureHangangYn": "N",
+          "themeDateYn": "Y",
+          "themeFoodTourYn": "N",
+          "themeCafeTourYn": "N",
+          "themeShoppingHotplaceYn": "N",
+          "themeNightViewYn": "N",
+          "themeHotelStayYn": "N",
+
+          "alternativeCandidates": []
+        },
+        {
+          "placeId": 12,
+          "placeName": "청계천",
+          "category": "TOUR",
+          "recommendationScore": 86.0,
+          "latitude": 37.5690,
+          "longitude": 126.9784,
+
+          "themePalaceCultureYn": "N",
+          "themeNatureHangangYn": "Y",
+          "themeDateYn": "Y",
+          "themeFoodTourYn": "N",
+          "themeCafeTourYn": "N",
+          "themeShoppingHotplaceYn": "N",
+          "themeNightViewYn": "Y",
+          "themeHotelStayYn": "N",
+
+          "alternativeCandidates": []
+        },
+        {
+          "placeId": 40,
+          "placeName": "광화문 식당",
+          "category": "RESTAURANT",
+          "recommendationScore": 89.0,
+          "latitude": 37.5701,
+          "longitude": 126.9768,
+
+          "themePalaceCultureYn": "N",
+          "themeNatureHangangYn": "N",
+          "themeDateYn": "N",
+          "themeFoodTourYn": "Y",
+          "themeCafeTourYn": "N",
+          "themeShoppingHotplaceYn": "N",
+          "themeNightViewYn": "N",
+          "themeHotelStayYn": "N",
+
+          "alternativeCandidates": [
+            {
+              "placeId": 41,
+              "placeName": "서촌 식당",
+              "category": "RESTAURANT",
+              "recommendationScore": 85.0,
+              "latitude": 37.5780,
+              "longitude": 126.9718,
+
+              "themePalaceCultureYn": "N",
+              "themeNatureHangangYn": "N",
+              "themeDateYn": "N",
+              "themeFoodTourYn": "Y",
+              "themeCafeTourYn": "N",
+              "themeShoppingHotplaceYn": "N",
+              "themeNightViewYn": "N",
+              "themeHotelStayYn": "N"
+            }
+          ]
+        },
+        {
+          "placeId": 42,
+          "placeName": "종로 맛집",
+          "category": "RESTAURANT",
+          "recommendationScore": 84.0,
+          "latitude": 37.5704,
+          "longitude": 126.9921,
+
+          "themePalaceCultureYn": "N",
+          "themeNatureHangangYn": "N",
+          "themeDateYn": "N",
+          "themeFoodTourYn": "Y",
+          "themeCafeTourYn": "N",
+          "themeShoppingHotplaceYn": "N",
+          "themeNightViewYn": "N",
+          "themeHotelStayYn": "N",
+
+          "alternativeCandidates": []
+        },
+        {
+          "placeId": 50,
+          "placeName": "서촌 카페",
+          "category": "CAFE",
+          "recommendationScore": 87.0,
+          "latitude": 37.5792,
+          "longitude": 126.9693,
+
+          "themePalaceCultureYn": "N",
+          "themeNatureHangangYn": "N",
+          "themeDateYn": "Y",
+          "themeFoodTourYn": "N",
+          "themeCafeTourYn": "Y",
+          "themeShoppingHotplaceYn": "N",
+          "themeNightViewYn": "N",
+          "themeHotelStayYn": "N",
+
+          "alternativeCandidates": [
+            {
+              "placeId": 51,
+              "placeName": "익선동 카페",
+              "category": "CAFE",
+              "recommendationScore": 83.0,
+              "latitude": 37.5730,
+              "longitude": 126.9900,
+
+              "themePalaceCultureYn": "N",
+              "themeNatureHangangYn": "N",
+              "themeDateYn": "Y",
+              "themeFoodTourYn": "N",
+              "themeCafeTourYn": "Y",
+              "themeShoppingHotplaceYn": "Y",
+              "themeNightViewYn": "N",
+              "themeHotelStayYn": "N"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "visitDate": "2026-07-21",
+      "targetPlaceCount": 4,
+
+      "categoryTargets": {
+        "TOUR": 2,
+        "RESTAURANT": 1,
+        "CAFE": 1,
+        "HOTEL": 0
+      },
+
+      "placeCandidates": [
+        {
+          "placeId": 30,
+          "placeName": "서울숲",
+          "category": "TOUR",
+          "recommendationScore": 94.0,
+          "latitude": 37.5444,
+          "longitude": 127.0374,
+
+          "themePalaceCultureYn": "N",
+          "themeNatureHangangYn": "Y",
+          "themeDateYn": "Y",
+          "themeFoodTourYn": "N",
+          "themeCafeTourYn": "N",
+          "themeShoppingHotplaceYn": "N",
+          "themeNightViewYn": "N",
+          "themeHotelStayYn": "N",
+
+          "alternativeCandidates": [
+            {
+              "placeId": 31,
+              "placeName": "뚝섬한강공원",
+              "category": "TOUR",
+              "recommendationScore": 90.0,
+              "latitude": 37.5293,
+              "longitude": 127.0697,
+
+              "themePalaceCultureYn": "N",
+              "themeNatureHangangYn": "Y",
+              "themeDateYn": "Y",
+              "themeFoodTourYn": "N",
+              "themeCafeTourYn": "N",
+              "themeShoppingHotplaceYn": "N",
+              "themeNightViewYn": "Y",
+              "themeHotelStayYn": "N"
+            }
+          ]
+        },
+        {
+          "placeId": 32,
+          "placeName": "성수 연무장길",
+          "category": "TOUR",
+          "recommendationScore": 88.0,
+          "latitude": 37.5435,
+          "longitude": 127.0557,
+
+          "themePalaceCultureYn": "N",
+          "themeNatureHangangYn": "N",
+          "themeDateYn": "Y",
+          "themeFoodTourYn": "N",
+          "themeCafeTourYn": "N",
+          "themeShoppingHotplaceYn": "Y",
+          "themeNightViewYn": "N",
+          "themeHotelStayYn": "N",
+
+          "alternativeCandidates": []
+        },
+        {
+          "placeId": 33,
+          "placeName": "건대 커먼그라운드",
+          "category": "TOUR",
+          "recommendationScore": 82.0,
+          "latitude": 37.5410,
+          "longitude": 127.0669,
+
+          "themePalaceCultureYn": "N",
+          "themeNatureHangangYn": "N",
+          "themeDateYn": "Y",
+          "themeFoodTourYn": "N",
+          "themeCafeTourYn": "N",
+          "themeShoppingHotplaceYn": "Y",
+          "themeNightViewYn": "N",
+          "themeHotelStayYn": "N",
+
+          "alternativeCandidates": []
+        },
+        {
+          "placeId": 43,
+          "placeName": "성수 식당",
+          "category": "RESTAURANT",
+          "recommendationScore": 91.0,
+          "latitude": 37.5448,
+          "longitude": 127.0552,
+
+          "themePalaceCultureYn": "N",
+          "themeNatureHangangYn": "N",
+          "themeDateYn": "Y",
+          "themeFoodTourYn": "Y",
+          "themeCafeTourYn": "N",
+          "themeShoppingHotplaceYn": "N",
+          "themeNightViewYn": "N",
+          "themeHotelStayYn": "N",
+
+          "alternativeCandidates": [
+            {
+              "placeId": 44,
+              "placeName": "서울숲 식당",
+              "category": "RESTAURANT",
+              "recommendationScore": 86.0,
+              "latitude": 37.5460,
+              "longitude": 127.0430,
+
+              "themePalaceCultureYn": "N",
+              "themeNatureHangangYn": "N",
+              "themeDateYn": "Y",
+              "themeFoodTourYn": "Y",
+              "themeCafeTourYn": "N",
+              "themeShoppingHotplaceYn": "N",
+              "themeNightViewYn": "N",
+              "themeHotelStayYn": "N"
+            }
+          ]
+        },
+        {
+          "placeId": 52,
+          "placeName": "성수 카페",
+          "category": "CAFE",
+          "recommendationScore": 90.0,
+          "latitude": 37.5443,
+          "longitude": 127.0580,
+
+          "themePalaceCultureYn": "N",
+          "themeNatureHangangYn": "N",
+          "themeDateYn": "Y",
+          "themeFoodTourYn": "N",
+          "themeCafeTourYn": "Y",
+          "themeShoppingHotplaceYn": "Y",
+          "themeNightViewYn": "N",
+          "themeHotelStayYn": "N",
+
+          "alternativeCandidates": [
+            {
+              "placeId": 53,
+              "placeName": "서울숲 카페",
+              "category": "CAFE",
+              "recommendationScore": 86.0,
+              "latitude": 37.5461,
+              "longitude": 127.0435,
+
+              "themePalaceCultureYn": "N",
+              "themeNatureHangangYn": "N",
+              "themeDateYn": "Y",
+              "themeFoodTourYn": "N",
+              "themeCafeTourYn": "Y",
+              "themeShoppingHotplaceYn": "N",
+              "themeNightViewYn": "N",
+              "themeHotelStayYn": "N"
+            }
+          ]
+        },
+        {
+          "placeId": 54,
+          "placeName": "뚝섬 카페",
+          "category": "CAFE",
+          "recommendationScore": 82.0,
+          "latitude": 37.5310,
+          "longitude": 127.0670,
+
+          "themePalaceCultureYn": "N",
+          "themeNatureHangangYn": "Y",
+          "themeDateYn": "Y",
+          "themeFoodTourYn": "N",
+          "themeCafeTourYn": "Y",
+          "themeShoppingHotplaceYn": "N",
+          "themeNightViewYn": "N",
+          "themeHotelStayYn": "N",
+
+          "alternativeCandidates": []
+        }
+      ]
+    }
+  ]
+}

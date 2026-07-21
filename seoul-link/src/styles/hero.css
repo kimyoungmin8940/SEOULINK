@@ -6,6 +6,9 @@
 
 /* 메인 비주얼 영역입니다. 배경 이미지는 HeroSection.jsx에서 inline style로 전달 */
 .hero {
+  /* 전역 사진 필터 색상과 분리한 히어로 전용 기존 파란색(#1378D8) */
+  --hero-filter-blue-rgb: 19, 120, 216;
+
   min-height: 620px;
   background-size: cover;
   background-position: center center;
@@ -19,18 +22,18 @@
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(
-      90deg,
-      rgba(6, 38, 76, 0.56) 0%,
-      rgba(var(--main-blue-rgb), 0.28) 42%,
-      rgba(var(--sky-blue-rgb), 0.07) 70%,
-      rgba(255, 255, 255, 0.02) 100%
-    ),
-    linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.08) 0%,
-      rgba(255, 255, 255, 0) 45%
-    );
+          linear-gradient(
+                  90deg,
+                  rgba(6, 38, 76, 0.56) 0%,
+                  rgba(var(--hero-filter-blue-rgb), 0.28) 42%,
+                  rgba(var(--sky-blue-rgb), 0.07) 70%,
+                  rgba(255, 255, 255, 0.02) 100%
+          ),
+          linear-gradient(
+                  180deg,
+                  rgba(255, 255, 255, 0.08) 0%,
+                  rgba(255, 255, 255, 0) 45%
+          );
 }
 
 /* hero 문구와 버튼을 배경 위에 올리는 텍스트 영역 */
@@ -46,7 +49,7 @@
 
 /* hero 제목의 공통 글자 스타일 */
 .hero h1,
-/* 줄 단위 span을 쓰는 hero 제목 전용 줄간격. */
+  /* 줄 단위 span을 쓰는 hero 제목 전용 줄간격. */
 .hero-title {
   margin: 0;
   font-size: 41px;
@@ -110,7 +113,7 @@
 }
 
 .primary-btn,
-/* 보조 버튼. 흰색 배경과 파란 테두리를 사용 */
+  /* 보조 버튼. 흰색 배경과 파란 테두리를 사용 */
 .secondary-btn {
   min-width: 210px;
   padding: 18px 42px;
@@ -130,14 +133,15 @@
 .primary-btn {
   background: var(--primary-blue);
   color: white;
-  box-shadow: var(--shadow-button);
+  /* 두 hero 버튼은 같은 파란색 계열을 쓰고, 주 버튼만 더 진하게 표현 */
+  box-shadow: 0 10px 24px rgba(var(--hero-filter-blue-rgb), 0.22);
 }
 
 /* primary 버튼 hover 효과 */
 .primary-btn:hover {
   transform: translateY(-2px);
   background: var(--primary-blue-dark);
-  box-shadow: 0 14px 30px rgba(var(--primary-blue-rgb), 0.30);
+  box-shadow: 0 14px 30px rgba(var(--hero-filter-blue-rgb), 0.30);
 }
 
 /* 보조 버튼. 흰색 배경과 파란 테두리를 사용 */
@@ -145,7 +149,7 @@
   background: #ffffff;
   color: var(--primary-blue);
   border: 2px solid var(--primary-blue);
-  box-shadow: var(--shadow-button-light);
+  box-shadow: 0 10px 22px rgba(var(--hero-filter-blue-rgb), 0.12);
 }
 
 /* secondary 버튼 hover 효과 */
@@ -154,7 +158,7 @@
   background: var(--sub-blue);
   color: var(--primary-blue);
   border-color: var(--primary-blue);
-  box-shadow: 0 14px 28px rgba(var(--primary-blue-rgb), 0.14);
+  box-shadow: 0 14px 28px rgba(var(--hero-filter-blue-rgb), 0.14);
 }
 
 

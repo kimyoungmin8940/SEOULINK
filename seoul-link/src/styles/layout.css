@@ -18,3 +18,20 @@
 .section {
   margin-bottom: clamp(70px, 4.5vw, 86px);
 }
+
+/* 메인페이지 소제목의 아이콘/제목 위치를 모든 섹션에서 동일하게 맞춤 */
+.section-heading-title {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* 추천 코스, 무드, 후기 소제목 아이콘의 공통 크기와 색상 */
+.section-heading-icon {
+  width: 21px;
+  height: 21px;
+  flex: 0 0 21px;
+  color: var(--primary-blue);
+  stroke: currentColor;
+}

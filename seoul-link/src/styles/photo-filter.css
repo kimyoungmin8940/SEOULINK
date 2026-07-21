@@ -1,0 +1,69 @@
+/*
+  photo-filter.css
+  - 콘텐츠 사진에 프로젝트 메인 색을 동일한 투명도로 자동 적용
+  - 로고처럼 원래 색을 유지해야 하는 이미지는 data-photo-filter="off"를 사용
+  - background-image 방식의 사진 영역에는 photo-background-filter 클래스를 사용
+*/
+
+/* 화면에는 보이지 않고, img 태그가 참조할 SVG 필터 정의만 유지 */
+.photo-filter-definitions {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* variables.css의 메인 색과 사진 필터 투명도를 SVG 필터에 연결 */
+.photo-filter-color {
+  flood-color: var(--photo-filter-color);
+  flood-opacity: var(--photo-filter-opacity);
+}
+
+/*
+  새로 추가되는 img 태그에도 별도 class 없이 자동 적용됩니다.
+  로고, 아이콘처럼 필터가 필요 없는 이미지만 data-photo-filter="off"로 제외합니다.
+*/
+img:not([data-photo-filter="off"]) {
+  filter: url("#seoulink-photo-filter");
+}
+
+/* background-image로 넣은 사진에 사용할 공통 오버레이 */
+.photo-background-filter {
+  position: relative;
+  isolation: isolate;
+}
+
+/* 전용 필터가 있는 배경은 data-photo-filter="off"로 공통 필터에서 제외 */
+.photo-background-filter:not([data-photo-filter="off"])::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  pointer-events: none;
+
+  /* 구형 브라우저용 대체값 */
+  background: rgba(var(--main-blue-rgb), var(--photo-filter-opacity));
+  /* 메인 색이 바뀌어도 사진 필터가 자동으로 같은 색을 따라감 */
+  background: color-mix(
+    in srgb,
+    var(--photo-filter-color) var(--photo-filter-strength),
+    transparent
+  );
+}
+
+/* 배경 사진 위의 문구와 버튼은 색상 오버레이보다 위에 표시 */
+.photo-background-filter:not([data-photo-filter="off"]) > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* 히어로는 hero.css의 기존 전용 ::before 필터만 유지 */
+.hero[data-photo-filter="off"] {
+  filter: none;
+}
+
+.hero[data-photo-filter="off"]::after {
+  content: none;
+}

@@ -1,0 +1,83 @@
+{
+  "courseId": 20,
+  "title": "서울 도심 추천 코스",
+  "description": "궁궐과 카페를 함께 둘러보는 2일 코스",
+  "travelCode": "ATLSR",
+  "courseType": "SURVEY",
+  "region": "서울",
+  "publicCourse": false,
+  "placeCount": 3,
+  "dayCount": 2,
+  "totalDistanceKm": 0.267,
+  "totalTravelTimeMinutes": 3.56,
+  "totalVisitTimeMinutes": 240,
+  "totalCourseTimeMinutes": 243.56,
+  "days": [
+    {
+      "dayNo": 1,
+      "visitDate": "2026-07-20",
+      "places": [
+        {
+          "detailId": null,
+          "placeId": 1,
+          "placeName": "서울시청",
+          "category": "TOUR",
+          "address": null,
+          "roadAddress": null,
+          "imageUrl": null,
+          "latitude": 37.5665,
+          "longitude": 126.978,
+          "recommendationScore": 100.0,
+          "visitOrder": 1,
+          "memo": null,
+          "visitTime": null,
+          "expectedVisitMinutes": 90,
+          "distanceFromPreviousKm": 0.0,
+          "travelTimeFromPreviousMinutes": 0.0
+        },
+        {
+          "detailId": null,
+          "placeId": 3,
+          "placeName": "덕수궁",
+          "category": "TOUR",
+          "address": null,
+          "roadAddress": null,
+          "imageUrl": null,
+          "latitude": 37.5658,
+          "longitude": 126.9751,
+          "recommendationScore": 85.0,
+          "visitOrder": 2,
+          "memo": null,
+          "visitTime": null,
+          "expectedVisitMinutes": 90,
+          "distanceFromPreviousKm": 0.267,
+          "travelTimeFromPreviousMinutes": 3.56
+        }
+      ]
+    },
+    {
+      "dayNo": 2,
+      "visitDate": "2026-07-21",
+      "places": [
+        {
+          "detailId": null,
+          "placeId": 7,
+          "placeName": "서울숲 카페",
+          "category": "CAFE",
+          "address": null,
+          "roadAddress": null,
+          "imageUrl": null,
+          "latitude": 37.5444,
+          "longitude": 127.0374,
+          "recommendationScore": 91.0,
+          "visitOrder": 1,
+          "memo": null,
+          "visitTime": null,
+          "expectedVisitMinutes": 60,
+          "distanceFromPreviousKm": 0.0,
+          "travelTimeFromPreviousMinutes": 0.0
+        }
+      ]
+    }
+  ]
+}

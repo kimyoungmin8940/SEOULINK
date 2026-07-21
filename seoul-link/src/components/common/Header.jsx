@@ -201,6 +201,7 @@ function Header({ variant = "simple" }) {
                                     strokeWidth={2.2}
                                 />
                             )}
+                            <Menu className="floating-menu-icon" aria-hidden="true" />
                         </button>
                     </div>
                 </div>
