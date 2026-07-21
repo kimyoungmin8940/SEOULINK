@@ -13,7 +13,7 @@ public class MyCourseResponse {
     private String travelCode;
     private String courseType;
     private String region;
-    private Integer viewCount;
+    private Long viewCount;
     private LocalDateTime createdAt;
 
     public MyCourseResponse(TravelCourse course) {

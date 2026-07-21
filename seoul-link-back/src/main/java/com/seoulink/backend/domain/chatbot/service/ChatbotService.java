@@ -76,14 +76,15 @@ public class ChatbotService {
     }
 
     private TravelCourse saveChatbotCourse(ChatbotRequest request, String answer, Payment payment) {
-        TravelCourse course = new TravelCourse();
-        course.setMemberId(request.getMemberId());
-        course.setPaymentId(payment.getPaymentId());
-        course.setTitle(request.getTravelConcept());
-        course.setDescription(answer.length() > 1000 ? answer.substring(0, 1000) : answer);
-        course.setCourseType("CHATBOT");
-        course.setIsPublic("N");
-        course.setViewCount(0);
+        TravelCourse course = TravelCourse.builder()
+                .memberId(request.getMemberId())
+                .paymentId(payment.getPaymentId())
+                .title(request.getTravelConcept())
+                .description(answer.length() > 1000 ? answer.substring(0, 1000) : answer)
+                .courseType("CHATBOT")
+                .publicStatus("N")
+                .viewCount(0L)
+                .build();
         return travelCourseRepository.save(course);
     }
 

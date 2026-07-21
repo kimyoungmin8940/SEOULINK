@@ -6,17 +6,13 @@ import com.seoulink.backend.domain.mypage.dto.response.MyPageResponse;
 import com.seoulink.backend.domain.mypage.dto.response.MyTravelTypeResponse;
 import com.seoulink.backend.domain.review.dto.response.ReviewResponse;
 import com.seoulink.backend.domain.member.entity.Member;
-import com.seoulink.backend.domain.survey.entity.SurveyResult;
 import com.seoulink.backend.domain.course.entity.TravelCourse;
-import com.seoulink.backend.domain.traveltype.entity.TravelTypeMaster;
 import com.seoulink.backend.domain.chatbot.repository.ChatbotHistoryRepository;
 import com.seoulink.backend.domain.course.repository.TravelCourseRepository;
 import com.seoulink.backend.domain.member.repository.MemberRepository;
 import com.seoulink.backend.domain.payment.repository.PaymentRepository;
 import com.seoulink.backend.domain.review.repository.ReviewLikeRepository;
 import com.seoulink.backend.domain.review.repository.ReviewRepository;
-import com.seoulink.backend.domain.survey.repository.SurveyResultRepository;
-import com.seoulink.backend.domain.traveltype.repository.TravelTypeMasterRepository;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -25,8 +21,6 @@ import java.util.List;
 public class MyPageService {
 
     private final MemberRepository memberRepository;
-    private final SurveyResultRepository surveyResultRepository;
-    private final TravelTypeMasterRepository travelTypeMasterRepository;
     private final TravelCourseRepository travelCourseRepository;
     private final PaymentRepository paymentRepository;
     private final ChatbotHistoryRepository chatbotHistoryRepository;
@@ -35,8 +29,6 @@ public class MyPageService {
 
     public MyPageService(
             MemberRepository memberRepository,
-            SurveyResultRepository surveyResultRepository,
-            TravelTypeMasterRepository travelTypeMasterRepository,
             TravelCourseRepository travelCourseRepository,
             PaymentRepository paymentRepository,
             ChatbotHistoryRepository chatbotHistoryRepository,
@@ -44,8 +36,6 @@ public class MyPageService {
             ReviewLikeRepository reviewLikeRepository
     ) {
         this.memberRepository = memberRepository;
-        this.surveyResultRepository = surveyResultRepository;
-        this.travelTypeMasterRepository = travelTypeMasterRepository;
         this.travelCourseRepository = travelCourseRepository;
         this.paymentRepository = paymentRepository;
         this.chatbotHistoryRepository = chatbotHistoryRepository;
@@ -64,24 +54,6 @@ public class MyPageService {
                 member.getNickname()
         );
         MyTravelTypeResponse travelTypeResponse = null;
-
-        List<SurveyResult> results = surveyResultRepository.findResultsByMemberId(memberId);
-
-        SurveyResult surveyResult = results.isEmpty() ? null : results.get(0);
-
-        if (surveyResult != null) {
-            TravelTypeMaster type = travelTypeMasterRepository.findById(surveyResult.getTravelCode())
-                    .orElse(null);
-
-            if (type != null) {
-                travelTypeResponse = new MyTravelTypeResponse(
-                        type.getTravelCode(),
-                        type.getTypeTitle(),
-                        type.getTypeDescription(),
-                        type.getImageUrl()
-                );
-            }
-        }
 
         List<MyCourseResponse> courses = travelCourseRepository.findByMemberIdOrderByCreatedAtDesc(memberId)
                 .stream()

@@ -4,7 +4,6 @@
     <modules>
       <module fileurl="file://$PROJECT_DIR$/.idea/react-seoulink.iml" filepath="$PROJECT_DIR$/.idea/react-seoulink.iml" />
       <module fileurl="file://$PROJECT_DIR$/.idea/modules/seoul-link-back.main.iml" filepath="$PROJECT_DIR$/.idea/modules/seoul-link-back.main.iml" />
-      <module fileurl="file://$PROJECT_DIR$/.idea/modules/seoul-link-back.test.iml" filepath="$PROJECT_DIR$/.idea/modules/seoul-link-back.test.iml" />
     </modules>
   </component>
 </project>
