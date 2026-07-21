@@ -1,11 +1,51 @@
 package com.seoulink.backend.domain.chatbot.entity;
 
-/**
- * ERD의 {@code CHATBOT_HISTORY} 테이블과 매핑될 챗봇 대화 이력 엔티티이다.
- *
- * <p>회원의 질문, AI 응답, 관련 코스·설문·결제 정보,
- * 생성 시각, 추천 여행 유형 등을 저장한다.</p>
- */
+import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+import java.time.LocalDateTime;
+
+@Entity
+@Table(name = "CHATBOT_HISTORY")
+@Getter
+@Setter
+@NoArgsConstructor
 public class ChatbotHistory {
-    // TODO: 담당 기능의 요구사항과 API 명세가 확정되면 구현한다.
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "CHAT_ID")
+    private Long chatId;
+
+    @Column(name = "MEMBER_ID", nullable = false)
+    private Long memberId;
+
+    @Column(name = "PAYMENT_ID")
+    private Long paymentId;
+
+    @Column(name = "RESULT_ID")
+    private Long resultId;
+
+    @Column(name = "COURSE_ID")
+    private Long courseId;
+
+    @Lob
+    @Column(name = "QUESTION", nullable = false)
+    private String question;
+
+    @Column(name = "TRAVEL_CONCEPT", nullable = false, length = 100)
+    private String travelConcept;
+
+    @Lob
+    @Column(name = "COURSE_SUMMARY")
+    private String courseSummary;
+
+    @Lob
+    @Column(name = "ANSWER", nullable = false)
+    private String answer;
+
+    @Column(name = "CREATED_AT", nullable = false)
+    private LocalDateTime createdAt = LocalDateTime.now();
 }

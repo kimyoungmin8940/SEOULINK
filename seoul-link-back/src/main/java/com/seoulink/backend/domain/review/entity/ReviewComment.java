@@ -1,10 +1,45 @@
 package com.seoulink.backend.domain.review.entity;
 
-/**
- * ERD의 {@code REVIEW_COMMENT} 테이블과 매핑될 후기 댓글 엔티티이다.
- *
- * <p>후기별 댓글 작성자, 댓글 내용, 삭제 여부, 생성·수정 시각 등을 관리한다.</p>
- */
+import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+import java.time.LocalDateTime;
+
+@Entity
+@Table(name = "REVIEW_COMMENT")
+@Getter
+@Setter
+@NoArgsConstructor
 public class ReviewComment {
-    // TODO: 담당 기능의 요구사항과 API 명세가 확정되면 구현한다.
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "COMMENT_ID")
+    private Long commentId;
+
+    @Column(name = "REVIEW_ID", nullable = false)
+    private Long reviewId;
+
+    @Column(name = "MEMBER_ID", nullable = false)
+    private Long memberId;
+
+    @Column(name = "CONTENT", nullable = false)
+    private String content;
+
+    @Column(name = "CREATED_AT", nullable = false)
+    private LocalDateTime createdAt = LocalDateTime.now();
+
+    @Column(name = "UPDATED_AT")
+    private LocalDateTime updatedAt;
+
+    @Column(name = "IS_DELETED", nullable = false)
+    private String isDeleted = "N";
+
+    public ReviewComment(Long reviewId, Long memberId, String content) {
+        this.reviewId = reviewId;
+        this.memberId = memberId;
+        this.content = content;
+    }
 }

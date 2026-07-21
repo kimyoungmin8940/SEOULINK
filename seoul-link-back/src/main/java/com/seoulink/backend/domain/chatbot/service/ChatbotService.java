@@ -1,12 +1,95 @@
 package com.seoulink.backend.domain.chatbot.service;
 
-/**
- * 챗봇 사용 가능 여부 확인, 질문·응답 저장, 여행 정보 조합 등
- * 챗봇 기능의 전체 흐름을 관리하는 서비스이다.
- *
- * <p>외부 AI API 호출 자체는 {@code OpenAiChatbotService}에 위임하고,
- * 이 클래스는 회원·결제·이력과 관련된 비즈니스 규칙을 담당한다.</p>
- */
+import com.seoulink.backend.domain.chatbot.dto.request.ChatbotRequest;
+import com.seoulink.backend.domain.chatbot.entity.ChatbotHistory;
+import com.seoulink.backend.domain.payment.entity.Payment;
+import com.seoulink.backend.domain.course.entity.TravelCourse;
+import com.seoulink.backend.domain.chatbot.repository.ChatbotHistoryRepository;
+import com.seoulink.backend.domain.member.repository.MemberRepository;
+import com.seoulink.backend.domain.payment.repository.PaymentRepository;
+import com.seoulink.backend.domain.course.repository.TravelCourseRepository;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+@Service
 public class ChatbotService {
-    // TODO: 담당 기능의 요구사항과 API 명세가 확정되면 구현한다.
+
+    private final ChatbotHistoryRepository chatbotHistoryRepository;
+    private final PaymentRepository paymentRepository;
+    private final MemberRepository memberRepository;
+    private final TravelCourseRepository travelCourseRepository;
+    private final OpenAiChatbotService openAiChatbotService;
+
+    public ChatbotService(
+            ChatbotHistoryRepository chatbotHistoryRepository,
+            PaymentRepository paymentRepository,
+            MemberRepository memberRepository,
+            TravelCourseRepository travelCourseRepository,
+            OpenAiChatbotService openAiChatbotService
+    ) {
+        this.chatbotHistoryRepository = chatbotHistoryRepository;
+        this.paymentRepository = paymentRepository;
+        this.memberRepository = memberRepository;
+        this.travelCourseRepository = travelCourseRepository;
+        this.openAiChatbotService = openAiChatbotService;
+    }
+
+    @Transactional
+    public ChatbotHistory ask(ChatbotRequest request) {
+        validateMemberExists(request.getMemberId());
+
+        Payment payment = paymentRepository
+                .findFirstByMemberIdAndPaymentStatusAndRemainCountGreaterThanOrderByPaidAtDesc(
+                        request.getMemberId(),
+                        "PAID",
+                        0
+                )
+                .orElseThrow(() -> new IllegalArgumentException("사용 가능한 챗봇 이용권이 필요합니다."));
+
+        if (payment.getExpiredAt() == null || payment.getExpiredAt().isBefore(LocalDateTime.now())) {
+            throw new IllegalArgumentException("챗봇 이용권이 만료되었습니다.");
+        }
+
+        String answer = openAiChatbotService.generateCourseRecommendation(request);
+
+        payment.useOneCount();
+
+        TravelCourse course = saveChatbotCourse(request, answer, payment);
+
+        ChatbotHistory history = new ChatbotHistory();
+        history.setMemberId(request.getMemberId());
+        history.setPaymentId(payment.getPaymentId());
+        history.setCourseId(course.getCourseId());
+        history.setQuestion(request.getQuestion());
+        history.setTravelConcept(request.getTravelConcept());
+        history.setAnswer(answer);
+        history.setCourseSummary(course.getDescription());
+
+        return chatbotHistoryRepository.save(history);
+    }
+
+    public List<ChatbotHistory> getHistories(Long memberId) {
+        return chatbotHistoryRepository.findByMemberIdOrderByCreatedAtDesc(memberId);
+    }
+
+    private TravelCourse saveChatbotCourse(ChatbotRequest request, String answer, Payment payment) {
+        TravelCourse course = new TravelCourse();
+        course.setMemberId(request.getMemberId());
+        course.setPaymentId(payment.getPaymentId());
+        course.setTitle(request.getTravelConcept());
+        course.setDescription(answer.length() > 1000 ? answer.substring(0, 1000) : answer);
+        course.setCourseType("CHATBOT");
+        course.setIsPublic("N");
+        course.setViewCount(0);
+        return travelCourseRepository.save(course);
+    }
+
+    private void validateMemberExists(Long memberId) {
+        if (!memberRepository.existsById(memberId)) {
+            throw new IllegalArgumentException("회원 정보를 찾을 수 없습니다.");
+        }
+    }
 }

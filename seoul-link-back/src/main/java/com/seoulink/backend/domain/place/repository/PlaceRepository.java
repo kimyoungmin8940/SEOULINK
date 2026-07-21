@@ -1,12 +1,33 @@
 package com.seoulink.backend.domain.place.repository;
 
-/**
- * 장소 엔티티의 저장·조회·검색 기능을 담당할 Repository이다.
- * 카테고리, 지역, 태그, 활성 여부 등의 조건 조회 메서드를 정의한다.
- *
- * <p>Spring Data JPA 구현 시 이 인터페이스가 해당 엔티티의
- * {@code JpaRepository<엔티티, 기본키타입>}를 상속하도록 수정한다.</p>
- */
-public interface PlaceRepository {
-    // TODO: 엔티티 매핑 완료 후 JpaRepository 상속 및 필요한 조회 메서드를 선언한다.
+import com.seoulink.backend.domain.place.entity.Place;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+import java.util.List;
+
+public interface PlaceRepository extends JpaRepository<Place, Long> {
+    @Query("select p from Place p where p.isActive = 'Y' and (lower(p.name) like lower(concat('%', :keyword, '%')) or lower(p.address) like lower(concat('%', :keyword, '%'))) order by p.rating desc")
+    List<Place> searchActive(@Param("keyword") String keyword, org.springframework.data.domain.Pageable pageable);
+    List<Place> findTop10ByRegionAndIsActiveOrderByRatingDesc(String region, String isActive);
+    List<Place> findByPlaceIdInAndIsActive(List<Long> placeIds, String isActive);
+    List<Place> findByRegionContainingAndIsActive(String region, String isActive);
+    List<Place> findByRegionContainingAndCategoryAndIsActive(String region, String category, String isActive);
+    List<Place> findByLatitudeBetweenAndLongitudeBetweenAndIsActive(
+            Double minLatitude,
+            Double maxLatitude,
+            Double minLongitude,
+            Double maxLongitude,
+            String isActive
+    );
+    List<Place> findByLatitudeBetweenAndLongitudeBetweenAndCategoryAndIsActive(
+            Double minLatitude,
+            Double maxLatitude,
+            Double minLongitude,
+            Double maxLongitude,
+            String category,
+            String isActive
+    );
+
 }

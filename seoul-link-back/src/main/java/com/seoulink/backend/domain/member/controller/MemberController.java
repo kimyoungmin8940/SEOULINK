@@ -1,13 +1,43 @@
 package com.seoulink.backend.domain.member.controller;
 
-/**
- * 회원 관련 HTTP 요청을 받는 컨트롤러이다.
- *
- * <p>회원가입, 로그인, 회원 정보 조회·수정 등의 엔드포인트를 정의하고,
- * 실제 비즈니스 처리는 {@code MemberService}에 위임한다.</p>
- *
- * <p>컨트롤러에는 복잡한 비즈니스 로직을 두지 않고 요청 검증과 응답 반환만 담당한다.</p>
- */
+import com.seoulink.backend.domain.member.dto.request.MemberLoginRequest;
+import com.seoulink.backend.domain.member.dto.request.MemberSignupRequest;
+import com.seoulink.backend.domain.member.dto.response.MemberLoginResponse;
+import com.seoulink.backend.domain.member.service.MemberService;
+import jakarta.validation.Valid;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/api/members")
 public class MemberController {
-    // TODO: 담당 기능의 요구사항과 API 명세가 확정되면 구현한다.
+    private final MemberService memberService;
+
+    public MemberController(MemberService memberService) {
+        this.memberService = memberService;
+    }
+
+    @PostMapping("/signup")
+    public MemberLoginResponse signup(@Valid @RequestBody MemberSignupRequest request) {
+        return memberService.signup(request);
+    }
+
+    @PostMapping("/login")
+    public MemberLoginResponse login(@Valid @RequestBody MemberLoginRequest request) {
+        return memberService.login(request);
+    }
+
+    @GetMapping("/check-email")
+    public boolean checkEmail(@RequestParam String email) {
+        return memberService.checkEmail(email);
+    }
+
+    @GetMapping("/check-nickname")
+    public boolean checkNickname(@RequestParam String nickname) {
+        return memberService.checkNickname(nickname);
+    }
 }

@@ -1,12 +1,17 @@
 package com.seoulink.backend.domain.payment.repository;
 
-/**
- * 결제 엔티티의 저장·조회 기능을 담당할 Repository이다.
- * 주문 번호, 회원 ID, 결제 상태 기준 조회 메서드를 정의한다.
- *
- * <p>Spring Data JPA 구현 시 이 인터페이스가 해당 엔티티의
- * {@code JpaRepository<엔티티, 기본키타입>}를 상속하도록 수정한다.</p>
- */
-public interface PaymentRepository {
-    // TODO: 엔티티 매핑 완료 후 JpaRepository 상속 및 필요한 조회 메서드를 선언한다.
+import com.seoulink.backend.domain.payment.entity.Payment;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.List;
+import java.util.Optional;
+
+public interface PaymentRepository extends JpaRepository<Payment, Long> {
+    List<Payment> findByMemberIdOrderByCreatedAtDesc(Long memberId);
+    Optional<Payment> findByOrderId(String orderId);
+    Optional<Payment> findFirstByMemberIdAndPaymentStatusAndRemainCountGreaterThanOrderByPaidAtDesc(
+            Long memberId,
+            String paymentStatus,
+            Integer remainCount
+    );
 }

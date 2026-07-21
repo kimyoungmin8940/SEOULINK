@@ -1,10 +1,28 @@
 package com.seoulink.backend.domain.traveltype.entity;
 
-/**
- * ERD의 {@code TRAVEL_TYPE_PLACE} 테이블과 매핑될 여행 유형-장소 연결 엔티티이다.
- *
- * <p>하나의 여행 유형에 어떤 장소들이 연결되는지 저장하는 중간 테이블 역할을 한다.</p>
- */
+import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+@Entity
+@Table(name = "TRAVEL_TYPE_PLACE")
+@Getter
+@Setter
+@NoArgsConstructor
 public class TravelTypePlace {
-    // TODO: 담당 기능의 요구사항과 API 명세가 확정되면 구현한다.
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "TYPE_PLACE_ID")
+    private Long typePlaceId;
+
+    @Column(name = "TRAVEL_CODE", nullable = false)
+    private String travelCode;
+
+    @Column(name = "PLACE_ID", nullable = false)
+    private Long placeId;
+
+    @Column(name = "WEIGHT_SCORE", nullable = false)
+    private Integer weightScore;
 }
