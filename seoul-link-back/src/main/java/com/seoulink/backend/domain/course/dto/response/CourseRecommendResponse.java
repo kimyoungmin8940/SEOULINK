@@ -11,7 +11,7 @@ import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 
-/** 동일한 후보 풀에서 생성한 세 가지 추천 코스와 추천 시점 날씨를 반환한다. */
+/** 동일한 후보 풀에서 생성한 세 가지 추천 코스를 반환한다. */
 @Getter
 @Setter
 @Builder
@@ -25,11 +25,6 @@ public class CourseRecommendResponse {
 
     @JsonFormat(pattern = "HH:mm")
     private LocalTime dailyStartTime;
-
-    // 세 코스 옵션에 공통으로 적용된 추천 시점 날씨 스냅샷이다.
-    private String weatherStatus;
-    private Double temperature;
-    private Integer rainProbability;
 
     // 기본적으로 취향 우선·이동 최소·균형 코스 세 가지를 반환한다.
     private Integer optionCount;

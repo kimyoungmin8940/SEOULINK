@@ -123,9 +123,6 @@ public class CourseRecommendationService {
                 .resultId(request.getResultId())
                 .travelCode(request.getTravelCode())
                 .dailyStartTime(request.getDailyStartTime())
-                .weatherStatus(validated.weatherStatus())
-                .temperature(validated.temperature())
-                .rainProbability(validated.rainProbability())
                 .optionCount(courseOptions.size())
                 .courseOptions(courseOptions)
                 .build();
@@ -156,11 +153,6 @@ public class CourseRecommendationService {
             throw new IllegalArgumentException("날짜별 일정이 한 개 이상 필요합니다.");
         }
 
-        String weatherStatus = normalizeWeatherStatus(request.getWeatherStatus());
-        Double temperature = validateTemperature(request.getTemperature());
-        Integer rainProbability = validateRainProbability(
-                request.getRainProbability()
-        );
         Set<String> excludedRecommendationKeys = normalizeExcludedRecommendationKeys(
                 request.getExcludedRecommendationKeys()
         );
@@ -181,9 +173,6 @@ public class CourseRecommendationService {
 
         return new ValidatedRecommendation(
                 new ArrayList<>(plansByDate.values()),
-                weatherStatus,
-                temperature,
-                rainProbability,
                 excludedRecommendationKeys
         );
     }
@@ -960,46 +949,6 @@ public class CourseRecommendationService {
                 .build();
     }
 
-    /** 날씨 상태는 DB 컬럼 길이에 맞춰 공백을 제거하고 대문자로 통일한다. */
-    private String normalizeWeatherStatus(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        String normalized = value.trim().toUpperCase(Locale.ROOT);
-        if (normalized.length() > 50) {
-            throw new IllegalArgumentException(
-                    "weatherStatus는 50자 이하여야 합니다."
-            );
-        }
-        return normalized;
-    }
-
-    /** 실제 날씨 API 오류값이 코스 응답에 섞이지 않도록 유효한 기온 범위만 허용한다. */
-    private Double validateTemperature(Double value) {
-        if (value == null) {
-            return null;
-        }
-        if (!Double.isFinite(value) || value < -100.0 || value > 100.0) {
-            throw new IllegalArgumentException(
-                    "temperature는 -100.0 이상 100.0 이하이어야 합니다."
-            );
-        }
-        return value;
-    }
-
-    /** 강수 확률은 SURVEY_RESULT 제약조건과 동일하게 0~100 범위로 검증한다. */
-    private Integer validateRainProbability(Integer value) {
-        if (value == null) {
-            return null;
-        }
-        if (value < 0 || value > 100) {
-            throw new IllegalArgumentException(
-                    "rainProbability는 0 이상 100 이하이어야 합니다."
-            );
-        }
-        return value;
-    }
-
     /** 테마 여부는 누락 시 N으로 두고 Y/N 외의 값은 요청 오류로 처리한다. */
     private String normalizeYn(String value, String fieldName) {
         if (value == null || value.isBlank()) {
@@ -1057,9 +1006,6 @@ public class CourseRecommendationService {
 
     private record ValidatedRecommendation(
             List<ValidatedDailyPlan> dailyPlans,
-            String weatherStatus,
-            Double temperature,
-            Integer rainProbability,
             Set<String> excludedRecommendationKeys
     ) {
     }
