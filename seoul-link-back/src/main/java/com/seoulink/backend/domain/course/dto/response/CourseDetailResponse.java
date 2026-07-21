@@ -1,55 +1,45 @@
 package com.seoulink.backend.domain.course.dto.response;
 
-import com.seoulink.backend.domain.course.entity.CourseDetail;
-import com.seoulink.backend.domain.place.entity.Place;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+
+/** 추천 상세페이지에서 사용하는 저장 코스 조회 응답이다. */
 @Getter
+@Setter
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class CourseDetailResponse {
 
-    private Long detailId;
-    private Long placeId;
-
-    private Integer dayNo;
-    private Integer placeOrder;
-
-    private String memo;
-    private String visitTime;
-    private Integer stayMinutes;
-
-    private String placeName;
-    private String category;
+    // 저장된 코스의 기본 정보와 공개 상태이다.
+    private Long courseId;
+    private String title;
+    private String description;
+    private String coverImageUrl;
+    private String travelCode;
+    private String courseType;
     private String region;
-    private String address;
-    private String roadAddress;
-    private Double latitude;
-    private Double longitude;
-    private String phone;
-    private String placeUrl;
-    private String imageUrl;
+    private Boolean publicCourse;
+    private Long viewCount;
 
-    public CourseDetailResponse(CourseDetail detail, Place place) {
-        this.detailId = detail.getDetailId();
-        this.placeId = detail.getPlaceId();
+    // 코스 전체의 장소·일수·거리·시간 집계값이다.
+    private Integer placeCount;
+    private Integer dayCount;
+    private Double totalDistanceKm;
+    private Double totalTravelTimeMinutes;
+    private Integer totalVisitTimeMinutes;
+    private Double totalCourseTimeMinutes;
+    private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
 
-        this.dayNo = detail.getDayNo();
-        this.placeOrder = detail.getPlaceOrder();
-
-        this.memo = detail.getMemo();
-        this.visitTime = detail.getVisitTime();
-        this.stayMinutes = detail.getStayMinutes();
-
-        if (place != null) {
-            this.placeName = place.getName();
-            this.category = place.getCategory();
-            this.region = place.getRegion();
-            this.address = place.getAddress();
-            this.roadAddress = place.getRoadAddress();
-            this.latitude = place.getLatitude();
-            this.longitude = place.getLongitude();
-            this.phone = place.getPhone();
-            this.placeUrl = place.getPlaceUrl();
-            this.imageUrl = place.getImageUrl();
-        }
-    }
+    // 날짜별로 묶이고 각 날짜 안에서 방문 순서대로 정렬된 장소 목록이다.
+    @Builder.Default
+    private List<CourseDayResponse> days = new ArrayList<>();
 }
