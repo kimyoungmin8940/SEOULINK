@@ -97,6 +97,60 @@
 @media (min-width:1050px) and (max-height:920px){.payment-reference-badge{top:14px;right:18px}.payment-reference-open-action{height:68px;padding-top:8px;padding-bottom:8px}.payment-reference-open-copy>span{width:42px;height:42px}.payment-reference-open-price{font-size:20px}.payment-reference-open-action button{height:46px}}
 @media (max-width:700px){.payment-reference-badge{top:18px;right:18px}.payment-reference-open-action{display:flex;gap:14px;padding:17px}.payment-reference-open-copy{width:100%;grid-template-columns:42px minmax(0,1fr);gap:11px;padding:0 0 14px;border-right:0;border-bottom:1px solid #d8e5ef;text-align:left}.payment-reference-open-copy>span{width:42px;height:42px}.payment-reference-open-price{grid-column:1/-1;margin-top:2px;text-align:center;font-size:22px}.payment-reference-open-copy b{font-size:16px}.payment-reference-open-action button{width:100%}}
 
+/* Payment page visual alignment: use the same quiet base as the temporary pages. */
+.pass-payment-page {
+  --pass-blue: var(--primary-blue, #1378d8);
+  background: #f4f9ff;
+}
+
+.pass-payment-overlay {
+  display: none;
+}
+
+.payment-reference-heading h1 {
+  font-size: clamp(28px, 2.1vw, 34px);
+}
+
+.payment-reference-heading p {
+  margin-top: 5px;
+}
+
+.payment-reference-plan.selected {
+  border-color: var(--primary-blue, #1378d8);
+  box-shadow: 0 18px 38px rgba(var(--primary-blue-rgb, 19, 120, 216), .18);
+}
+
+.selected .payment-reference-radio,
+.payment-reference-open-action button,
+.payment-modal-footer button {
+  background: var(--primary-blue, #1378d8);
+  color: #fff;
+  font-weight: 400;
+}
+
+.payment-reference-open-action button:hover,
+.payment-modal-footer button:hover {
+  background: var(--primary-blue-dark, #0d67b8);
+}
+
+.selected footer span:last-child b,
+.payment-reference-open-price,
+.payment-reference-open-copy > span,
+.payment-reference-plan li svg {
+  color: var(--primary-blue, #1378d8);
+}
+
+/* Reserve an equal copy area so the feature divider starts at the same height. */
+.payment-reference-copy {
+  min-height: 58px;
+}
+
+@media (max-width: 700px) {
+  .payment-reference-copy {
+    min-height: 0;
+  }
+}
+
 /* Keep the checkout CTA centered independently from the selected-pass summary. */
 @media (min-width:1050px){.payment-reference-open-action{position:relative;display:block;padding:0}.payment-reference-open-copy{position:absolute;top:50%;left:25px;width:300px;grid-template-columns:42px minmax(0,1fr);gap:11px;padding:0;margin:0;border:0;transform:translateY(-50%)}.payment-reference-open-copy>span{width:42px;height:42px}.payment-reference-open-price{display:none}.payment-reference-open-action button{position:absolute;top:50%;left:50%;width:310px;height:52px;transform:translate(-50%,-50%)} }
 @media (min-width:1050px) and (max-height:920px){.payment-reference-open-action button{height:46px}.payment-reference-open-copy{left:20px}}
@@ -180,4 +234,182 @@
   .payment-modal-product img{width:82px;height:62px}.payment-modal-product{grid-template-columns:82px minmax(0,1fr);column-gap:12px}.payment-modal-product strong{font-size:19px}
   .payment-modal-period b{padding:10px 8px;font-size:12px}.payment-modal-period p{margin-top:8px;font-size:10px}
   .payment-modal-widget,.payment-modal-agreement{min-height:202px}.payment-modal-widget>div,.payment-modal-agreement>div{max-height:none;overflow:visible}.payment-modal-footer{padding:2px 0 4px}.payment-modal-footer button{height:50px}.payment-modal-footer small{margin-top:6px}
+}
+
+/* Let the payment-method widget use the full width; keep the agreement compact below it. */
+@media (min-width:861px){
+  .payment-modal {
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+  }
+
+  .payment-modal::-webkit-scrollbar {
+    width: 14px;
+  }
+
+  .payment-modal::-webkit-scrollbar-track {
+    margin: 14px 0;
+    border-radius: 999px;
+    background: transparent;
+  }
+
+  .payment-modal::-webkit-scrollbar-thumb {
+    border: 4px solid transparent;
+    border-radius: 999px;
+    background-clip: padding-box;
+    background-color: #9a9a9a;
+  }
+
+  .payment-modal-widget {
+    grid-column: 1 / -1;
+    min-height: 0;
+  }
+
+  .payment-modal-agreement {
+    grid-column: 1 / -1;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 18px;
+  }
+
+  .payment-modal-agreement > small {
+    display: none;
+  }
+
+  .payment-modal-agreement > div {
+    display: flex;
+    flex: none;
+    width: min(460px, 100%);
+    max-height: 72px;
+    overflow: auto;
+  }
+
+  .payment-modal-footer {
+    padding-top: 8px;
+  }
+
+  .payment-modal-footer button {
+    background: var(--primary-blue);
+    color: #fff;
+    font-weight: 800;
+  }
+}
+
+/* Keep the Toss agreement in the checkout area, directly above the final CTA. */
+.payment-modal-footer .payment-modal-agreement {
+  position: static;
+  z-index: auto;
+  display: flex;
+  min-height: 52px;
+  box-sizing: border-box;
+  width: min(460px, calc(100% - 32px));
+  margin: 10px auto;
+  padding: 0 14px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #e0eaf2;
+  border-radius: 11px;
+  background: #fbfdff;
+  overflow: hidden;
+}
+
+.payment-modal-footer {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-top: 1px solid #e0eaf2;
+  background: #fff;
+}
+
+.payment-modal-footer .payment-modal-agreement > small {
+  display: none;
+}
+
+.payment-modal-footer .payment-modal-agreement > div {
+  width: min(460px, 100%);
+  max-height: none;
+  overflow: visible;
+}
+
+/* The shared Toss widget style pulls its agreement upward; reset it inside this footer. */
+.payment-modal-footer #toss-payment-agreement,
+.payment-modal-footer .toss-payment-agreement {
+  margin: 0 !important;
+  position: relative;
+  top: 3px;
+}
+
+.payment-modal-widget {
+  padding-top: 5px;
+  padding-bottom: 5px;
+}
+
+.payment-modal-widget > small {
+  margin-bottom: 5px;
+}
+
+.payment-modal-widget #toss-payment-methods {
+  margin-top: -5px;
+  margin-bottom: -15px;
+}
+
+/* Match only the chatbot's new-conversation CTA to the main-page button color. */
+.chatbot-new-button {
+  background: var(--primary-blue, #1378d8);
+  color: #fff;
+}
+
+.chatbot-new-button:hover {
+  background: var(--primary-blue-dark, #0a5ea8);
+}
+
+/* Use the same plain background as the temporary pages behind the chatbot workspace. */
+.chatbot-page {
+  background: #f4f9ff;
+}
+
+.chatbot-page-overlay {
+  display: none;
+}
+
+/* Compress the pass link to the same one-line height as the chat input. */
+.chatbot-pass-card {
+  height: 50px;
+  box-sizing: border-box;
+  margin-bottom: 16px;
+  padding: 0 13px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.chatbot-pass-card > span {
+  flex: none;
+}
+
+.chatbot-pass-card strong {
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+}
+
+.chatbot-pass-card small {
+  display: none;
+}
+
+/* Keep pass selection neutral; reserve the shared main blue for payment CTAs. */
+.payment-reference-plan.selected {
+  background: #fff;
+  border-color: #247bf1;
+  box-shadow: 0 13px 30px rgba(48, 97, 137, .10);
+}
+
+/* Use one type treatment for every primary payment CTA. */
+.payment-reference-open-action button,
+.payment-modal-footer button {
+  font-family: inherit;
+  font-size: 17px;
+  font-weight: 800;
 }

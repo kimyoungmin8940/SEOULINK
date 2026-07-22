@@ -50,3 +50,5 @@ body:has(.review-write-shell){background:#f4f9ff;background-image:radial-gradien
 .review-hub .review-category-tabs{margin-bottom:22px}
 .review-hub{box-sizing:border-box;min-height:calc(100vh - 72px)}
 @media(max-width:620px){.review-hub{padding-top:90px}.review-hub .breadcrumbs{margin-bottom:16px}}
+/* Keep the Korean search label on one line in the compact review toolbar. */
+.review-controls form button{flex:none;min-width:58px;white-space:nowrap}

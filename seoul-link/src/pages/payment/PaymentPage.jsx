@@ -56,10 +56,7 @@ function PaymentPage() {
   const end = useMemo(() => new Date(start.getFullYear(), start.getMonth(), start.getDate() + selected.days - 1), [start, selected.days]);
 
   useEffect(() => {
-    if (!isPaymentOpen) {
-      setWidgets(null);
-      return undefined;
-    }
+    if (!isPaymentOpen) return undefined;
     let active = true;
     const mountWidgets = async () => {
       try {
@@ -85,14 +82,14 @@ function PaymentPage() {
       paymentWidgetRef.current = null;
       agreementWidgetRef.current = null;
     };
-  }, [isPaymentOpen]);
-
-  useEffect(() => {
-    widgets?.setAmount({ currency: 'KRW', value: selected.price });
-  }, [selected.price, widgets]);
+  }, [isPaymentOpen, selected.price]);
 
   const openPayment = () => { setError(''); setIsPaymentOpen(true); };
-  const closePayment = () => { if (!loading) setIsPaymentOpen(false); };
+  const closePayment = () => {
+    if (loading) return;
+    setWidgets(null);
+    setIsPaymentOpen(false);
+  };
 
   const handlePayment = async () => {
     const member = authStore.getMember();
@@ -146,8 +143,10 @@ function PaymentPage() {
             <section className="payment-modal-product"><small>{t.selected}</small><img src={selected.image} alt="" /><div><b>{selected.name} ({selected.days}{t.day})</b><p>{selected.description}</p><strong>{won(selected.price)}</strong></div></section>
             <section className="payment-modal-period"><small>{t.period}</small><div><b>{formatDate(start)}</b><span>~</span><b>{formatDate(end)}</b></div><p><Clock3 />{t.start}</p></section>
             <section className="payment-modal-widget"><small>{t.method}</small><div id="toss-payment-methods" /></section>
-            <section className="payment-modal-agreement"><small>{t.agreement}</small><div id="toss-payment-agreement" /></section>
-            <footer className="payment-modal-footer"><button type="button" disabled={loading || !widgets} onClick={handlePayment}><LockKeyhole /><span>{loading ? '\uACB0\uC81C\uCC3D\uC744 \uC5F4\uB294 \uC911...' : `${won(selected.price)} \uACB0\uC81C\uD558\uACE0 \uC774\uC6A9 \uC2DC\uC791\uD558\uAE30`}</span></button>{error && <p>{error}</p>}<small>{t.notice}</small></footer>
+            <footer className="payment-modal-footer">
+              <section className="payment-modal-agreement"><small>{t.agreement}</small><div id="toss-payment-agreement" /></section>
+              <button type="button" disabled={loading || !widgets} onClick={handlePayment}><LockKeyhole /><span>{loading ? '\uACB0\uC81C \uCC3D\uC744 \uC5EC\uB294 \uC911\uC785\uB2C8\uB2E4...' : `${won(selected.price)} \uACB0\uC81C\uD558\uACE0 \uC774\uC6A9 \uC2DC\uC791\uD558\uAE30`}</span></button>{error && <p>{error}</p>}<small>{t.notice}</small>
+            </footer>
           </div>
         </section>
       </div>}
