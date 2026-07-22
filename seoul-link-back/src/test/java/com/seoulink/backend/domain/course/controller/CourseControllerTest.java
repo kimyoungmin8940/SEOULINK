@@ -9,6 +9,7 @@ import com.seoulink.backend.domain.course.dto.response.CourseRecommendResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseRecommendationResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseSaveResponse;
 import com.seoulink.backend.domain.course.model.TransportMode;
+import com.seoulink.backend.domain.course.service.CourseDraftService;
 import com.seoulink.backend.domain.course.service.CourseOptimizationService;
 import com.seoulink.backend.domain.course.service.CourseRecommendationService;
 import com.seoulink.backend.domain.course.service.CourseSaveService;
@@ -58,6 +59,7 @@ class CourseControllerTest {
         courseService = mock(CourseService.class);
 
         mockMvc = standaloneSetup(new CourseController(
+                        mock(CourseDraftService.class),
                         optimizationService,
                         courseRecommendationService,
                         courseSaveService,

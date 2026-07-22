@@ -46,6 +46,12 @@ export const recommendCourse = (data, options = {}) => apiClient.post(
     options,
 );
 
+/** 저장된 설문을 날짜별 추천 후보 풀로 변환해 최적화 입력 초안을 받습니다. */
+export const getCourseDraft = (surveyId, options = {}) => apiClient.get(
+    `/courses/draft?surveyId=${requirePositiveId(Number(surveyId), '설문 ID')}`,
+    options,
+);
+
 /**
  * 사용자가 확정한 최적화 코스를 저장합니다.
  * @param {import('../types/course').CourseSaveRequest} data

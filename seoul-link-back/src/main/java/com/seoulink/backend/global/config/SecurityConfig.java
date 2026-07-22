@@ -2,44 +2,44 @@ package com.seoulink.backend.global.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.web.SecurityFilterChain;
-import jakarta.servlet.DispatcherType;
 
 /**
- * 애플리케이션의 HTTP 보안 규칙을 설정한다.
+ * OAuth 보안 설정을 사용하지 않는 환경의 기본 HTTP 보안 규칙을 설정한다.
  */
 @Configuration
 @EnableWebSecurity
+@Profile("!oauth")
 public class SecurityConfig {
 
     /**
-     * 코스 API는 로그인 기능이 완성되기 전까지 테스트할 수 있도록 공개한다.
-     * 다른 요청은 기존처럼 인증이 필요하다.
+     * 로그인·JWT 통합 전까지 장소 추천과 코스 API를 프론트에서 테스트할 수 있도록
+     * 요청을 허용하고, REST API에 불필요한 기본 로그인 방식은 비활성화한다.
      */
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                // 로컬 API 테스트를 위해 코스 API의 CSRF 검사 제외
-                .csrf(csrf -> csrf
-                        .ignoringRequestMatchers(
-                                "/api/courses",
-                                "/api/courses/**"
-                        )
-                )
+                // 현재 API는 세션 기반 폼 요청을 사용하지 않으므로 CSRF 검사를 비활성화한다.
+                .csrf(csrf -> csrf.disable())
+                // CorsConfig에 정의한 프론트엔드 허용 규칙을 Spring Security에도 적용한다.
+                .cors(Customizer.withDefaults())
+                .formLogin(form -> form.disable())
+                .httpBasic(basic -> basic.disable())
                 .authorizeHttpRequests(authorize -> authorize
-                        // 예외 처리 과정에서 다시 전달되는 /error 요청은 인증 없이 통과시킨다.
-                        .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
-                        // 로그인 연동 전까지 코스와 내 코스 조회 API 테스트 허용
+                        // 추천 후보 생성과 코스 최적화·저장·조회 흐름을 모두 테스트할 수 있다.
                         .requestMatchers(
                                 "/error",
+                                "/api/places/**",
                                 "/api/courses",
                                 "/api/courses/**",
                                 "/api/members/me/courses"
                         ).permitAll()
-                        // 위 임시 허용 경로를 제외한 기존 API는 인증된 사용자만 접근한다.
-                        .anyRequest().authenticated()
+                        // 인증 기능이 완성되기 전까지 나머지 API도 임시로 허용한다.
+                        .anyRequest().permitAll()
                 );
 
         return http.build();

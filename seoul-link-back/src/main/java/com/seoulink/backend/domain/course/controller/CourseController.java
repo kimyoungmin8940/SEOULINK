@@ -6,16 +6,19 @@ import com.seoulink.backend.domain.course.dto.request.CourseRecommendRequest;
 import com.seoulink.backend.domain.course.dto.request.CourseSaveRequest;
 import com.seoulink.backend.domain.course.dto.response.CourseBatchSaveResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseDetailResponse;
+import com.seoulink.backend.domain.course.dto.response.CourseDraftResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseErrorResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseOptimizeResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseRecommendResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseRecommendationResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseSaveResponse;
+import com.seoulink.backend.domain.course.service.CourseDraftService;
 import com.seoulink.backend.domain.course.service.CourseOptimizationService;
 import com.seoulink.backend.domain.course.service.CourseRecommendationService;
 import com.seoulink.backend.domain.course.service.CourseSaveService;
 import com.seoulink.backend.domain.course.service.CourseService;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -31,28 +34,39 @@ import java.util.List;
 import java.util.NoSuchElementException;
 
 /**
- * 여행 코스 최적화·저장·조회 HTTP 요청을 처리한다.
+ * 추천 후보 초안 생성부터 코스 최적화·저장·조회까지의 HTTP 요청을 처리한다.
  */
 @RestController
 @RequestMapping("/api/courses")
 public class CourseController {
 
-    // 최적화만 실행하는 흐름, 최적화 후 저장하는 흐름, 저장·조회 흐름을 각각 분리한다.
+    // 후보 초안, 최적화, 추천 코스 생성, 저장, 조회 책임을 각 서비스에 위임한다.
+    private final CourseDraftService courseDraftService;
     private final CourseOptimizationService courseOptimizationService;
     private final CourseRecommendationService courseRecommendationService;
     private final CourseSaveService courseSaveService;
     private final CourseService courseService;
 
     public CourseController(
+            CourseDraftService courseDraftService,
             CourseOptimizationService courseOptimizationService,
             CourseRecommendationService courseRecommendationService,
             CourseSaveService courseSaveService,
             CourseService courseService
     ) {
+        this.courseDraftService = courseDraftService;
         this.courseOptimizationService = courseOptimizationService;
         this.courseRecommendationService = courseRecommendationService;
         this.courseSaveService = courseSaveService;
         this.courseService = courseService;
+    }
+
+    /** 설문 번호를 기준으로 날짜별 추천 장소 후보 초안을 생성한다. */
+    @GetMapping("/draft")
+    public ResponseEntity<CourseDraftResponse> getCourseDraft(
+            @RequestParam Long surveyId
+    ) {
+        return ResponseEntity.ok(courseDraftService.createDraft(surveyId));
     }
 
     /**

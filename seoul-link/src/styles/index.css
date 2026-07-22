@@ -19,6 +19,8 @@
 @import './layout.css';
 @import './page.css';
 @import './survey.css';
+/* 취향 검사 결과 분석 화면 전용 스타일 */
+@import './travelPreference.css';
 @import './category.css';
 @import './course.css';
 /* 취향 검사 완료 후 표시되는 맞춤 추천 결과 화면 */

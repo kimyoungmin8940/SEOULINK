@@ -35,6 +35,22 @@ function getToday() {
     return localToday.toISOString().slice(0, 10);
 }
 
+/** 시작일을 포함해 최대 7일까지 선택할 수 있도록 종료일 상한을 계산합니다. */
+function getMaximumEndDate(startDate) {
+    if (!startDate) {
+        return '';
+    }
+
+    const maximumEndDate = new Date(`${startDate}T00:00:00`);
+    maximumEndDate.setDate(maximumEndDate.getDate() + 6);
+
+    const localMaximumEndDate = new Date(
+        maximumEndDate.getTime() - maximumEndDate.getTimezoneOffset() * 60 * 1000,
+    );
+
+    return localMaximumEndDate.toISOString().slice(0, 10);
+}
+
 function getInitialTravelInfo() {
     try {
         const storedTravelInfo = sessionStorage.getItem(TRAVEL_INFO_STORAGE_KEY);
@@ -58,6 +74,10 @@ function TravelInfoPage() {
     const [travelInfo, setTravelInfo] = useState(getInitialTravelInfo);
     const [errorMessage, setErrorMessage] = useState('');
     const today = useMemo(() => getToday(), []);
+    const maximumEndDate = useMemo(
+        () => getMaximumEndDate(travelInfo.startDate),
+        [travelInfo.startDate],
+    );
 
     const travelDays = useMemo(() => {
         if (!travelInfo.startDate || !travelInfo.endDate) {
@@ -92,6 +112,11 @@ function TravelInfoPage() {
             return;
         }
 
+        if (travelDays > 7) {
+            setErrorMessage('여행 기간은 최대 7일까지 선택할 수 있습니다.');
+            return;
+        }
+
         if (!travelInfo.companionType) {
             setErrorMessage('누구와 여행하는지 선택해주세요.');
             return;
@@ -105,6 +130,7 @@ function TravelInfoPage() {
         sessionStorage.setItem(
             TRAVEL_INFO_STORAGE_KEY,
             JSON.stringify({
+                region: '서울',
                 ...travelInfo,
                 travelDays,
             }),
@@ -152,6 +178,7 @@ function TravelInfoPage() {
                                 <input
                                     type="date"
                                     min={travelInfo.startDate || today}
+                                    max={maximumEndDate || undefined}
                                     value={travelInfo.endDate}
                                     onChange={(event) => updateTravelInfo('endDate', event.target.value)}
                                 />
