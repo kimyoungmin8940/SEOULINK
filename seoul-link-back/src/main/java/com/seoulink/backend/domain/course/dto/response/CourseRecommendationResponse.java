@@ -6,6 +6,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -28,6 +30,7 @@ public class CourseRecommendationResponse {
     private String title;
     private String description;
     private String coverImageUrl;
+    private String courseType;
 
     @Builder.Default
     private List<String> regions = new ArrayList<>();
@@ -38,10 +41,13 @@ public class CourseRecommendationResponse {
     // 카드에서 소요 규모를 보여 주기 위한 코스 집계값이다.
     private Integer placeCount;
     private Integer dayCount;
+    private LocalDate startDate;
+    private LocalDate endDate;
     private Double totalDistanceKm;
     private Double totalTravelTimeMinutes;
     private Integer totalVisitTimeMinutes;
     private Double totalCourseTimeMinutes;
+    private LocalDateTime createdAt;
 
     // 하트 도메인 연동 전에는 조회 서비스가 false로 채우는 임시 필드이다.
     private Boolean liked;

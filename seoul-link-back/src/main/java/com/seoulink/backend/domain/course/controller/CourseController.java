@@ -99,8 +99,23 @@ public class CourseController {
 
     /** 저장된 코스 기본정보와 날짜별 장소 순서를 조회한다. */
     @GetMapping("/{courseId}")
-    public CourseDetailResponse getCourse(@PathVariable Long courseId) {
-        return courseService.getCourse(courseId);
+    public CourseDetailResponse getCourse(
+            @PathVariable Long courseId,
+            @RequestParam(required = false) Long memberId
+    ) {
+        // 로그인 통합 전에는 memberId가 전달된 경우에만 비공개 코스 소유권을 확인한다.
+        // JWT 인증이 합쳐지면 쿼리 파라미터 대신 인증 객체의 회원 ID를 넘기면 된다.
+        return memberId == null
+                ? courseService.getCourse(courseId)
+                : courseService.getMemberCourse(courseId, memberId);
+    }
+
+    /** 로그인 회원이 저장한 모든 코스를 최신순으로 조회한다. */
+    @GetMapping("/my")
+    public List<CourseRecommendationResponse> getMyCourses(
+            @RequestParam Long memberId
+    ) {
+        return courseService.getMemberCourses(memberId);
     }
 
     /** 로그인 연동 전에는 memberId를 임시 쿼리 파라미터로 받는다. */

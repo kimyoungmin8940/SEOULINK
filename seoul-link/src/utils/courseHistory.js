@@ -3,6 +3,7 @@ const RECOMMENDATION_STORAGE_KEYS = [
     'myRecommendedCourses',
     'recommendationCourses',
 ];
+const MY_COURSE_STORAGE_KEY = 'seoulinkMyCourses';
 
 /** 로그인·코스 캐시의 손상된 JSON을 무시하고 null로 처리합니다. */
 function safelyParse(value) {
@@ -87,6 +88,29 @@ export function writeRecommendedCourseCache(courses) {
     );
 }
 
+/** 내 코스 화면을 서버 응답 전에도 바로 채우기 위한 최근 저장 목록을 읽습니다. */
+export function readMyCourseCache(memberId = null) {
+    const parsed = safelyParse(localStorage.getItem(MY_COURSE_STORAGE_KEY));
+
+    // 이전 개발 데이터의 배열 형식도 한동안 읽을 수 있게 유지합니다.
+    if (Array.isArray(parsed)) return parsed;
+    if (!parsed || !Array.isArray(parsed.courses)) return [];
+    if (memberId && Number(parsed.memberId) !== Number(memberId)) return [];
+
+    return parsed.courses;
+}
+
+/** 저장 성공 직후 내 코스 화면에서 사용할 요약 목록을 갱신합니다. */
+export function writeMyCourseCache(courses, memberId = null) {
+    localStorage.setItem(
+        MY_COURSE_STORAGE_KEY,
+        JSON.stringify({
+            memberId,
+            courses: Array.isArray(courses) ? courses : [],
+        }),
+    );
+}
+
 /** 서버 상세 응답의 이미지·태그를 보완할 같은 코스의 로컬 요약을 찾습니다. */
 export function findCachedRecommendedCourse(courseId) {
     return readRecommendedCourseCache().find(
@@ -114,9 +138,13 @@ export function normalizeRecommendedCourseList(
 ) {
     const list = Array.isArray(response)
         ? response
-        : Array.isArray(response?.data)
-            ? response.data
-            : [];
+        : Array.isArray(response?.content)
+            ? response.content
+            : Array.isArray(response?.data)
+                ? response.data
+                : Array.isArray(response?.data?.content)
+                    ? response.data.content
+                    : [];
     const cachedById = new Map(
         cachedCourses
             .map((course) => [getCourseId(course), course])
@@ -174,4 +202,26 @@ export function normalizeRecommendedCourseList(
             };
         })
         .filter((course) => course.courseId);
+}
+
+/** 내 코스 API 응답을 카드 모델로 통일하고 여행 시작·종료일을 보존합니다. */
+export function normalizeMyCourseList(
+    response,
+    { cachedCourses = [], fallbackImages = [] } = {},
+) {
+    return normalizeRecommendedCourseList(response, {
+        cachedCourses,
+        fallbackImages,
+    }).map((course) => ({
+        ...course,
+        startDate: course.startDate
+            || course.travelStartDate
+            || course.firstVisitDate
+            || null,
+        endDate: course.endDate
+            || course.travelEndDate
+            || course.lastVisitDate
+            || course.startDate
+            || null,
+    }));
 }

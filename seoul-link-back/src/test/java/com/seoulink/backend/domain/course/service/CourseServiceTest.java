@@ -137,6 +137,53 @@ class CourseServiceTest {
     }
 
     @Test
+    @DisplayName("회원은 자신이 저장한 비공개 코스 상세만 조회한다")
+    void getMemberCourse() {
+        LocalDate visitDate = LocalDate.of(2026, 7, 20);
+        TravelCourse privateCourse = TravelCourse.builder()
+                .courseId(11L)
+                .memberId(1L)
+                .title("내 비공개 코스")
+                .publicStatus("N")
+                .build();
+        List<CourseDetail> details = List.of(detail(
+                110L,
+                11L,
+                1L,
+                1,
+                1,
+                visitDate,
+                90,
+                0.0,
+                0.0
+        ));
+
+        when(travelCourseRepository.findByCourseIdAndMemberId(11L, 1L))
+                .thenReturn(Optional.of(privateCourse));
+        when(courseDetailRepository
+                .findByCourseIdOrderByDayNoAscPlaceOrderAsc(11L))
+                .thenReturn(details);
+
+        CourseDetailResponse response = courseService.getMemberCourse(11L, 1L);
+
+        assertEquals(11L, response.getCourseId());
+        assertEquals("내 비공개 코스", response.getTitle());
+        assertEquals(1, response.getPlaceCount());
+    }
+
+    @Test
+    @DisplayName("다른 회원의 비공개 코스 상세는 존재하지 않는 코스처럼 처리한다")
+    void rejectOtherMembersCourse() {
+        when(travelCourseRepository.findByCourseIdAndMemberId(11L, 2L))
+                .thenReturn(Optional.empty());
+
+        assertThrows(
+                NoSuchElementException.class,
+                () -> courseService.getMemberCourse(11L, 2L)
+        );
+    }
+
+    @Test
     @DisplayName("회원의 SURVEY 추천 코스만 최신순으로 조회한다")
     void getRecommendedCourses() {
         TravelCourse recommended = TravelCourse.builder()
@@ -208,6 +255,9 @@ class CourseServiceTest {
         assertEquals(30L, response.get(0).getCourseId());
         assertEquals("내 서울 코스", response.get(0).getTitle());
         assertEquals(1, response.get(0).getPlaceCount());
+        assertEquals("CUSTOM", response.get(0).getCourseType());
+        assertEquals(LocalDate.of(2026, 7, 20), response.get(0).getStartDate());
+        assertEquals(LocalDate.of(2026, 7, 20), response.get(0).getEndDate());
     }
 
     /** 날짜와 순서가 다른 상세 장소 엔티티를 만드는 테스트 헬퍼이다. */

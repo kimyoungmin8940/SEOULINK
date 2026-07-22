@@ -521,6 +521,33 @@ class CourseControllerTest {
     }
 
     @Test
+    @DisplayName("회원 ID와 코스 ID로 본인이 저장한 코스 상세를 조회한다")
+    void getMemberCourse() throws Exception {
+        when(courseService.getMemberCourse(10L, 1L))
+                .thenReturn(CourseDetailResponse.builder()
+                        .courseId(10L)
+                        .title("내 서울 코스")
+                        .publicCourse(false)
+                        .placeCount(1)
+                        .dayCount(1)
+                        .days(List.of(CourseDayResponse.builder()
+                                .dayNo(1)
+                                .visitDate(java.time.LocalDate.of(2026, 7, 20))
+                                .places(List.of(CoursePlaceResponse.builder()
+                                        .placeId(1L)
+                                        .visitOrder(1)
+                                        .build()))
+                                .build()))
+                        .build());
+
+        mockMvc.perform(get("/api/courses/10")
+                        .param("memberId", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.courseId").value(10))
+                .andExpect(jsonPath("$.title").value("내 서울 코스"));
+    }
+
+    @Test
     @DisplayName("존재하지 않는 코스는 코드가 포함된 404 응답을 반환한다")
     void getUnknownCourse() throws Exception {
         when(courseService.getCourse(999L))
@@ -569,5 +596,27 @@ class CourseControllerTest {
                 .andExpect(jsonPath("$[0].courseId").value(20))
                 .andExpect(jsonPath("$[0].title").value("서울 추천 코스"))
                 .andExpect(jsonPath("$[0].placeCount").value(3));
+    }
+
+    @Test
+    @DisplayName("회원의 내 코스 목록을 새 API 경로로 조회한다")
+    void getMyCourses() throws Exception {
+        when(courseService.getMemberCourses(1L))
+                .thenReturn(List.of(CourseRecommendationResponse.builder()
+                        .courseId(30L)
+                        .title("내 서울 코스")
+                        .courseType("SURVEY")
+                        .startDate(java.time.LocalDate.of(2026, 7, 20))
+                        .endDate(java.time.LocalDate.of(2026, 7, 21))
+                        .placeCount(4)
+                        .dayCount(2)
+                        .build()));
+
+        mockMvc.perform(get("/api/courses/my")
+                        .param("memberId", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].courseId").value(30))
+                .andExpect(jsonPath("$[0].startDate").value("2026-07-20"))
+                .andExpect(jsonPath("$[0].endDate").value("2026-07-21"));
     }
 }

@@ -146,6 +146,11 @@ function Router() {
         return <CourseListPage />;
     }
 
+    // /mypage/courses/1 같은 내 코스 상세 페이지는 로그인 보호 경로로 처리합니다.
+    if (pathname.startsWith('/mypage/courses/')) {
+        return <CourseDetailPage />;
+    }
+
     // /courses/1 같은 일반 코스 상세 페이지 경로 처리
     if (pathname.startsWith('/courses/')) {
         return <CourseDetailPage />;

@@ -23,7 +23,10 @@ import Footer from '../../components/common/Footer';
 import CoursePlaceList from '../../components/course/CoursePlaceList';
 import KakaoCourseMap from '../../components/course/KakaoCourseMap';
 import { getCourseDetail } from '../../api/courseApi';
-import { findCachedRecommendedCourse } from '../../utils/courseHistory';
+import {
+    findCachedRecommendedCourse,
+    getCurrentMemberId,
+} from '../../utils/courseHistory';
 import recommendationPreview from '../../mocks/courseRecommendation.json';
 import { mockThemeCourseListResponse } from '../../mocks/homeMockData';
 import hanokImage from '../../assets/images/moods/mood-hanok-photo.png';
@@ -57,7 +60,7 @@ const COURSE_DETAIL_ENTRY_KEY = 'seoulinkCourseDetailEntry';
 /** 지원하는 상세 경로 전체가 정확히 일치할 때만 조회할 courseId를 구합니다. */
 function getCourseId() {
     const match = window.location.pathname.match(
-        /^\/courses\/(?:recommendations\/)?([1-9]\d*)\/?$/,
+        /^(?:\/courses\/(?:recommendations\/)?|\/mypage\/courses\/)([1-9]\d*)\/?$/,
     );
     const courseId = Number(match?.[1]);
 
@@ -66,6 +69,10 @@ function getCourseId() {
 
 /** 현재 상세 경로의 종류에 맞는 안전한 목록 복귀 경로를 반환합니다. */
 function getCourseListPath() {
+    if (window.location.pathname.startsWith('/mypage/courses/')) {
+        return '/mypage/courses';
+    }
+
     return window.location.pathname.startsWith('/courses/recommendations/')
         ? '/courses/recommendations'
         : '/courses/list';
@@ -261,7 +268,7 @@ function normalizeApiCourseDetail(response, courseId) {
     });
 }
 
-/** API 오류 시에도 상세 화면 디자인을 확인할 수 있도록 캐시·더미 데이터로 임시 코스를 만듭니다. */
+/** 상세 API를 사용할 수 없을 때 사용자가 선택해서 확인할 수 있는 UI 미리보기를 만듭니다. */
 function buildPreviewCourse(courseId) {
     const entrySummary = readCourseDetailEntry(courseId)?.summary
         || findCachedRecommendedCourse(courseId)
@@ -291,7 +298,7 @@ function buildPreviewCourse(courseId) {
         coverImageUrl: summary?.coverImageUrl || summary?.imageUrl || hanokImage,
         travelCode: summary ? null : recommendationPreview.travelCode,
         courseType: summary?.themeCode ? 'THEME' : 'SURVEY',
-        region: summary?.area || '서울',
+        region: summary?.area || summary?.region || '서울',
         tags: summary?.tags || [],
         liked: summary?.liked ?? false,
         publicCourse: true,
@@ -395,6 +402,7 @@ function CourseRouteMap({ day }) {
 function CourseDetailPage() {
     const courseId = useMemo(() => getCourseId(), []);
     const courseListPath = useMemo(() => getCourseListPath(), []);
+    const memberId = useMemo(() => getCurrentMemberId(), []);
     const previewCourse = useMemo(() => buildPreviewCourse(courseId), [courseId]);
     const [course, setCourse] = useState(null);
     const [status, setStatus] = useState(courseId ? 'loading' : 'redirecting');
@@ -415,7 +423,10 @@ function CourseDetailPage() {
         const controller = new AbortController();
 
         // 목록 요약이 아닌 저장 코스 상세 API를 기준으로 일정과 이동 정보를 갱신합니다.
-        getCourseDetail(courseId, { signal: controller.signal })
+        getCourseDetail(courseId, {
+            memberId,
+            signal: controller.signal,
+        })
             .then((response) => {
                 const normalizedCourse = normalizeApiCourseDetail(response, courseId);
 
@@ -443,7 +454,7 @@ function CourseDetailPage() {
             });
 
         return () => controller.abort();
-    }, [courseId, courseListPath, reloadKey]);
+    }, [courseId, courseListPath, memberId, reloadKey]);
 
     const activeDay = course?.days.find((day) => day.dayNo === activeDayNo)
         || course?.days[0]
@@ -570,8 +581,11 @@ function CourseDetailPage() {
                         <h1>코스를 찾을 수 없어요</h1>
                         <p>{errorMessage || '삭제되었거나 존재하지 않는 코스입니다.'}</p>
                         <div>
-                            <button type="button" onClick={showPreview}>
-                                임시 페이지 보기
+                            <button type="button" onClick={handleReturnToCourseList}>
+                                내 코스로 돌아가기
+                            </button>
+                            <button className="secondary" type="button" onClick={showPreview}>
+                                임시 화면 보기
                             </button>
                         </div>
                     </section>
@@ -583,8 +597,11 @@ function CourseDetailPage() {
                         <h1>표시할 코스 일정이 없어요</h1>
                         <p>저장된 장소 정보가 비어 있습니다. 목록에서 다른 코스를 선택해주세요.</p>
                         <div>
-                            <button type="button" onClick={showPreview}>
-                                임시 페이지 보기
+                            <button type="button" onClick={handleReturnToCourseList}>
+                                내 코스로 돌아가기
+                            </button>
+                            <button className="secondary" type="button" onClick={showPreview}>
+                                임시 화면 보기
                             </button>
                         </div>
                     </section>
@@ -600,7 +617,7 @@ function CourseDetailPage() {
                                 <RefreshCw size={16} aria-hidden="true" /> 다시 불러오기
                             </button>
                             <button className="secondary" type="button" onClick={showPreview}>
-                                임시 페이지 보기
+                                임시 화면 보기
                             </button>
                         </div>
                     </section>

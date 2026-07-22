@@ -158,7 +158,16 @@ function ExpandedSchedule({ days }) {
                             const Icon = meta.Icon;
 
                             return (
-                                <li key={`${day.dayNo}-${place.placeId}-${place.visitOrder ?? index}`}>
+                                <li
+                                    className={index > 0 ? 'has-transfer' : undefined}
+                                    key={`${day.dayNo}-${place.placeId}-${place.visitOrder ?? index}`}
+                                >
+                                    {index > 0 && (
+                                        <span className="course-result-expanded-move">
+                                            <Footprints size={13} aria-hidden="true" />
+                                            {Number(place.distanceFromPreviousKm || 0).toFixed(1)}km · {Math.round(place.travelTimeFromPreviousMinutes || 0)}분
+                                        </span>
+                                    )}
                                     <span className={`course-result-expanded-icon ${meta.tone}`}>
                                         <Icon size={17} strokeWidth={1.9} aria-hidden="true" />
                                     </span>
@@ -170,12 +179,6 @@ function ExpandedSchedule({ days }) {
                                     <span className="course-result-expanded-time">
                                         {place.expectedVisitTimeHHmm || place.visitTime || '--:--'}
                                     </span>
-                                    {index > 0 && (
-                                        <span className="course-result-expanded-move">
-                                            <Footprints size={13} aria-hidden="true" />
-                                            {Number(place.distanceFromPreviousKm || 0).toFixed(1)}km · {Math.round(place.travelTimeFromPreviousMinutes || 0)}분
-                                        </span>
-                                    )}
                                 </li>
                             );
                         })}

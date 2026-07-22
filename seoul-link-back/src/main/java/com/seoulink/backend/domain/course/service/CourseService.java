@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -43,16 +44,41 @@ public class CourseService {
      * 일정 정보만 반환한다. 장소 도메인 통합 시 placeId 목록으로 PLACES를 일괄 조회해
      * 장소명·카테고리·주소·이미지·좌표·테마를 함께 채워야 한다.</p>
      */
+    @Transactional(readOnly = true)
     public CourseDetailResponse getCourse(Long courseId) {
-        if (courseId == null || courseId < 1) {
-            throw new IllegalArgumentException("코스 ID는 1 이상이어야 합니다.");
-        }
+        validateCourseId(courseId);
 
-        // 코스 기본 행과 상세 장소 행을 각각 조회한 뒤 하나의 상세 응답으로 조립한다.
+        // 회원 ID 없이 조회하는 일반 상세 API는 공개 코스만 반환한다.
         TravelCourse course = travelCourseRepository.findById(courseId)
-                .orElseThrow(() -> new NoSuchElementException(
-                        "코스를 찾을 수 없습니다. courseId=" + courseId
-                ));
+                .filter(savedCourse -> "Y".equalsIgnoreCase(
+                        savedCourse.getPublicStatus()
+                ))
+                .orElseThrow(() -> courseNotFound(courseId));
+
+        return toDetailResponse(course);
+    }
+
+    /** 로그인 회원에게 본인 저장 코스 또는 공개 코스의 상세 일정을 반환한다. */
+    @Transactional(readOnly = true)
+    public CourseDetailResponse getMemberCourse(Long courseId, Long memberId) {
+        validateCourseId(courseId);
+        validateMemberId(memberId);
+
+        TravelCourse course = travelCourseRepository
+                .findByCourseIdAndMemberId(courseId, memberId)
+                // 로그인 회원도 다른 사람이 공개한 코스는 정상적으로 볼 수 있다.
+                .orElseGet(() -> travelCourseRepository.findById(courseId)
+                        .filter(savedCourse -> "Y".equalsIgnoreCase(
+                                savedCourse.getPublicStatus()
+                        ))
+                        .orElseThrow(() -> courseNotFound(courseId)));
+
+        return toDetailResponse(course);
+    }
+
+    /** 코스 기본 행과 상세 장소 행을 하나의 상세 응답으로 조립한다. */
+    private CourseDetailResponse toDetailResponse(TravelCourse course) {
+        Long courseId = course.getCourseId();
         List<CourseDetail> details =
                 courseDetailRepository.findByCourseIdOrderByDayNoAscPlaceOrderAsc(
                         courseId
@@ -117,6 +143,16 @@ public class CourseService {
                 .map(CourseDetail::getDayNo)
                 .distinct()
                 .count();
+        LocalDate startDate = details.stream()
+                .map(CourseDetail::getVisitDate)
+                .filter(java.util.Objects::nonNull)
+                .min(LocalDate::compareTo)
+                .orElse(null);
+        LocalDate endDate = details.stream()
+                .map(CourseDetail::getVisitDate)
+                .filter(java.util.Objects::nonNull)
+                .max(LocalDate::compareTo)
+                .orElse(null);
         List<String> regions = course.getRegion() == null
                 || course.getRegion().isBlank()
                 ? List.of()
@@ -126,13 +162,17 @@ public class CourseService {
                 .courseId(course.getCourseId())
                 .title(course.getTitle())
                 .description(course.getDescription())
+                .courseType(course.getCourseType())
                 .regions(regions)
                 .placeCount(details.size())
                 .dayCount(dayCount)
+                .startDate(startDate)
+                .endDate(endDate)
                 .totalDistanceKm(course.getTotalDistanceKm())
                 .totalTravelTimeMinutes(course.getTotalTravelTimeMinutes())
                 .totalVisitTimeMinutes(course.getTotalVisitTimeMinutes())
                 .totalCourseTimeMinutes(course.getTotalCourseTimeMinutes())
+                .createdAt(course.getCreatedAt())
                 // 코스 하트 테이블 연동 전까지는 미선택 상태로 반환한다.
                 .liked(false)
                 .build();
@@ -143,6 +183,20 @@ public class CourseService {
         if (memberId == null || memberId < 1) {
             throw new IllegalArgumentException("회원 ID는 1 이상이어야 합니다.");
         }
+    }
+
+    /** 잘못된 코스 식별자가 Repository까지 전달되지 않도록 공통 검증한다. */
+    private void validateCourseId(Long courseId) {
+        if (courseId == null || courseId < 1) {
+            throw new IllegalArgumentException("코스 ID는 1 이상이어야 합니다.");
+        }
+    }
+
+    /** 비공개 코스 존재 여부나 소유 회원 정보를 외부에 노출하지 않는 404 예외이다. */
+    private NoSuchElementException courseNotFound(Long courseId) {
+        return new NoSuchElementException(
+                "코스를 찾을 수 없습니다. courseId=" + courseId
+        );
     }
 
     /** 저장 상세를 dayNo 기준으로 묶어 추천 결과와 동일한 날짜별 구조를 만든다. */

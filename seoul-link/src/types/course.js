@@ -155,14 +155,18 @@
  * @property {string} title
  * @property {?string} description
  * @property {?string} coverImageUrl
+ * @property {'CUSTOM'|'SURVEY'|'CHATBOT'} courseType
  * @property {string[]} regions
  * @property {string[]} tags
  * @property {number} placeCount
  * @property {number} dayCount
+ * @property {?string} startDate YYYY-MM-DD
+ * @property {?string} endDate YYYY-MM-DD
  * @property {number} totalDistanceKm
  * @property {number} totalTravelTimeMinutes
  * @property {number} totalVisitTimeMinutes
  * @property {number} totalCourseTimeMinutes
+ * @property {?string} createdAt
  * @property {boolean} liked
  */
 

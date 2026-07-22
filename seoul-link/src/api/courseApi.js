@@ -76,10 +76,17 @@ export const saveCourses = (data, options = {}) => apiClient.post(
  * @param {RequestInit} [options]
  * @returns {Promise<import('../types/course').CourseDetailResponse>}
  */
-export const getCourseDetail = (courseId, options = {}) => apiClient.get(
-    `/courses/${requirePositiveId(courseId, '코스 ID')}`,
-    options,
-);
+export const getCourseDetail = (courseId, options = {}) => {
+    const { memberId, ...requestOptions } = options;
+    const query = memberId
+        ? `?memberId=${requirePositiveId(memberId, '회원 ID')}`
+        : '';
+
+    return apiClient.get(
+        `/courses/${requirePositiveId(courseId, '코스 ID')}${query}`,
+        requestOptions,
+    );
+};
 
 /**
  * 회원의 설문 기반 추천 코스 카드 목록을 조회합니다.
@@ -102,7 +109,7 @@ export const getCourses = getRecommendedCourses;
  * @returns {Promise<import('../types/course').CourseSummaryResponse[]>}
  */
 export const getMyCourses = (memberId, options = {}) => apiClient.get(
-    `/members/me/courses?memberId=${requirePositiveId(memberId, '회원 ID')}`,
+    `/courses/my?memberId=${requirePositiveId(memberId, '회원 ID')}`,
     options,
 );
 

@@ -23,7 +23,9 @@ import {
     COURSE_RECOMMEND_RESPONSE_KEY,
 } from '../../utils/courseRecommendationHandoff';
 import {
+    readMyCourseCache,
     readRecommendedCourseCache,
+    writeMyCourseCache,
     writeRecommendedCourseCache,
 } from '../../utils/courseHistory';
 import recommendationPreview from '../../mocks/courseRecommendation.json';
@@ -329,7 +331,7 @@ function buildSaveRequest(option, response, profile, travelCode) {
 }
 
 /** 서버 목록에 아직 없는 이미지·태그를 상세/목록 화면에서 보완할 로컬 요약을 저장합니다. */
-function storeRecommendedCourseSummary(option, savedCourse) {
+function storeRecommendedCourseSummary(option, savedCourse, memberId) {
     if (!savedCourse?.courseId) return;
 
     const places = (option.days || []).flatMap((day) => day.places || []);
@@ -350,6 +352,10 @@ function storeRecommendedCourseSummary(option, savedCourse) {
     const coverImageUrl = option.coverImageUrl
         || places.find((place) => place.imageUrl)?.imageUrl
         || fallbackImages[0];
+    const visitDates = (option.days || [])
+        .map((day) => day?.visitDate)
+        .filter(Boolean)
+        .sort();
     const previousCourses = readRecommendedCourseCache();
     const summary = {
         courseId: savedCourse.courseId,
@@ -362,6 +368,8 @@ function storeRecommendedCourseSummary(option, savedCourse) {
         tags: tags.length > 0 ? tags : ['추천코스', '취향맞춤'],
         placeCount: savedCourse.placeCount ?? getOptionPlaceCount(option),
         dayCount: savedCourse.dayCount ?? option.days?.length ?? 1,
+        startDate: visitDates[0] || null,
+        endDate: visitDates[visitDates.length - 1] || visitDates[0] || null,
         totalDistanceKm: savedCourse.totalDistanceKm ?? option.totalDistanceKm,
         totalCourseTimeMinutes: savedCourse.totalCourseTimeMinutes
             ?? option.totalCourseTimeMinutes,
@@ -377,6 +385,12 @@ function storeRecommendedCourseSummary(option, savedCourse) {
     ].slice(0, 50);
 
     writeRecommendedCourseCache(nextCourses);
+
+    const previousMyCourses = readMyCourseCache(memberId);
+    writeMyCourseCache([
+        summary,
+        ...previousMyCourses.filter((course) => course?.courseId !== summary.courseId),
+    ].slice(0, 50), memberId);
 }
 
 /** 추천 API 응답을 기다리는 동안 세 개 옵션의 자리와 비슷한 스켈레톤을 표시합니다. */
@@ -659,7 +673,11 @@ function CourseRecommendPage() {
 
                 // 서버 저장 성공 뒤 로컬 요약 보완이 실패해도 같은 코스를 다시 저장하지 않게 합니다.
                 try {
-                    storeRecommendedCourseSummary(option, savedCourse);
+                    storeRecommendedCourseSummary(
+                        option,
+                        savedCourse,
+                        profile.memberId,
+                    );
                 } catch {
                     // 목록 API가 연결되면 서버 데이터로 다시 채워집니다.
                 }
@@ -888,13 +906,8 @@ function CourseRecommendPage() {
                 <div className={`course-result-toast ${notice.tone}`} role="status">
                     <span>{notice.tone === 'success' ? <Check size={18} aria-hidden="true" /> : <Info size={18} aria-hidden="true" />}</span>
                     <p>{notice.message}</p>
-                    {lastSavedCourseIds.length === 1 && (
-                        <a href={`/courses/recommendations/${lastSavedCourseIds[0]}`}>
-                            저장한 코스 상세보기
-                        </a>
-                    )}
-                    {lastSavedCourseIds.length > 1 && (
-                        <a href="/courses/recommendations">저장한 코스 목록 보기</a>
+                    {lastSavedCourseIds.length > 0 && (
+                        <a href="/mypage/courses">내 코스에서 확인하기</a>
                     )}
                     <button type="button" aria-label="알림 닫기" onClick={() => setNotice(null)}>
                         <X size={16} aria-hidden="true" />
