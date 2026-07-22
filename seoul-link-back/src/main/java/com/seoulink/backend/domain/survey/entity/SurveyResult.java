@@ -11,7 +11,6 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
@@ -57,32 +56,13 @@ public class SurveyResult {
     )
     private String travelCode;
 
-    //날씨 상태
-    @Column(
-            name = "WEATHER_STATUS",
-            length = 50
-    )
-    private String weatherStatus;
-
-    //여행지의 기온
-    @Column(
-            name = "TEMPERATURE",
-            precision = 4,
-            scale = 1
-    )
-    private BigDecimal temperature;
-
-    //강수 확률
-    @Column(name = "RAIN_PROBABILITY")
-    private Integer rainProbability;
-
     @Column(
             name = "CREATED_AT",
             nullable = false
     )
     private LocalDateTime createdAt;
 
-    //날씨 정보 없이 설문 결과를 생성
+    // 설문 실행 번호와 여행 유형 코드로 결과를 생성한다.
     public static SurveyResult create(
             Long surveyId,
             String travelCode
@@ -93,48 +73,11 @@ public class SurveyResult {
         SurveyResult result = new SurveyResult();
 
         result.surveyId = surveyId;
-        result.travelCode = travelCode;
+        result.travelCode =
+                travelCode.trim().toUpperCase();
         result.createdAt = LocalDateTime.now();
 
         return result;
-    }
-
-    //날씨 정보를 포함하여 설문 결과를 생성
-    public static SurveyResult createWithWeather(
-            Long surveyId,
-            String travelCode,
-            String weatherStatus,
-            BigDecimal temperature,
-            Integer rainProbability
-    ) {
-        validateSurveyId(surveyId);
-        validateTravelCode(travelCode);
-        validateRainProbability(rainProbability);
-
-        SurveyResult result = new SurveyResult();
-
-        result.surveyId = surveyId;
-        result.travelCode = travelCode;
-        result.weatherStatus = weatherStatus;
-        result.temperature = temperature;
-        result.rainProbability = rainProbability;
-        result.createdAt = LocalDateTime.now();
-
-        return result;
-    }
-
-    //날씨 정보를 새로 입력하거나 갱신
-
-    public void updateWeather(
-            String weatherStatus,
-            BigDecimal temperature,
-            Integer rainProbability
-    ) {
-        validateRainProbability(rainProbability);
-
-        this.weatherStatus = weatherStatus;
-        this.temperature = temperature;
-        this.rainProbability = rainProbability;
     }
 
     private static void validateSurveyId(Long surveyId) {
@@ -153,18 +96,6 @@ public class SurveyResult {
                 travelCode.length() != 5) {
             throw new IllegalArgumentException(
                     "여행 유형 코드는 5글자여야 합니다."
-            );
-        }
-    }
-
-    private static void validateRainProbability(
-            Integer rainProbability
-    ) {
-        if (rainProbability != null &&
-                (rainProbability < 0 ||
-                        rainProbability > 100)) {
-            throw new IllegalArgumentException(
-                    "강수 확률은 0부터 100 사이여야 합니다."
             );
         }
     }

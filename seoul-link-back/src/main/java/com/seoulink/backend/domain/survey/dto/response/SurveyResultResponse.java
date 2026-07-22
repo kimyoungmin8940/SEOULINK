@@ -3,7 +3,6 @@ package com.seoulink.backend.domain.survey.dto.response;
 import com.seoulink.backend.domain.survey.entity.SurveyResult;
 import com.seoulink.backend.domain.survey.entity.TravelTypeMaster;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
@@ -18,10 +17,6 @@ public record SurveyResultResponse(
         String typeTitle,
         String typeDescription,
         String imageUrl,
-
-        String weatherStatus,
-        BigDecimal temperature,
-        Integer rainProbability,
 
         LocalDateTime createdAt
 
@@ -40,10 +35,6 @@ public record SurveyResultResponse(
                 travelType.getTypeTitle(),
                 travelType.getTypeDescription(),
                 travelType.getImageUrl(),
-
-                result.getWeatherStatus(),
-                result.getTemperature(),
-                result.getRainProbability(),
 
                 result.getCreatedAt()
         );
