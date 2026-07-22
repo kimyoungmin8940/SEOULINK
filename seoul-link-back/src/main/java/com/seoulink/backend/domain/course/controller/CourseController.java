@@ -16,6 +16,7 @@ import com.seoulink.backend.domain.course.service.CourseRecommendationService;
 import com.seoulink.backend.domain.course.service.CourseSaveService;
 import com.seoulink.backend.domain.course.service.CourseService;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -136,6 +137,18 @@ public class CourseController {
             IllegalArgumentException exception
     ) {
         return new CourseErrorResponse("INVALID_REQUEST", exception.getMessage());
+    }
+
+    /** enum에 없는 이동수단처럼 JSON 자체를 변환할 수 없는 요청도 400으로 반환한다. */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public CourseErrorResponse handleUnreadableRequest(
+            HttpMessageNotReadableException exception
+    ) {
+        return new CourseErrorResponse(
+                "INVALID_REQUEST",
+                "요청 JSON의 값 또는 형식이 올바르지 않습니다."
+        );
     }
 
     /** 존재하지 않는 코스를 조회한 경우 404 응답으로 변환한다. */

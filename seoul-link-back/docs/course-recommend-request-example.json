@@ -1,6 +1,11 @@
 {
+  "surveyId": 1,
   "resultId": 101,
   "travelCode": "ATLSR",
+  "transportMode": "PUBLIC_TRANSIT",
+  "startDate": "2026-07-20",
+  "endDate": "2026-07-21",
+  "travelDays": 2,
   "dailyStartTime": "10:00",
 
   "dailyPlans": [

@@ -1,6 +1,7 @@
 package com.seoulink.backend.domain.course.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.seoulink.backend.domain.course.model.TransportMode;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -22,6 +23,10 @@ public class CourseRecommendResponse {
     // 요청과 결과를 연결하는 설문 결과 식별자·여행 유형 코드·공통 시작 시각이다.
     private Long resultId;
     private String travelCode;
+    private TransportMode transportMode;
+
+    // true이면 외부 경로 API가 아닌 임시 추정 이동시간이 하나 이상 포함되었다.
+    private Boolean estimatedTravelTimes;
 
     @JsonFormat(pattern = "HH:mm")
     private LocalTime dailyStartTime;

@@ -1,5 +1,6 @@
 package com.seoulink.backend.domain.course.dto.response;
 
+import com.seoulink.backend.domain.course.model.TransportMode;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -18,6 +19,9 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 public class CourseOptimizeResponse {
+
+    private TransportMode transportMode;
+    private Boolean estimatedTravelTimes;
 
     // 날짜별 방문 순서와 장소 간 이동 정보가 계산된 결과이다.
     @Builder.Default

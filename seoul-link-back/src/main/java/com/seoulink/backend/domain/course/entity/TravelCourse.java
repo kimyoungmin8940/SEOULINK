@@ -1,7 +1,10 @@
 package com.seoulink.backend.domain.course.entity;
 
+import com.seoulink.backend.domain.course.model.TransportMode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -57,6 +60,11 @@ public class TravelCourse {
 
     @Column(name = "TRAVEL_CODE", length = 5)
     private String travelCode;
+
+    // JSON enum 이름과 DB 체크 제약조건 값을 동일한 문자열로 저장한다.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "TRANSPORT_MODE", nullable = false, length = 20)
+    private TransportMode transportMode;
 
     @Builder.Default
     @Column(name = "COURSE_TYPE", nullable = false, length = 20)

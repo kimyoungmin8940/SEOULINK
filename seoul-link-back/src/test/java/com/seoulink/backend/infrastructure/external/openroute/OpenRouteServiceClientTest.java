@@ -32,8 +32,7 @@ class OpenRouteServiceClientTest {
                 MockRestServiceServer.bindTo(builder).build();
         OpenRouteServiceClient client = new OpenRouteServiceClient(
                 builder.build(),
-                "test-api-key",
-                "foot-walking"
+                "test-api-key"
         );
 
         mockServer.expect(requestTo(
@@ -51,13 +50,54 @@ class OpenRouteServiceClientTest {
                         MediaType.APPLICATION_JSON
                 ));
 
-        RouteMatrixResult result = client.calculateMatrix(List.of(
-                new RouteCoordinate(126.9780, 37.5665),
-                new RouteCoordinate(126.9770, 37.5796)
-        ));
+        RouteMatrixResult result = client.calculateMatrix(
+                "foot-walking",
+                List.of(
+                        new RouteCoordinate(126.9780, 37.5665),
+                        new RouteCoordinate(126.9770, 37.5796)
+                )
+        );
 
         assertEquals(1.2, result.getDistanceKm(0, 1), 0.000001);
         assertEquals(15.0, result.getTravelTimeMinutes(0, 1), 0.000001);
+        mockServer.verify();
+    }
+
+    @Test
+    @DisplayName("요청별 자동차 프로필을 Matrix API 경로에 적용한다")
+    void calculateMatrixUsesRequestedDrivingProfile() {
+        RestClient.Builder builder = RestClient.builder()
+                .baseUrl("https://api.openrouteservice.org");
+        MockRestServiceServer mockServer =
+                MockRestServiceServer.bindTo(builder).build();
+        OpenRouteServiceClient client = new OpenRouteServiceClient(
+                builder.build(),
+                "test-api-key"
+        );
+
+        mockServer.expect(requestTo(
+                        "https://api.openrouteservice.org/v2/matrix/driving-car"
+                ))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess(
+                        """
+                        {
+                          "distances": [[0.0, 1.4], [1.4, 0.0]],
+                          "durations": [[0.0, 360.0], [360.0, 0.0]]
+                        }
+                        """,
+                        MediaType.APPLICATION_JSON
+                ));
+
+        RouteMatrixResult result = client.calculateMatrix(
+                "driving-car",
+                List.of(
+                        new RouteCoordinate(126.9780, 37.5665),
+                        new RouteCoordinate(126.9770, 37.5796)
+                )
+        );
+
+        assertEquals(6.0, result.getTravelTimeMinutes(0, 1), 0.000001);
         mockServer.verify();
     }
 
@@ -66,17 +106,19 @@ class OpenRouteServiceClientTest {
     void calculateMatrixRejectsMissingApiKey() {
         OpenRouteServiceClient client = new OpenRouteServiceClient(
                 RestClient.create("https://api.openrouteservice.org"),
-                "",
-                "foot-walking"
+                ""
         );
 
         assertFalse(client.isConfigured());
         assertThrows(
                 IllegalStateException.class,
-                () -> client.calculateMatrix(List.of(
-                        new RouteCoordinate(126.9780, 37.5665),
-                        new RouteCoordinate(126.9770, 37.5796)
-                ))
+                () -> client.calculateMatrix(
+                        "foot-walking",
+                        List.of(
+                                new RouteCoordinate(126.9780, 37.5665),
+                                new RouteCoordinate(126.9770, 37.5796)
+                        )
+                )
         );
     }
 }

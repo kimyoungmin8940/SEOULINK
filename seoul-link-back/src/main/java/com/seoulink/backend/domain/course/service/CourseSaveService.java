@@ -7,6 +7,8 @@ import com.seoulink.backend.domain.course.dto.response.CourseBatchSaveResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseSaveResponse;
 import com.seoulink.backend.domain.course.entity.CourseDetail;
 import com.seoulink.backend.domain.course.entity.TravelCourse;
+import com.seoulink.backend.domain.course.model.TransportMode;
+import com.seoulink.backend.domain.course.model.TransitPathType;
 import com.seoulink.backend.domain.course.repository.CourseDetailRepository;
 import com.seoulink.backend.domain.course.repository.TravelCourseRepository;
 import org.springframework.stereotype.Service;
@@ -66,7 +68,7 @@ public class CourseSaveService {
         List<ValidatedCourse> validatedCourses = requests.stream()
                 .map(this::validateAndNormalize)
                 .toList();
-        validateSameMember(requests);
+        validateSameMemberAndTransportMode(requests);
 
         List<CourseSaveResponse> savedCourses = new ArrayList<>();
         for (int index = 0; index < requests.size(); index++) {
@@ -112,6 +114,7 @@ public class CourseSaveService {
                         .title(validated.title())
                         .description(trimToNull(request.getDescription()))
                         .travelCode(validated.travelCode())
+                        .transportMode(validated.transportMode())
                         .courseType(validated.courseType())
                         .region(trimToNull(request.getRegion()))
                         .publicStatus(Boolean.TRUE.equals(request.getPublicCourse()) ? "Y" : "N")
@@ -129,6 +132,7 @@ public class CourseSaveService {
 
         Map<LocalDate, Integer> dayNumbers = createDayNumbers(validated.places());
         // 장소명·주소 같은 표시 정보는 중복 저장하지 않고 PLACE_ID만 보관해 조회 시 PLACES와 연결한다.
+        // 거리·시간·경로 종류는 해당 장소로 들어오는 이전 구간 값이며 첫 장소는 0·0·null이다.
         List<CourseDetail> details = validated.places().stream()
                 .map(place -> CourseDetail.builder()
                         .courseId(savedCourse.getCourseId())
@@ -146,6 +150,7 @@ public class CourseSaveService {
                                 place.getTravelTimeFromPreviousMinutes(),
                                 2
                         ))
+                        .transitPathType(place.getTransitPathType())
                         .build())
                 .toList();
 
@@ -154,6 +159,7 @@ public class CourseSaveService {
         return CourseSaveResponse.builder()
                 .courseId(savedCourse.getCourseId())
                 .title(savedCourse.getTitle())
+                .transportMode(savedCourse.getTransportMode())
                 .placeCount(details.size())
                 .dayCount(dayNumbers.size())
                 .totalDistanceKm(storedTotalDistanceKm)
@@ -181,13 +187,19 @@ public class CourseSaveService {
         return List.copyOf(courses);
     }
 
-    /** 한 배치 요청이 다른 회원의 코스를 섞어 저장하지 못하도록 회원 ID를 통일한다. */
-    private void validateSameMember(List<CourseSaveRequest> requests) {
+    /** 한 추천의 복수 옵션이므로 회원 ID와 이동수단이 섞이지 않도록 검증한다. */
+    private void validateSameMemberAndTransportMode(List<CourseSaveRequest> requests) {
         Long memberId = requests.get(0).getMemberId();
+        TransportMode transportMode = requests.get(0).getTransportMode();
         for (CourseSaveRequest request : requests) {
             if (!memberId.equals(request.getMemberId())) {
                 throw new IllegalArgumentException(
                         "복수 저장 요청의 모든 코스는 같은 회원 ID여야 합니다."
+                );
+            }
+            if (transportMode != request.getTransportMode()) {
+                throw new IllegalArgumentException(
+                        "한 추천에서 저장하는 코스는 모두 같은 이동수단이어야 합니다."
                 );
             }
         }
@@ -209,6 +221,9 @@ public class CourseSaveService {
 
         String courseType = normalizeCourseType(request.getCourseType());
         String travelCode = normalizeTravelCode(request.getTravelCode());
+        TransportMode transportMode = requireTransportMode(
+                request.getTransportMode()
+        );
 
         List<CourseSavePlaceDto> places = request.getPlaces();
         if (places == null || places.isEmpty()) {
@@ -230,8 +245,15 @@ public class CourseSaveService {
                 .comparing(CourseSavePlaceDto::getVisitDate)
                 .thenComparing(CourseSavePlaceDto::getVisitOrder));
         validateSequentialOrders(sortedPlaces);
+        validateTransitPathTypes(sortedPlaces, transportMode);
 
-        return new ValidatedCourse(title, courseType, travelCode, sortedPlaces);
+        return new ValidatedCourse(
+                title,
+                courseType,
+                travelCode,
+                transportMode,
+                sortedPlaces
+        );
     }
 
     /** 상세 장소 한 건의 필수값과 음수가 될 수 없는 계산값을 검증한다. */
@@ -284,6 +306,27 @@ public class CourseSaveService {
         }
     }
 
+    /** 첫 장소와 도보·자동차 코스에는 대중교통 경로 종류가 잘못 저장되지 않게 한다. */
+    private void validateTransitPathTypes(
+            List<CourseSavePlaceDto> places,
+            TransportMode transportMode
+    ) {
+        for (CourseSavePlaceDto place : places) {
+            TransitPathType transitPathType = place.getTransitPathType();
+            if (place.getVisitOrder() == 1 && transitPathType != null) {
+                throw new IllegalArgumentException(
+                        "날짜별 첫 장소에는 대중교통 경로 종류를 저장할 수 없습니다."
+                );
+            }
+            if (transportMode != TransportMode.PUBLIC_TRANSIT
+                    && transitPathType != null) {
+                throw new IllegalArgumentException(
+                        "대중교통 경로 종류는 PUBLIC_TRANSIT 코스에서만 사용할 수 있습니다."
+                );
+            }
+        }
+    }
+
     /** 정렬된 방문 날짜를 처음 나타난 순서대로 1일차, 2일차 번호에 매핑한다. */
     private Map<LocalDate, Integer> createDayNumbers(List<CourseSavePlaceDto> places) {
         Map<LocalDate, Integer> dayNumbers = new LinkedHashMap<>();
@@ -324,6 +367,14 @@ public class CourseSaveService {
             throw new IllegalArgumentException("여행 유형 코드는 영문 대문자 5자리여야 합니다.");
         }
         return normalized;
+    }
+
+    /** 저장 후 조회에서 이동수단이 사라지지 않도록 필수값으로 검증한다. */
+    private TransportMode requireTransportMode(TransportMode transportMode) {
+        if (transportMode == null) {
+            throw new IllegalArgumentException("이동수단은 필수입니다.");
+        }
+        return transportMode;
     }
 
     /** 필수 외래키·식별자가 양의 정수인지 확인한다. */
@@ -376,6 +427,7 @@ public class CourseSaveService {
             String title,
             String courseType,
             String travelCode,
+            TransportMode transportMode,
             List<CourseSavePlaceDto> places
     ) {
     }

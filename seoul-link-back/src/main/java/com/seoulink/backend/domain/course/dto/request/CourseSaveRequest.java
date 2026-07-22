@@ -1,5 +1,6 @@
 package com.seoulink.backend.domain.course.dto.request;
 
+import com.seoulink.backend.domain.course.model.TransportMode;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -31,6 +32,9 @@ public class CourseSaveRequest {
     private String title;
     private String description;
     private String travelCode;
+
+    // 추천 때 사용한 이동수단을 저장 후에도 목록·상세에서 유지한다.
+    private TransportMode transportMode;
 
     // CUSTOM(직접 생성), SURVEY(취향 추천), CHATBOT(AI 생성) 중 하나이다.
     @Builder.Default

@@ -537,6 +537,7 @@ CREATE TABLE TRAVEL_SURVEY (
                                START_DATE DATE NOT NULL,
                                END_DATE DATE NOT NULL,
                                PEOPLE_COUNT NUMBER NOT NULL,
+                               TRANSPORT_MODE VARCHAR2(20) NOT NULL,
 
                                CREATED_AT DATE DEFAULT SYSDATE NOT NULL,
 
@@ -555,7 +556,14 @@ CREATE TABLE TRAVEL_SURVEY (
                                    CHECK (END_DATE >= START_DATE),
 
                                CONSTRAINT CK_SURVEY_PEOPLE
-                                   CHECK (PEOPLE_COUNT >= 1)
+                                   CHECK (PEOPLE_COUNT >= 1),
+
+                               CONSTRAINT CK_SURVEY_TRANSPORT_MODE
+                                   CHECK (TRANSPORT_MODE IN (
+                                       'WALKING',
+                                       'PUBLIC_TRANSIT',
+                                       'DRIVING'
+                                   ))
 );
 
 -- SURVEY_ANSWER
@@ -649,6 +657,8 @@ CREATE TABLE TRAVEL_COURSES (
 
                                 TRAVEL_CODE CHAR(5),
 
+                                TRANSPORT_MODE VARCHAR2(20) NOT NULL,
+
                                 COURSE_TYPE VARCHAR2(20) DEFAULT 'CUSTOM' NOT NULL,
 
                                 REGION VARCHAR2(100),
@@ -684,6 +694,13 @@ CREATE TABLE TRAVEL_COURSES (
 
                                 CONSTRAINT CK_COURSE_TYPE
                                     CHECK (COURSE_TYPE IN ('CUSTOM', 'SURVEY', 'CHATBOT')),
+
+                                CONSTRAINT CK_COURSE_TRANSPORT_MODE
+                                    CHECK (TRANSPORT_MODE IN (
+                                        'WALKING',
+                                        'PUBLIC_TRANSIT',
+                                        'DRIVING'
+                                    )),
 
                                 CONSTRAINT CK_COURSE_PUBLIC
                                     CHECK (IS_PUBLIC IN ('Y', 'N')),
@@ -721,6 +738,7 @@ CREATE TABLE COURSE_DETAILS (
 
                                 DISTANCE_FROM_PREV_KM NUMBER(12, 3) DEFAULT 0 NOT NULL,
                                 TRAVEL_MINUTES_FROM_PREV NUMBER(12, 2) DEFAULT 0 NOT NULL,
+                                TRANSIT_PATH_TYPE VARCHAR2(20),
 
                                 MEMO VARCHAR2(500),
 
@@ -761,7 +779,17 @@ CREATE TABLE COURSE_DETAILS (
                                     CHECK (DISTANCE_FROM_PREV_KM >= 0),
 
                                 CONSTRAINT CK_COURSE_DETAILS_TRAVEL
-                                    CHECK (TRAVEL_MINUTES_FROM_PREV >= 0)
+                                    CHECK (TRAVEL_MINUTES_FROM_PREV >= 0),
+
+                                CONSTRAINT CK_CDETAIL_TRANSIT_TYPE
+                                    CHECK (
+                                        TRANSIT_PATH_TYPE IS NULL
+                                            OR TRANSIT_PATH_TYPE IN (
+                                                'SUBWAY',
+                                                'BUS',
+                                                'BUS_SUBWAY'
+                                               )
+                                        )
 );
 
 
@@ -1126,6 +1154,7 @@ COMMENT ON COLUMN TRAVEL_SURVEY.REGION IS '사용자가 선택한 여행 지역'
 COMMENT ON COLUMN TRAVEL_SURVEY.START_DATE IS '여행 시작일';
 COMMENT ON COLUMN TRAVEL_SURVEY.END_DATE IS '여행 종료일';
 COMMENT ON COLUMN TRAVEL_SURVEY.PEOPLE_COUNT IS '여행 인원 수';
+COMMENT ON COLUMN TRAVEL_SURVEY.TRANSPORT_MODE IS '여행 전체 이동수단, WALKING/PUBLIC_TRANSIT/DRIVING';
 COMMENT ON COLUMN TRAVEL_SURVEY.CREATED_AT IS '취향 검사 생성 일시';
 
 /* =========================
@@ -1166,6 +1195,7 @@ COMMENT ON COLUMN TRAVEL_COURSES.PAYMENT_ID IS '유료 챗봇으로 생성된 �
 COMMENT ON COLUMN TRAVEL_COURSES.TITLE IS '여행 코스 제목';
 COMMENT ON COLUMN TRAVEL_COURSES.DESCRIPTION IS '여행 코스 설명';
 COMMENT ON COLUMN TRAVEL_COURSES.TRAVEL_CODE IS '코스에 연결된 여행 유형 코드';
+COMMENT ON COLUMN TRAVEL_COURSES.TRANSPORT_MODE IS '코스 최적화에 사용한 이동수단, WALKING/PUBLIC_TRANSIT/DRIVING';
 COMMENT ON COLUMN TRAVEL_COURSES.COURSE_TYPE IS '코스 생성 방식, CUSTOM/SURVEY/CHATBOT 중 하나';
 COMMENT ON COLUMN TRAVEL_COURSES.REGION IS '코스의 주요 여행 지역';
 COMMENT ON COLUMN TRAVEL_COURSES.IS_PUBLIC IS '코스 공개 여부, Y/N';
@@ -1192,6 +1222,7 @@ COMMENT ON COLUMN COURSE_DETAILS.STAY_MINUTES IS '권장 체류 시간, 분 단�
 COMMENT ON COLUMN COURSE_DETAILS.VISIT_DATE IS '해당 장소를 방문할 날짜';
 COMMENT ON COLUMN COURSE_DETAILS.DISTANCE_FROM_PREV_KM IS '직전 장소로부터의 이동거리, km 단위';
 COMMENT ON COLUMN COURSE_DETAILS.TRAVEL_MINUTES_FROM_PREV IS '직전 장소로부터의 이동시간, 분 단위';
+COMMENT ON COLUMN COURSE_DETAILS.TRANSIT_PATH_TYPE IS 'ODsay 대중교통 최적 경로 종류, SUBWAY/BUS/BUS_SUBWAY';
 COMMENT ON COLUMN COURSE_DETAILS.CREATED_AT IS '코스 상세 등록 일시';
 
 /* =========================

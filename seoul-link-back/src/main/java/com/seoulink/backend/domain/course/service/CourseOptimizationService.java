@@ -4,6 +4,8 @@ import com.seoulink.backend.domain.course.dto.request.CourseOptimizeRequest;
 import com.seoulink.backend.domain.course.dto.request.PlaceCandidateDto;
 import com.seoulink.backend.domain.course.dto.response.CourseOptimizeResponse;
 import com.seoulink.backend.domain.course.dto.response.OptimizedPlaceDto;
+import com.seoulink.backend.domain.course.model.TransportMode;
+import com.seoulink.backend.domain.course.model.TransitPathType;
 import com.seoulink.backend.domain.course.service.DistanceService.RouteMatrix;
 import org.springframework.stereotype.Service;
 
@@ -24,7 +26,7 @@ import java.util.TreeMap;
  * <p>중복 장소를 한 번만 남긴 뒤 각 날짜에서 추천 점수가 가장 높은 장소를 첫 장소로 선택하고,
  * OpenRouteService 경로 행렬의 이동시간을 기준으로 최근접 이웃 초기 경로를 만든 뒤,
  * 첫 장소를 고정한 2-opt로 총 이동시간과 거리를 한 번 더 줄인다.
- * 한 구간의 이동거리 또는 이동시간이 허용 기준을 넘으면 같은 날짜·카테고리의
+ * 한 구간이 선택한 이동수단의 이동시간 중심 허용 기준을 넘으면 같은 날짜·카테고리의
  * 예비 후보 중 기준 안에 들어오는 가장 가까운 장소로 교체한 뒤 전체 경로를 다시 계산한다.
  * 외부 API를 사용할 수 없으면 {@link DistanceService}가 직선거리 방식으로 자동 대체하고,
  * 예상 방문 시간은 {@link VisitDurationService}가 카테고리에 따라 계산한다.</p>
@@ -34,10 +36,6 @@ public class CourseOptimizationService {
 
     // 외부 API의 부동소수점 오차 때문에 사실상 같은 경로 비용을 다르게 보지 않도록 한다.
     private static final double ROUTE_TIE_EPSILON = 0.000000001;
-
-    // 두 장소 사이에서 하나라도 초과하면 먼 이동 구간으로 판단한다.
-    private static final double MAX_LEG_DISTANCE_KM = 2.0;
-    private static final double MAX_LEG_TRAVEL_TIME_MINUTES = 30.0;
 
     private final DistanceService distanceService;
     private final VisitDurationService visitDurationService;
@@ -63,10 +61,16 @@ public class CourseOptimizationService {
         if (request == null) {
             throw new IllegalArgumentException("코스 최적화 요청은 null일 수 없습니다.");
         }
+        TransportMode transportMode = request.getTransportMode();
+        if (transportMode == null) {
+            throw new IllegalArgumentException("이동수단은 필수입니다.");
+        }
 
         List<PlaceCandidateDto> candidates = request.getPlaceCandidates();
         if (candidates == null || candidates.isEmpty()) {
             return CourseOptimizeResponse.builder()
+                    .transportMode(transportMode)
+                    .estimatedTravelTimes(false)
                     .optimizedPlaces(new ArrayList<>())
                     .totalDistanceKm(0.0)
                     .totalTravelTimeMinutes(0.0)
@@ -89,7 +93,7 @@ public class CourseOptimizationService {
                 .sum() + legacyAlternatives.size();
 
         if (alternativeCount == 0) {
-            return optimizeCandidates(currentCandidates);
+            return optimizeCandidates(currentCandidates, transportMode);
         }
 
         // 원래 코스 장소와 이미 소비한 대체 후보가 다시 들어가지 않도록 ID를 추적한다.
@@ -103,7 +107,10 @@ public class CourseOptimizationService {
 
         // 교체 후보 한 건은 최대 한 번만 사용하므로 전체 후보 수만큼 반복하면 종료된다.
         for (int attempt = 0; attempt < alternativeCount; attempt++) {
-            CourseOptimizeResponse optimized = optimizeCandidates(currentCandidates);
+            CourseOptimizeResponse optimized = optimizeCandidates(
+                    currentCandidates,
+                    transportMode
+            );
             Replacement replacement = findReplacement(
                     optimized,
                     currentCandidates,
@@ -111,7 +118,8 @@ public class CourseOptimizationService {
                     legacyAlternatives,
                     originalPlaceIds,
                     currentCoursePlaceIds,
-                    consumedAlternativeIds
+                    consumedAlternativeIds,
+                    transportMode
             );
 
             if (replacement == null) {
@@ -138,11 +146,14 @@ public class CourseOptimizationService {
             consumedAlternativeIds.add(alternativePlaceId);
         }
 
-        return optimizeCandidates(currentCandidates);
+        return optimizeCandidates(currentCandidates, transportMode);
     }
 
     /** 교체가 반영된 후보 목록을 날짜별 방문 순서로 정렬하고 합계를 다시 계산한다. */
-    private CourseOptimizeResponse optimizeCandidates(List<PlaceCandidateDto> candidates) {
+    private CourseOptimizeResponse optimizeCandidates(
+            List<PlaceCandidateDto> candidates,
+            TransportMode transportMode
+    ) {
 
         // 중복을 먼저 제거한 뒤 TreeMap으로 날짜가 빠른 일정부터 처리한다.
         Map<LocalDate, List<PlaceCandidateDto>> candidatesByDate = new TreeMap<>();
@@ -155,10 +166,14 @@ public class CourseOptimizationService {
         List<OptimizedPlaceDto> optimizedPlaces = new ArrayList<>();
         double totalDistanceKm = 0.0;
         double totalTravelTimeMinutes = 0.0;
+        boolean estimatedTravelTimes = false;
 
         // 하루마다 이동 행렬을 한 번 계산하고 최근접 이웃 + 2-opt로 경로를 만든다.
         for (List<PlaceCandidateDto> dailyCandidates : candidatesByDate.values()) {
-            RouteMatrix routeMatrix = distanceService.calculateRouteMatrix(dailyCandidates);
+            RouteMatrix routeMatrix = distanceService.calculateRouteMatrix(
+                    dailyCandidates,
+                    transportMode
+            );
             List<Integer> routeIndexes = createNearestNeighborRoute(
                     dailyCandidates,
                     routeMatrix
@@ -170,12 +185,22 @@ public class CourseOptimizationService {
                 int currentIndex = routeIndexes.get(routePosition);
                 double distanceFromPreviousKm = 0.0;
                 double travelTimeFromPreviousMinutes = 0.0;
+                TransitPathType transitPathType = null;
                 if (routePosition > 0) {
                     int previousIndex = routeIndexes.get(routePosition - 1);
                     distanceFromPreviousKm =
                             routeMatrix.getDistanceKm(previousIndex, currentIndex);
                     travelTimeFromPreviousMinutes =
                             routeMatrix.getTravelTimeMinutes(previousIndex, currentIndex);
+                    // 이전→현재 방향의 ODsay 경로 종류를 현재 장소의 이동 정보로 귀속한다.
+                    transitPathType = routeMatrix.getTransitPathType(
+                            previousIndex,
+                            currentIndex
+                    );
+                    estimatedTravelTimes |= routeMatrix.isEstimated(
+                            previousIndex,
+                            currentIndex
+                    );
                 }
 
                 totalDistanceKm += distanceFromPreviousKm;
@@ -184,7 +209,8 @@ public class CourseOptimizationService {
                         dailyCandidates.get(currentIndex),
                         routePosition + 1,
                         distanceFromPreviousKm,
-                        travelTimeFromPreviousMinutes
+                        travelTimeFromPreviousMinutes,
+                        transitPathType
                 ));
             }
         }
@@ -197,6 +223,8 @@ public class CourseOptimizationService {
                 totalVisitTimeMinutes + totalTravelTimeMinutes;
 
         return CourseOptimizeResponse.builder()
+                .transportMode(transportMode)
+                .estimatedTravelTimes(estimatedTravelTimes)
                 .optimizedPlaces(optimizedPlaces)
                 .totalDistanceKm(totalDistanceKm)
                 .totalTravelTimeMinutes(totalTravelTimeMinutes)
@@ -333,7 +361,8 @@ public class CourseOptimizationService {
             List<PlaceCandidateDto> legacyAlternatives,
             Set<Long> originalPlaceIds,
             Set<Long> currentCoursePlaceIds,
-            Set<Long> consumedAlternativeIds
+            Set<Long> consumedAlternativeIds,
+            TransportMode transportMode
     ) {
         List<OptimizedPlaceDto> optimizedPlaces = optimized.getOptimizedPlaces();
 
@@ -343,7 +372,8 @@ public class CourseOptimizationService {
             // 방문 순서가 1이면 새 날짜의 첫 장소이므로 전날 마지막 장소와 연결하지 않는다.
             if (distantPlace.getVisitOrder() == 1 || !isDistantLeg(
                     distantPlace.getDistanceFromPreviousKm(),
-                    distantPlace.getTravelTimeFromPreviousMinutes()
+                    distantPlace.getTravelTimeFromPreviousMinutes(),
+                    transportMode
             )) {
                 continue;
             }
@@ -368,7 +398,8 @@ public class CourseOptimizationService {
                     candidateAlternatives,
                     originalPlaceIds,
                     currentCoursePlaceIds,
-                    consumedAlternativeIds
+                    consumedAlternativeIds,
+                    transportMode
             );
 
             if (alternative != null) {
@@ -379,10 +410,39 @@ public class CourseOptimizationService {
         return null;
     }
 
-    /** 거리 2km 초과 또는 이동시간 30분 초과 구간인지 확인한다. */
-    private boolean isDistantLeg(double distanceKm, double travelTimeMinutes) {
-        return distanceKm > MAX_LEG_DISTANCE_KM
-                || travelTimeMinutes > MAX_LEG_TRAVEL_TIME_MINUTES;
+    /**
+     * 이동시간을 주 기준으로 먼 구간을 판단하고 거리는 보조 기준으로만 사용한다.
+     * 거리만 긴데 실제 이동시간은 충분히 짧은 자동차 구간이 강제 교체되지 않도록 한다.
+     */
+    private boolean isDistantLeg(
+            double distanceKm,
+            double travelTimeMinutes,
+            TransportMode transportMode
+    ) {
+        double maxTravelMinutes = maxTravelMinutes(transportMode);
+        if (travelTimeMinutes > maxTravelMinutes) {
+            return true;
+        }
+        return distanceKm > maxDistanceKm(transportMode)
+                && travelTimeMinutes > maxTravelMinutes * 0.75;
+    }
+
+    /** 팀에서 조정하기 쉽도록 이동수단별 초기 거리 기준을 한곳에 모은다. */
+    private double maxDistanceKm(TransportMode transportMode) {
+        return switch (transportMode) {
+            case WALKING -> 2.0;
+            case PUBLIC_TRANSIT -> 10.0;
+            case DRIVING -> 15.0;
+        };
+    }
+
+    /** 팀에서 조정하기 쉽도록 이동수단별 초기 이동시간 기준을 한곳에 모은다. */
+    private double maxTravelMinutes(TransportMode transportMode) {
+        return switch (transportMode) {
+            case WALKING -> 30.0;
+            case PUBLIC_TRANSIT -> 45.0;
+            case DRIVING -> 40.0;
+        };
     }
 
     /**
@@ -395,7 +455,8 @@ public class CourseOptimizationService {
             List<PlaceCandidateDto> alternatives,
             Set<Long> originalPlaceIds,
             Set<Long> currentCoursePlaceIds,
-            Set<Long> consumedAlternativeIds
+            Set<Long> consumedAlternativeIds,
+            TransportMode transportMode
     ) {
         List<PlaceCandidateDto> eligibleAlternatives = alternatives.stream()
                 .filter(alternative -> alternative.getVisitDate().equals(
@@ -417,7 +478,10 @@ public class CourseOptimizationService {
         List<PlaceCandidateDto> matrixCandidates = new ArrayList<>();
         matrixCandidates.add(previousPlace);
         matrixCandidates.addAll(eligibleAlternatives);
-        RouteMatrix routeMatrix = distanceService.calculateRouteMatrix(matrixCandidates);
+        RouteMatrix routeMatrix = distanceService.calculateRouteMatrix(
+                matrixCandidates,
+                transportMode
+        );
 
         int selectedMatrixIndex = -1;
         double shortestTravelTimeMinutes = Double.MAX_VALUE;
@@ -427,7 +491,7 @@ public class CourseOptimizationService {
         for (int matrixIndex = 1; matrixIndex < matrixCandidates.size(); matrixIndex++) {
             double distanceKm = routeMatrix.getDistanceKm(0, matrixIndex);
             double travelTimeMinutes = routeMatrix.getTravelTimeMinutes(0, matrixIndex);
-            if (isDistantLeg(distanceKm, travelTimeMinutes)) {
+            if (isDistantLeg(distanceKm, travelTimeMinutes, transportMode)) {
                 continue;
             }
 
@@ -703,7 +767,8 @@ public class CourseOptimizationService {
             PlaceCandidateDto candidate,
             int visitOrder,
             double distanceFromPreviousKm,
-            double travelTimeFromPreviousMinutes
+            double travelTimeFromPreviousMinutes,
+            TransitPathType transitPathType
     ) {
         return OptimizedPlaceDto.builder()
                 .placeId(candidate.getPlaceId())
@@ -732,6 +797,7 @@ public class CourseOptimizationService {
                 .visitOrder(visitOrder)
                 .distanceFromPreviousKm(distanceFromPreviousKm)
                 .travelTimeFromPreviousMinutes(travelTimeFromPreviousMinutes)
+                .transitPathType(transitPathType)
                 .build();
     }
 

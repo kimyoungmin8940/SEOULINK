@@ -184,6 +184,13 @@
   color: var(--primary-blue);
 }
 
+.course-detail-hero-meta span.course-detail-transport-badge {
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: #edf6ff;
+  color: #356d9c;
+}
+
 .course-detail-hero-image {
   height: 100%;
   min-height: 0;
@@ -224,10 +231,10 @@
 
 .course-detail-metrics article {
   min-width: 0;
-  padding: 7px 16px;
+  padding: 7px 12px;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .course-detail-metrics article + article {
@@ -248,6 +255,7 @@
 
 .course-detail-metrics article div {
   min-width: 0;
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -260,12 +268,15 @@
 }
 
 .course-detail-metrics strong {
-  overflow: hidden;
+  overflow: visible;
   color: #233e54;
-  font-size: 14px;
+  font-size: clamp(12px, 0.9vw, 14px);
   font-weight: 820;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.25;
+  letter-spacing: -0.2px;
+  text-overflow: clip;
+  white-space: normal;
+  word-break: keep-all;
 }
 
 .course-detail-content-grid {
@@ -649,16 +660,31 @@
 }
 
 .course-detail-schedule-note {
-  margin: 6px 6px 15px;
+  margin: 12px 6px 9px;
   color: #8293a2;
   font-size: 10px;
+  line-height: 1.5;
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
 .course-detail-schedule-note svg {
+  flex: 0 0 auto;
   color: #6da9d9;
+}
+
+.course-detail-schedule-note.is-estimated {
+  margin-top: 12px;
+  padding: 9px 11px;
+  border: 1px solid #f0d9a5;
+  border-radius: 10px;
+  background: #fffaf0;
+  color: #806b42;
+}
+
+.course-detail-schedule-note.is-estimated svg {
+  color: #b47b11;
 }
 
 .course-detail-bottom-actions {

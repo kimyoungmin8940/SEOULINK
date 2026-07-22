@@ -25,16 +25,13 @@ public class OpenRouteServiceClient {
 
     private final RestClient restClient;
     private final String apiKey;
-    private final String profile;
 
     public OpenRouteServiceClient(
             @Qualifier("openRouteServiceRestClient") RestClient restClient,
-            @Value("${external.openroute.api-key:}") String apiKey,
-            @Value("${external.openroute.profile:foot-walking}") String profile
+            @Value("${external.openroute.api-key:}") String apiKey
     ) {
         this.restClient = restClient;
         this.apiKey = apiKey;
-        this.profile = profile;
     }
 
     /**
@@ -45,13 +42,17 @@ public class OpenRouteServiceClient {
     }
 
     /**
-     * 전달받은 모든 좌표 사이의 경로 거리와 이동시간 행렬을 조회한다.
+     * 요청한 이동수단 프로필로 모든 좌표 사이의 경로 거리와 이동시간 행렬을 조회한다.
      *
+     * @param requestedProfile OpenRouteService 이동 프로필
      * @param coordinates 경도·위도 순서로 구성된 좌표 목록
      * @return 거리(km)와 이동시간(분) 행렬
      */
-    public RouteMatrixResult calculateMatrix(List<RouteCoordinate> coordinates) {
-        validateRequest(coordinates);
+    public RouteMatrixResult calculateMatrix(
+            String requestedProfile,
+            List<RouteCoordinate> coordinates
+    ) {
+        validateRequest(requestedProfile, coordinates);
 
         // OpenRouteService 규격은 일반적인 위도·경도 표기와 반대로 [경도, 위도] 순서이다.
         List<List<Double>> locations = coordinates.stream()
@@ -68,9 +69,9 @@ public class OpenRouteServiceClient {
         );
 
         try {
-            // 선택한 이동 프로필(기본 foot-walking)에 대해 하루 좌표 전체를 한 번에 요청한다.
+            // 선택한 이동 프로필에 대해 하루 좌표 전체를 한 번에 요청한다.
             MatrixResponse response = restClient.post()
-                    .uri("/v2/matrix/{profile}", profile)
+                    .uri("/v2/matrix/{profile}", requestedProfile)
                     .header(HttpHeaders.AUTHORIZATION, apiKey)
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(request)
@@ -87,13 +88,16 @@ public class OpenRouteServiceClient {
     }
 
     /** API 키·이동 프로필·최소 좌표 개수를 외부 요청 전에 검증한다. */
-    private void validateRequest(List<RouteCoordinate> coordinates) {
+    private void validateRequest(
+            String requestedProfile,
+            List<RouteCoordinate> coordinates
+    ) {
         if (!isConfigured()) {
             throw new IllegalStateException(
                     "OPENROUTESERVICE_API_KEY 환경변수가 설정되지 않았습니다."
             );
         }
-        if (profile == null || !profile.matches("[a-z-]+")) {
+        if (requestedProfile == null || !requestedProfile.matches("[a-z-]+")) {
             throw new IllegalStateException("OpenRouteService 이동 프로필 설정이 올바르지 않습니다.");
         }
         if (coordinates == null || coordinates.size() < 2) {

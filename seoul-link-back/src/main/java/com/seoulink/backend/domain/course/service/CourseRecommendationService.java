@@ -10,6 +10,8 @@ import com.seoulink.backend.domain.course.dto.response.CourseOptionResponse;
 import com.seoulink.backend.domain.course.dto.response.CoursePlaceResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseRecommendResponse;
 import com.seoulink.backend.domain.course.dto.response.OptimizedPlaceDto;
+import com.seoulink.backend.domain.course.model.TransportMode;
+import com.seoulink.backend.domain.course.service.DistanceService.RouteMatrix;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -42,7 +44,6 @@ public class CourseRecommendationService {
     private static final int MAX_DAILY_SELECTIONS = 10_000;
     private static final int MAX_GLOBAL_SELECTIONS = 10_000;
     private static final int MAX_EXCLUDED_RECOMMENDATIONS = 60;
-    private static final double FALLBACK_WALKING_SPEED_KM_PER_HOUR = 4.5;
 
     private final CourseOptimizationService courseOptimizationService;
     private final DistanceService distanceService;
@@ -58,8 +59,8 @@ public class CourseRecommendationService {
     /**
      * 최종 요청 JSON의 날짜별 후보 풀에서 취향 우선·이동 최소·균형 코스를 만든다.
      *
-     * <p>각 날짜마다 {@code targetPlaceCount}와 {@code categoryTargets}를 정확히 지키는
-     * 가능한 장소 조합을 만든 뒤 세 전략으로 순위를 계산한다. 후보 조합이 세 개 이상이면
+     * <p>각 날짜의 후보 카테고리 비율을 {@code targetPlaceCount}에 맞게 축소한 뒤
+     * 가능한 장소 조합을 만들고 세 전략으로 순위를 계산한다. 후보 조합이 세 개 이상이면
      * 서로 다른 조합을 우선 반환하며, 후보가 부족해 세 조합을 만들 수 없는 경우에는
      * 전략별 최선 결과가 일부 겹칠 수 있다. 추천 결과는 저장하지 않고 사용자가 선택한
      * 한 코스만 기존 {@code POST /api/courses}로 저장한다.</p>
@@ -69,7 +70,10 @@ public class CourseRecommendationService {
         List<List<DailySelection>> selectionsByDay = new ArrayList<>();
 
         for (ValidatedDailyPlan dailyPlan : validated.dailyPlans()) {
-            selectionsByDay.add(createDailySelections(dailyPlan));
+            selectionsByDay.add(createDailySelections(
+                    dailyPlan,
+                    validated.transportMode()
+            ));
         }
 
         List<GlobalSelection> globalSelections = createGlobalSelections(
@@ -107,6 +111,7 @@ public class CourseRecommendationService {
 
             CourseOptimizeResponse optimized = courseOptimizationService.optimize(
                     CourseOptimizeRequest.builder()
+                            .transportMode(validated.transportMode())
                             .placeCandidates(selected.placeCandidates())
                             .build()
             );
@@ -122,6 +127,11 @@ public class CourseRecommendationService {
         return CourseRecommendResponse.builder()
                 .resultId(request.getResultId())
                 .travelCode(request.getTravelCode())
+                .transportMode(validated.transportMode())
+                .estimatedTravelTimes(courseOptions.stream()
+                        .anyMatch(option -> Boolean.TRUE.equals(
+                                option.getEstimatedTravelTimes()
+                        )))
                 .dailyStartTime(request.getDailyStartTime())
                 .optionCount(courseOptions.size())
                 .courseOptions(courseOptions)
@@ -145,6 +155,9 @@ public class CourseRecommendationService {
         }
         if (request.getResultId() == null || request.getResultId() < 1) {
             throw new IllegalArgumentException("설문 결과 ID는 1 이상이어야 합니다.");
+        }
+        if (request.getTransportMode() == null) {
+            throw new IllegalArgumentException("이동수단은 필수입니다.");
         }
         if (request.getDailyStartTime() == null) {
             throw new IllegalArgumentException("일정 시작 시각은 필수입니다.");
@@ -173,7 +186,8 @@ public class CourseRecommendationService {
 
         return new ValidatedRecommendation(
                 new ArrayList<>(plansByDate.values()),
-                excludedRecommendationKeys
+                excludedRecommendationKeys,
+                request.getTransportMode()
         );
     }
 
@@ -237,9 +251,9 @@ public class CourseRecommendationService {
         int categoryTargetSum = categoryTargets.values().stream()
                 .mapToInt(Integer::intValue)
                 .sum();
-        if (categoryTargetSum != targetPlaceCount) {
+        if (categoryTargetSum < targetPlaceCount) {
             throw new IllegalArgumentException(
-                    "categoryTargets 합계는 targetPlaceCount와 같아야 합니다. visitDate="
+                    "categoryTargets 합계는 targetPlaceCount 이상이어야 합니다. visitDate="
                             + visitDate
             );
         }
@@ -284,12 +298,67 @@ public class CourseRecommendationService {
             }
         }
 
+        Map<String, Integer> finalCategoryTargets = deriveFinalCategoryTargets(
+                categoryTargets,
+                targetPlaceCount
+        );
+
         return new ValidatedDailyPlan(
                 visitDate,
                 targetPlaceCount,
-                categoryTargets,
+                finalCategoryTargets,
                 candidates
         );
+    }
+
+    /**
+     * 후보 풀 카테고리 수를 비율로 축소해 실제 코스에 뽑을 정확한 개수로 변환한다.
+     *
+     * <p>예를 들어 TOUR 7, RESTAURANT 4, CAFE 4 후보에서 6곳을 뽑으면
+     * 최대 나머지 방식으로 TOUR 3, RESTAURANT 2, CAFE 1을 선택한다.
+     * 나머지가 같을 때는 {@link #SUPPORTED_CATEGORIES} 순서를 사용해 결과를 고정한다.</p>
+     */
+    private Map<String, Integer> deriveFinalCategoryTargets(
+            Map<String, Integer> candidateCategoryTargets,
+            int targetPlaceCount
+    ) {
+        int candidateTargetSum = candidateCategoryTargets.values().stream()
+                .mapToInt(Integer::intValue)
+                .sum();
+        Map<String, Integer> finalTargets = new LinkedHashMap<>();
+        Map<String, Double> remainders = new LinkedHashMap<>();
+        int assigned = 0;
+
+        for (String category : SUPPORTED_CATEGORIES) {
+            int candidateCount = candidateCategoryTargets.getOrDefault(category, 0);
+            double proportionalCount = (double) candidateCount
+                    * targetPlaceCount
+                    / candidateTargetSum;
+            int baseCount = (int) Math.floor(proportionalCount);
+            finalTargets.put(category, baseCount);
+            remainders.put(category, proportionalCount - baseCount);
+            assigned += baseCount;
+        }
+
+        while (assigned < targetPlaceCount) {
+            String selectedCategory = SUPPORTED_CATEGORIES.stream()
+                    .filter(category -> finalTargets.get(category)
+                            < candidateCategoryTargets.get(category))
+                    .max(Comparator
+                            .comparingDouble((String category) -> remainders.get(category))
+                            .thenComparingInt(category -> -SUPPORTED_CATEGORIES.indexOf(category)))
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "카테고리 후보 비율로 최종 장소 수를 배분할 수 없습니다."
+                    ));
+            finalTargets.put(
+                    selectedCategory,
+                    finalTargets.get(selectedCategory) + 1
+            );
+            // 같은 카테고리가 남은 자리까지 반복해서 독점하지 않도록 한 번 배분 후 제외한다.
+            remainders.put(selectedCategory, -1.0);
+            assigned++;
+        }
+        return finalTargets;
     }
 
     /** categoryTargets 키를 대문자 기본 카테고리로 통일하고 누락 카테고리는 0으로 채운다. */
@@ -318,7 +387,8 @@ public class CourseRecommendationService {
 
     /** 카테고리 목표를 정확히 만족하는 하루 장소 조합을 모두 만든다. */
     private List<DailySelection> createDailySelections(
-            ValidatedDailyPlan dailyPlan
+            ValidatedDailyPlan dailyPlan,
+            TransportMode transportMode
     ) {
         List<List<PlaceCandidateDto>> combinations = new ArrayList<>();
         buildCategorySelections(
@@ -334,15 +404,32 @@ public class CourseRecommendationService {
             );
         }
 
+        // 후보 풀은 한 번에 평가하고, 대중교통은 ODsay 호출량을 줄이기 위해
+        // 이 1차 선별 단계에서만 전용 추정 행렬을 사용한다.
+        RouteMatrix candidatePoolMatrix = distanceService.calculateCandidatePoolMatrix(
+                dailyPlan.placeCandidates(),
+                transportMode
+        );
+        Map<Long, Integer> candidateIndexes = createCandidateIndexes(
+                dailyPlan.placeCandidates()
+        );
+
         Map<String, DailySelection> uniqueSelections = new LinkedHashMap<>();
         for (List<PlaceCandidateDto> combination : combinations) {
-            RouteEstimate routeEstimate = estimateRoute(combination);
+            RouteEstimate routeEstimate = estimateRoute(
+                    combination,
+                    candidateIndexes,
+                    candidatePoolMatrix
+            );
             double recommendationScore = combination.stream()
                     .mapToDouble(candidate -> valueOrZero(
                             candidate.getRecommendationScore()
                     ))
                     .sum();
-            String signature = createCompositionSignature(combination);
+            String signature = createCompositionSignature(
+                    combination,
+                    transportMode
+            );
             DailySelection selection = new DailySelection(
                     List.copyOf(combination),
                     recommendationScore,
@@ -601,8 +688,23 @@ public class CourseRecommendationService {
                 + distanceEfficiency * 0.20;
     }
 
-    /** 외부 경로 API 호출 없이 후보 조합의 직선거리 기반 이동 비용을 빠르게 추정한다. */
-    private RouteEstimate estimateRoute(List<PlaceCandidateDto> candidates) {
+    /** 후보 풀 행렬에서 장소 ID를 빠르게 찾기 위한 인덱스를 만든다. */
+    private Map<Long, Integer> createCandidateIndexes(
+            List<PlaceCandidateDto> candidates
+    ) {
+        Map<Long, Integer> indexes = new LinkedHashMap<>();
+        for (int index = 0; index < candidates.size(); index++) {
+            indexes.put(candidates.get(index).getPlaceId(), index);
+        }
+        return indexes;
+    }
+
+    /** 선택한 이동수단의 이동시간 → 거리 순으로 후보 조합의 빠른 경로 비용을 추정한다. */
+    private RouteEstimate estimateRoute(
+            List<PlaceCandidateDto> candidates,
+            Map<Long, Integer> candidateIndexes,
+            RouteMatrix routeMatrix
+    ) {
         if (candidates.size() < 2) {
             return new RouteEstimate(0.0, 0.0);
         }
@@ -624,42 +726,50 @@ public class CourseRecommendationService {
         remaining.remove(current);
 
         double totalDistanceKm = 0.0;
+        double totalTravelTimeMinutes = 0.0;
         while (!remaining.isEmpty()) {
             PlaceCandidateDto previous = current;
+            int previousIndex = candidateIndexes.get(previous.getPlaceId());
             current = remaining.stream()
                     .min(Comparator
-                            .comparingDouble((PlaceCandidateDto candidate) -> distanceService.calculateDistanceKm(
-                                    previous.getLatitude(),
-                                    previous.getLongitude(),
-                                    candidate.getLatitude(),
-                                    candidate.getLongitude()
+                            .comparingDouble((PlaceCandidateDto candidate) ->
+                                    routeMatrix.getTravelTimeMinutes(
+                                            previousIndex,
+                                            candidateIndexes.get(candidate.getPlaceId())
+                                    ))
+                            .thenComparingDouble(candidate -> routeMatrix.getDistanceKm(
+                                    previousIndex,
+                                    candidateIndexes.get(candidate.getPlaceId())
                             ))
                             .thenComparing(PlaceCandidateDto::getPlaceId))
                     .orElseThrow();
-            totalDistanceKm += distanceService.calculateDistanceKm(
-                    previous.getLatitude(),
-                    previous.getLongitude(),
-                    current.getLatitude(),
-                    current.getLongitude()
+            int currentIndex = candidateIndexes.get(current.getPlaceId());
+            totalDistanceKm += routeMatrix.getDistanceKm(
+                    previousIndex,
+                    currentIndex
+            );
+            totalTravelTimeMinutes += routeMatrix.getTravelTimeMinutes(
+                    previousIndex,
+                    currentIndex
             );
             remaining.remove(current);
         }
 
-        double travelTimeMinutes = totalDistanceKm
-                / FALLBACK_WALKING_SPEED_KM_PER_HOUR * 60.0;
-        return new RouteEstimate(totalDistanceKm, travelTimeMinutes);
+        return new RouteEstimate(totalDistanceKm, totalTravelTimeMinutes);
     }
 
     /** 조합의 장소 ID를 정렬해 방문 순서와 무관한 고유 서명을 만든다. */
     private String createCompositionSignature(
-            List<PlaceCandidateDto> candidates
+            List<PlaceCandidateDto> candidates,
+            TransportMode transportMode
     ) {
-        return candidates.stream()
+        String composition = candidates.stream()
                 .sorted(Comparator.comparing(PlaceCandidateDto::getPlaceId))
                 .map(candidate -> candidate.getVisitDate()
                         + ":" + candidate.getPlaceId())
                 .reduce((left, right) -> left + "," + right)
                 .orElse("");
+        return transportMode.name() + ":" + composition;
     }
 
     /** 최적화 결과를 프론트에서 비교할 수 있는 옵션 한 건으로 변환한다. */
@@ -693,6 +803,7 @@ public class CourseRecommendationService {
                         optimized.getTotalCourseTimeMinutes(),
                         2
                 ))
+                .estimatedTravelTimes(optimized.getEstimatedTravelTimes())
                 .days(days)
                 .build();
     }
@@ -946,6 +1057,7 @@ public class CourseRecommendationService {
                 .travelTimeFromPreviousMinutes(
                         place.getTravelTimeFromPreviousMinutes()
                 )
+                .transitPathType(place.getTransitPathType())
                 .build();
     }
 
@@ -1006,7 +1118,8 @@ public class CourseRecommendationService {
 
     private record ValidatedRecommendation(
             List<ValidatedDailyPlan> dailyPlans,
-            Set<String> excludedRecommendationKeys
+            Set<String> excludedRecommendationKeys,
+            TransportMode transportMode
     ) {
     }
 

@@ -9,7 +9,7 @@ import {
     ChevronUp,
     Clock3,
     Coffee,
-    Footprints,
+    Info,
     Landmark,
     MapPinned,
     Plus,
@@ -17,6 +17,9 @@ import {
     Sparkles,
     Utensils,
 } from 'lucide-react';
+
+import CourseTransportIcon from './CourseTransportIcon';
+import { getTransportMeta, getTravelLegMeta } from '../../utils/courseTransport';
 
 const categoryMeta = {
     TOUR: { label: '관광', Icon: Landmark, tone: 'tour' },
@@ -36,7 +39,7 @@ const optionMeta = {
         badge: 'EASY',
         tone: 'distance',
         shortLabel: '이동 최소',
-        tags: ['짧은 동선', '도보 중심', '여유 일정'],
+        tags: ['짧은 동선', '이동 부담 적음', '여유 일정'],
     },
     BALANCED: {
         badge: 'PICK',
@@ -142,7 +145,7 @@ function RouteStop({ place, fallbackImage, isLast }) {
 }
 
 /** 상세보기 버튼을 눌렀을 때 모든 일차의 이동·체류 정보를 펼쳐 보여줍니다. */
-function ExpandedSchedule({ days }) {
+function ExpandedSchedule({ days, transportMode }) {
     return (
         <div className="course-result-expanded">
             {days.map((day) => (
@@ -156,6 +159,11 @@ function ExpandedSchedule({ days }) {
                         {(day.places || []).map((place, index) => {
                             const meta = categoryMeta[place.category] || categoryMeta.TOUR;
                             const Icon = meta.Icon;
+                            // 거리·시간·경로 종류는 현재 장소로 들어오는 이전 구간의 정보입니다.
+                            const legTransport = getTravelLegMeta(
+                                transportMode,
+                                place.transitPathType,
+                            );
 
                             return (
                                 <li
@@ -164,14 +172,28 @@ function ExpandedSchedule({ days }) {
                                 >
                                     {index > 0 && (
                                         <span className="course-result-expanded-move">
-                                            <Footprints size={13} aria-hidden="true" />
-                                            {Number(place.distanceFromPreviousKm || 0).toFixed(1)}km · {Math.round(place.travelTimeFromPreviousMinutes || 0)}분
+                                            <span className="course-result-expanded-move-icon">
+                                                <CourseTransportIcon
+                                                    transportMode={transportMode}
+                                                    transitPathType={place.transitPathType}
+                                                    size={14}
+                                                    aria-hidden="true"
+                                                />
+                                            </span>
+                                            <span className="course-result-expanded-move-summary">
+                                                <span className="course-result-expanded-move-metrics">
+                                                    {Number(place.distanceFromPreviousKm || 0).toFixed(1)}km · {Math.round(place.travelTimeFromPreviousMinutes || 0)}분
+                                                </span>
+                                                <span className="course-result-expanded-move-badge">
+                                                    {legTransport?.label || '이동'}
+                                                </span>
+                                            </span>
                                         </span>
                                     )}
+                                    <span className="course-result-expanded-order">{index + 1}</span>
                                     <span className={`course-result-expanded-icon ${meta.tone}`}>
                                         <Icon size={17} strokeWidth={1.9} aria-hidden="true" />
                                     </span>
-                                    <span className="course-result-expanded-order">{index + 1}</span>
                                     <span className="course-result-expanded-place">
                                         <strong>{place.placeName || '장소 정보 준비 중'}</strong>
                                         <small>{meta.label} · 예상 체류 {formatMinutes(place.expectedVisitMinutes)}</small>
@@ -192,7 +214,9 @@ function ExpandedSchedule({ days }) {
 /** 추천 전략 한 개의 요약, 일차별 동선, 비교·저장 선택 동작을 묶은 카드입니다. */
 function CourseRecommendationCard({
     option,
+    transportMode,
     fallbackImage,
+    isEstimatedTravelTime,
     isCompared,
     isSelectedForSave,
     isSelectionDisabled,
@@ -216,6 +240,7 @@ function CourseRecommendationCard({
         [days],
     );
     const meta = optionMeta[option.optionType] || optionMeta.BALANCED;
+    const transport = getTransportMeta(transportMode);
     const coverImage = option.coverImageUrl
         || allPlaces.map(getPlaceImage).find(Boolean)
         || fallbackImage;
@@ -253,7 +278,14 @@ function CourseRecommendationCard({
                 <div className="course-result-summary">
                     <div className="course-result-title-row">
                         <div>
-                            <span className="course-result-option-name">{option.optionName || meta.shortLabel}</span>
+                            <div className="course-result-option-name-row">
+                                <span className="course-result-option-name">{option.optionName || meta.shortLabel}</span>
+                                {isEstimatedTravelTime && (
+                                    <span className="course-result-estimated-badge">
+                                        <Info size={11} aria-hidden="true" />일부 예상값
+                                    </span>
+                                )}
+                            </div>
                             <h2>{option.title || `${meta.shortLabel} 서울 맞춤 코스`}</h2>
                         </div>
 
@@ -275,7 +307,10 @@ function CourseRecommendationCard({
 
                     <div className="course-result-meta">
                         <span><Clock3 size={15} aria-hidden="true" />{formatMinutes(totalCourseTime)}</span>
-                        <span><Footprints size={15} aria-hidden="true" />이동 {formatMinutes(totalTravelTime)}</span>
+                        <span>
+                            <CourseTransportIcon transportMode={transportMode} size={15} aria-hidden="true" />
+                            {transport ? `${transport.label} ${formatMinutes(totalTravelTime)}` : `이동 ${formatMinutes(totalTravelTime)}`}
+                        </span>
                         <span><MapPinned size={15} aria-hidden="true" />{totalDistance.toFixed(1)}km</span>
                         <span><Route size={15} aria-hidden="true" />{allPlaces.length}곳 방문</span>
                         {days.length > 1 && (
@@ -381,7 +416,7 @@ function CourseRecommendationCard({
                 </div>
             </div>
 
-            {isExpanded && <ExpandedSchedule days={days} />}
+            {isExpanded && <ExpandedSchedule days={days} transportMode={transportMode} />}
         </article>
     );
 }

@@ -4,6 +4,8 @@ import com.seoulink.backend.domain.course.dto.request.CourseOptimizeRequest;
 import com.seoulink.backend.domain.course.dto.request.PlaceCandidateDto;
 import com.seoulink.backend.domain.course.dto.response.CourseOptimizeResponse;
 import com.seoulink.backend.domain.course.dto.response.OptimizedPlaceDto;
+import com.seoulink.backend.domain.course.model.TransportMode;
+import com.seoulink.backend.domain.course.model.TransitPathType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -12,9 +14,12 @@ import java.time.LocalDate;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -39,6 +44,7 @@ class CourseOptimizationServiceTest {
         LocalDate secondDay = LocalDate.of(2026, 7, 21);
 
         CourseOptimizeRequest request = CourseOptimizeRequest.builder()
+                .transportMode(TransportMode.WALKING)
                 .placeCandidates(List.of(
                         place(6L, "연남동", "카페", 75.0, 37.5660, 126.9250, secondDay),
                         place(4L, "남산서울타워", "관광지", 80.0, 37.5512, 126.9882, firstDay),
@@ -106,7 +112,10 @@ class CourseOptimizationServiceTest {
                 {8.0, 2.0, 10.0, 0.0}
         };
         DistanceService mockedDistanceService = mock(DistanceService.class);
-        when(mockedDistanceService.calculateRouteMatrix(anyList()))
+        when(mockedDistanceService.calculateRouteMatrix(
+                anyList(),
+                eq(TransportMode.WALKING)
+        ))
                 .thenReturn(new DistanceService.RouteMatrix(
                         distances,
                         travelTimes
@@ -117,6 +126,7 @@ class CourseOptimizationServiceTest {
         );
         LocalDate visitDate = LocalDate.of(2026, 7, 20);
         CourseOptimizeRequest request = CourseOptimizeRequest.builder()
+                .transportMode(TransportMode.WALKING)
                 .placeCandidates(List.of(
                         place(1L, "고정 출발", "TOUR", 100.0,
                                 37.5, 126.9, visitDate),
@@ -144,6 +154,74 @@ class CourseOptimizationServiceTest {
     }
 
     @Test
+    @DisplayName("최종 방문 경로에서 사용하지 않은 추정 구간은 결과를 추정값으로 표시하지 않는다")
+    void estimatedFlagChecksOnlyFinalRouteLegs() {
+        double[][] travelTimes = {
+                {0.0, 1.0, 10.0},
+                {1.0, 0.0, 1.0},
+                {10.0, 1.0, 0.0}
+        };
+        double[][] distances = {
+                {0.0, 1.0, 10.0},
+                {1.0, 0.0, 1.0},
+                {10.0, 1.0, 0.0}
+        };
+        boolean[][] estimatedPairs = {
+                {false, false, true},
+                {false, false, false},
+                {false, false, false}
+        };
+        TransitPathType[][] transitPathTypes = {
+                {null, TransitPathType.SUBWAY, null},
+                {TransitPathType.SUBWAY, null, TransitPathType.BUS_SUBWAY},
+                {null, TransitPathType.BUS_SUBWAY, null}
+        };
+        DistanceService mockedDistanceService = mock(DistanceService.class);
+        when(mockedDistanceService.calculateRouteMatrix(
+                anyList(),
+                eq(TransportMode.PUBLIC_TRANSIT)
+        )).thenReturn(new DistanceService.RouteMatrix(
+                distances,
+                travelTimes,
+                estimatedPairs,
+                transitPathTypes
+        ));
+        CourseOptimizationService service = new CourseOptimizationService(
+                mockedDistanceService,
+                new VisitDurationService()
+        );
+        LocalDate visitDate = LocalDate.of(2026, 7, 20);
+        CourseOptimizeRequest request = CourseOptimizeRequest.builder()
+                .transportMode(TransportMode.PUBLIC_TRANSIT)
+                .placeCandidates(List.of(
+                        place(1L, "출발", "TOUR", 100.0,
+                                37.5, 126.9, visitDate),
+                        place(2L, "중간", "TOUR", 90.0,
+                                37.51, 126.91, visitDate),
+                        place(3L, "도착", "TOUR", 80.0,
+                                37.52, 126.92, visitDate)
+                ))
+                .build();
+
+        CourseOptimizeResponse response = service.optimize(request);
+
+        assertEquals(
+                List.of(1L, 2L, 3L),
+                response.getOptimizedPlaces().stream()
+                        .map(OptimizedPlaceDto::getPlaceId)
+                        .toList()
+        );
+        assertFalse(response.getEstimatedTravelTimes());
+        assertEquals(
+                List.of(TransitPathType.SUBWAY, TransitPathType.BUS_SUBWAY),
+                response.getOptimizedPlaces().stream()
+                        .skip(1)
+                        .map(OptimizedPlaceDto::getTransitPathType)
+                        .toList()
+        );
+    }
+
+    @Test
     @DisplayName("총 이동시간이 같으면 2-opt는 총 거리가 더 짧은 경로를 선택한다")
     void useDistanceAsTwoOptTieBreaker() {
         double[][] travelTimes = {
@@ -159,7 +237,10 @@ class CourseOptimizationServiceTest {
                 {8.0, 2.0, 10.0, 0.0}
         };
         DistanceService mockedDistanceService = mock(DistanceService.class);
-        when(mockedDistanceService.calculateRouteMatrix(anyList()))
+        when(mockedDistanceService.calculateRouteMatrix(
+                anyList(),
+                eq(TransportMode.WALKING)
+        ))
                 .thenReturn(new DistanceService.RouteMatrix(
                         distances,
                         travelTimes
@@ -170,6 +251,7 @@ class CourseOptimizationServiceTest {
         );
         LocalDate visitDate = LocalDate.of(2026, 7, 20);
         CourseOptimizeRequest request = CourseOptimizeRequest.builder()
+                .transportMode(TransportMode.WALKING)
                 .placeCandidates(List.of(
                         place(1L, "고정 출발", "TOUR", 100.0,
                                 37.5, 126.9, visitDate),
@@ -198,7 +280,9 @@ class CourseOptimizationServiceTest {
     @DisplayName("장소 후보가 비어 있으면 빈 최적화 결과를 반환한다")
     void optimizeReturnsEmptyResponseForEmptyCandidates() {
         CourseOptimizeResponse response = courseOptimizationService.optimize(
-                CourseOptimizeRequest.builder().build()
+                CourseOptimizeRequest.builder()
+                        .transportMode(TransportMode.WALKING)
+                        .build()
         );
 
         assertTrue(response.getOptimizedPlaces().isEmpty());
@@ -209,10 +293,24 @@ class CourseOptimizationServiceTest {
     }
 
     @Test
+    @DisplayName("이동수단이 없으면 최적화 요청을 거부한다")
+    void optimizeRejectsMissingTransportMode() {
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> courseOptimizationService.optimize(
+                        CourseOptimizeRequest.builder().build()
+                )
+        );
+
+        assertTrue(exception.getMessage().contains("이동수단"));
+    }
+
+    @Test
     @DisplayName("장소가 한 개면 이동거리와 이동시간 없이 방문 순서 1로 반환한다")
     void optimizeSingleCandidate() {
         LocalDate visitDate = LocalDate.of(2026, 7, 20);
         CourseOptimizeRequest request = CourseOptimizeRequest.builder()
+                .transportMode(TransportMode.WALKING)
                 .placeCandidates(List.of(place(
                         1L,
                         "경복궁",
@@ -250,6 +348,7 @@ class CourseOptimizationServiceTest {
         );
 
         CourseOptimizeRequest request = CourseOptimizeRequest.builder()
+                .transportMode(TransportMode.WALKING)
                 .placeCandidates(List.of(invalidCandidate))
                 .build();
 
@@ -278,6 +377,7 @@ class CourseOptimizationServiceTest {
                 IllegalArgumentException.class,
                 () -> courseOptimizationService.optimize(
                         CourseOptimizeRequest.builder()
+                                .transportMode(TransportMode.WALKING)
                                 .placeCandidates(List.of(invalidCandidate))
                                 .build()
                 )
@@ -303,6 +403,7 @@ class CourseOptimizationServiceTest {
         )));
 
         CourseOptimizeRequest request = CourseOptimizeRequest.builder()
+                .transportMode(TransportMode.WALKING)
                 .placeCandidates(List.of(original))
                 .build();
 
@@ -319,6 +420,7 @@ class CourseOptimizationServiceTest {
     void optimizeRemovesDuplicatePlaces() {
         LocalDate visitDate = LocalDate.of(2026, 7, 20);
         CourseOptimizeRequest request = CourseOptimizeRequest.builder()
+                .transportMode(TransportMode.WALKING)
                 .placeCandidates(List.of(
                         place(1L, "경복궁", "TOUR", 80.0,
                                 37.5796, 126.9770, visitDate),
@@ -349,6 +451,7 @@ class CourseOptimizationServiceTest {
         LocalDate firstDay = LocalDate.of(2026, 7, 20);
         LocalDate secondDay = LocalDate.of(2026, 7, 21);
         CourseOptimizeRequest request = CourseOptimizeRequest.builder()
+                .transportMode(TransportMode.WALKING)
                 .placeCandidates(List.of(
                         place(1L, "경복궁", "TOUR", 99.0,
                                 37.5796, 126.9770, secondDay),
@@ -374,6 +477,7 @@ class CourseOptimizationServiceTest {
     void optimizeUsesPlaceIdForCompleteTie() {
         LocalDate visitDate = LocalDate.of(2026, 7, 20);
         CourseOptimizeRequest request = CourseOptimizeRequest.builder()
+                .transportMode(TransportMode.WALKING)
                 .placeCandidates(List.of(
                         place(3L, "세 번째 장소", "CAFE", 90.0,
                                 37.5665, 126.9780, visitDate),
@@ -411,6 +515,7 @@ class CourseOptimizationServiceTest {
         ));
 
         CourseOptimizeRequest request = CourseOptimizeRequest.builder()
+                .transportMode(TransportMode.WALKING)
                 .placeCandidates(List.of(
                         place(1L, "서울시청", "TOUR", 100.0,
                                 37.5665, 126.9780, visitDate),
@@ -449,7 +554,10 @@ class CourseOptimizationServiceTest {
     @DisplayName("거리가 2km 이하여도 이동시간이 30분을 초과하면 교체한다")
     void replacePlaceWhenTravelTimeExceedsThirtyMinutes() {
         DistanceService mockedDistanceService = mock(DistanceService.class);
-        when(mockedDistanceService.calculateRouteMatrix(anyList()))
+        when(mockedDistanceService.calculateRouteMatrix(
+                anyList(),
+                eq(TransportMode.WALKING)
+        ))
                 .thenAnswer(invocation -> {
                     List<PlaceCandidateDto> places = invocation.getArgument(0);
                     int size = places.size();
@@ -484,6 +592,7 @@ class CourseOptimizationServiceTest {
         ));
 
         CourseOptimizeRequest request = CourseOptimizeRequest.builder()
+                .transportMode(TransportMode.WALKING)
                 .placeCandidates(List.of(
                         place(1L, "출발 장소", "CAFE", 100.0,
                                 37.5665, 126.9780, visitDate),
@@ -518,6 +627,7 @@ class CourseOptimizationServiceTest {
         ));
 
         CourseOptimizeRequest request = CourseOptimizeRequest.builder()
+                .transportMode(TransportMode.WALKING)
                 .placeCandidates(List.of(
                         place(1L, "서울시청", "TOUR", 100.0,
                                 37.5665, 126.9780, visitDate),
@@ -551,6 +661,7 @@ class CourseOptimizationServiceTest {
         ));
 
         CourseOptimizeRequest request = CourseOptimizeRequest.builder()
+                .transportMode(TransportMode.WALKING)
                 .placeCandidates(List.of(
                         place(1L, "서울시청", "TOUR", 100.0,
                                 37.5665, 126.9780, visitDate),
@@ -594,6 +705,7 @@ class CourseOptimizationServiceTest {
         ));
 
         CourseOptimizeRequest request = CourseOptimizeRequest.builder()
+                .transportMode(TransportMode.WALKING)
                 .placeCandidates(List.of(
                         place(1L, "첫날 출발", "TOUR", 100.0,
                                 37.5665, 126.9780, firstDay),
@@ -633,6 +745,78 @@ class CourseOptimizationServiceTest {
     }
 
     @Test
+    @DisplayName("같은 구간도 이동수단별 먼 장소 기준을 다르게 적용한다")
+    void applyDifferentReplacementThresholdsByTransportMode() {
+        DistanceService mockedDistanceService = mock(DistanceService.class);
+        when(mockedDistanceService.calculateRouteMatrix(
+                anyList(),
+                any(TransportMode.class)
+        )).thenAnswer(invocation -> {
+            List<PlaceCandidateDto> places = invocation.getArgument(0);
+            int size = places.size();
+            double[][] distances = new double[size][size];
+            double[][] travelTimes = new double[size][size];
+            boolean containsOriginal = places.stream()
+                    .anyMatch(place -> place.getPlaceId().equals(2L));
+
+            for (int from = 0; from < size; from++) {
+                for (int to = 0; to < size; to++) {
+                    if (from == to) {
+                        continue;
+                    }
+                    distances[from][to] = containsOriginal ? 5.0 : 0.5;
+                    travelTimes[from][to] = containsOriginal ? 35.0 : 10.0;
+                }
+            }
+            return new DistanceService.RouteMatrix(distances, travelTimes);
+        });
+        CourseOptimizationService service = new CourseOptimizationService(
+                mockedDistanceService,
+                new VisitDurationService()
+        );
+        LocalDate visitDate = LocalDate.of(2026, 7, 20);
+        PlaceCandidateDto distantCafe = place(
+                2L, "이동 구간 카페", "CAFE", 90.0,
+                37.60, 127.00, visitDate
+        );
+        distantCafe.setAlternativeCandidates(List.of(place(
+                3L, "가까운 대체 카페", "CAFE", 80.0,
+                37.57, 126.98, null
+        )));
+        List<PlaceCandidateDto> candidates = List.of(
+                place(1L, "출발지", "TOUR", 100.0,
+                        37.5665, 126.9780, visitDate),
+                distantCafe
+        );
+
+        CourseOptimizeResponse walking = service.optimize(
+                CourseOptimizeRequest.builder()
+                        .transportMode(TransportMode.WALKING)
+                        .placeCandidates(candidates)
+                        .build()
+        );
+        CourseOptimizeResponse driving = service.optimize(
+                CourseOptimizeRequest.builder()
+                        .transportMode(TransportMode.DRIVING)
+                        .placeCandidates(candidates)
+                        .build()
+        );
+
+        assertEquals(
+                List.of(1L, 3L),
+                walking.getOptimizedPlaces().stream()
+                        .map(OptimizedPlaceDto::getPlaceId)
+                        .toList()
+        );
+        assertEquals(
+                List.of(1L, 2L),
+                driving.getOptimizedPlaces().stream()
+                        .map(OptimizedPlaceDto::getPlaceId)
+                        .toList()
+        );
+    }
+
+    @Test
     @DisplayName("방문 날짜가 없는 장소 후보는 예외가 발생한다")
     void optimizeRejectsCandidateWithoutVisitDate() {
         PlaceCandidateDto invalidCandidate = PlaceCandidateDto.builder()
@@ -645,6 +829,7 @@ class CourseOptimizationServiceTest {
                 .build();
 
         CourseOptimizeRequest request = CourseOptimizeRequest.builder()
+                .transportMode(TransportMode.WALKING)
                 .placeCandidates(List.of(invalidCandidate))
                 .build();
 

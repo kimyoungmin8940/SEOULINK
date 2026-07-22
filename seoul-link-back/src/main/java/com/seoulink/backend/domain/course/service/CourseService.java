@@ -90,6 +90,7 @@ public class CourseService {
                 .title(course.getTitle())
                 .description(course.getDescription())
                 .travelCode(course.getTravelCode())
+                .transportMode(course.getTransportMode())
                 .courseType(course.getCourseType())
                 .region(course.getRegion())
                 .publicCourse("Y".equalsIgnoreCase(course.getPublicStatus()))
@@ -163,6 +164,7 @@ public class CourseService {
                 .title(course.getTitle())
                 .description(course.getDescription())
                 .courseType(course.getCourseType())
+                .transportMode(course.getTransportMode())
                 .regions(regions)
                 .placeCount(details.size())
                 .dayCount(dayCount)
@@ -272,6 +274,7 @@ public class CourseService {
      * placeId를 모아 한 번에 조회하고, 이 응답의 장소 표시 필드를 보강한다.</p>
      */
     private CoursePlaceResponse toPlaceResponse(CourseDetail detail) {
+        // 저장한 이전→현재 구간의 경로 종류를 거리·시간과 함께 상세 화면까지 전달한다.
         return CoursePlaceResponse.builder()
                 .detailId(detail.getDetailId())
                 .placeId(detail.getPlaceId())
@@ -283,6 +286,7 @@ public class CourseService {
                 .travelTimeFromPreviousMinutes(
                         detail.getTravelTimeFromPreviousMinutes()
                 )
+                .transitPathType(detail.getTransitPathType())
                 .build();
     }
 }

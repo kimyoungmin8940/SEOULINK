@@ -6,12 +6,14 @@ import com.seoulink.backend.domain.course.dto.request.PlaceCandidateDto;
 import com.seoulink.backend.domain.course.dto.response.CourseDayResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseOptionResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseRecommendResponse;
+import com.seoulink.backend.domain.course.model.TransportMode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -49,6 +51,7 @@ class CourseRecommendationServiceTest {
         CourseRecommendRequest request = CourseRecommendRequest.builder()
                 .resultId(101L)
                 .travelCode("ATLSR")
+                .transportMode(TransportMode.WALKING)
                 .dailyStartTime(LocalTime.of(10, 0))
                 .dailyPlans(List.of(
                         DailyPlanRequest.builder()
@@ -85,6 +88,8 @@ class CourseRecommendationServiceTest {
 
         assertEquals(101L, response.getResultId());
         assertEquals("ATLSR", response.getTravelCode());
+        assertEquals(TransportMode.WALKING, response.getTransportMode());
+        assertTrue(response.getEstimatedTravelTimes());
         assertEquals(LocalTime.of(10, 0), response.getDailyStartTime());
         assertEquals(3, response.getOptionCount());
         assertEquals(3, response.getCourseOptions().size());
@@ -100,6 +105,8 @@ class CourseRecommendationServiceTest {
             assertTrue(option.getTitle().endsWith(option.getOptionName()));
             assertTrue(!option.getDescription().isBlank());
             assertTrue(!option.getRecommendationKey().isBlank());
+            assertTrue(option.getRecommendationKey().startsWith("WALKING:"));
+            assertTrue(option.getEstimatedTravelTimes());
 
             for (CourseDayResponse day : option.getDays()) {
                 assertEquals(4, day.getPlaces().size());
@@ -133,11 +140,77 @@ class CourseRecommendationServiceTest {
     }
 
     @Test
+    @DisplayName("후보 카테고리 7·4·4를 최종 6곳 비율로 축소해 추천한다")
+    void scaleCandidateCategoryTargetsToFinalPlaceCount() {
+        List<PlaceCandidateDto> candidates = new ArrayList<>();
+        for (long id = 1; id <= 7; id++) {
+            candidates.add(candidate(
+                    id,
+                    "관광지 " + id,
+                    "TOUR",
+                    100.0 - id,
+                    37.56 + id * 0.0001,
+                    126.97 + id * 0.0001
+            ));
+        }
+        for (long id = 11; id <= 14; id++) {
+            candidates.add(candidate(
+                    id,
+                    "식당 " + id,
+                    "RESTAURANT",
+                    100.0 - id,
+                    37.56 + id * 0.0001,
+                    126.97 + id * 0.0001
+            ));
+        }
+        for (long id = 21; id <= 24; id++) {
+            candidates.add(candidate(
+                    id,
+                    "카페 " + id,
+                    "CAFE",
+                    100.0 - id,
+                    37.56 + id * 0.0001,
+                    126.97 + id * 0.0001
+            ));
+        }
+
+        CourseRecommendRequest request = CourseRecommendRequest.builder()
+                .resultId(101L)
+                .transportMode(TransportMode.DRIVING)
+                .dailyStartTime(LocalTime.of(10, 0))
+                .dailyPlans(List.of(DailyPlanRequest.builder()
+                        .visitDate(LocalDate.of(2026, 7, 20))
+                        .targetPlaceCount(6)
+                        .categoryTargets(Map.of(
+                                "TOUR", 7,
+                                "RESTAURANT", 4,
+                                "CAFE", 4,
+                                "HOTEL", 0
+                        ))
+                        .placeCandidates(candidates)
+                        .build()))
+                .build();
+
+        CourseRecommendResponse response =
+                courseRecommendationService.recommend(request);
+
+        assertEquals(TransportMode.DRIVING, response.getTransportMode());
+        for (CourseOptionResponse option : response.getCourseOptions()) {
+            CourseDayResponse day = option.getDays().get(0);
+            assertEquals(6, day.getPlaces().size());
+            assertEquals(3, countCategory(day, "TOUR"));
+            assertEquals(2, countCategory(day, "RESTAURANT"));
+            assertEquals(1, countCategory(day, "CAFE"));
+        }
+    }
+
+    @Test
     @DisplayName("같은 취향으로 다시 추천하면 직전 세 코스를 제외한 새 코스를 반환한다")
     void recommendAgainExcludesPreviousOptions() {
         CourseRecommendRequest request = CourseRecommendRequest.builder()
                 .resultId(101L)
                 .travelCode("ATLSR")
+                .transportMode(TransportMode.WALKING)
                 .dailyStartTime(LocalTime.of(10, 0))
                 .dailyPlans(List.of(DailyPlanRequest.builder()
                         .visitDate(LocalDate.of(2026, 7, 20))
@@ -179,7 +252,7 @@ class CourseRecommendationServiceTest {
     }
 
     @Test
-    @DisplayName("categoryTargets 합계가 targetPlaceCount와 다르면 요청을 거부한다")
+    @DisplayName("categoryTargets 합계가 targetPlaceCount보다 작으면 요청을 거부한다")
     void rejectMismatchedTargetCount() {
         Map<String, Integer> invalidTargets = new LinkedHashMap<>();
         invalidTargets.put("TOUR", 1);
@@ -189,6 +262,7 @@ class CourseRecommendationServiceTest {
 
         CourseRecommendRequest request = CourseRecommendRequest.builder()
                 .resultId(101L)
+                .transportMode(TransportMode.WALKING)
                 .dailyStartTime(LocalTime.of(10, 0))
                 .dailyPlans(List.of(DailyPlanRequest.builder()
                         .visitDate(LocalDate.of(2026, 7, 20))
@@ -213,6 +287,7 @@ class CourseRecommendationServiceTest {
     void rejectInsufficientCategoryCandidates() {
         CourseRecommendRequest request = CourseRecommendRequest.builder()
                 .resultId(101L)
+                .transportMode(TransportMode.WALKING)
                 .dailyStartTime(LocalTime.of(10, 0))
                 .dailyPlans(List.of(DailyPlanRequest.builder()
                         .visitDate(LocalDate.of(2026, 7, 20))
@@ -231,6 +306,39 @@ class CourseRecommendationServiceTest {
                 IllegalArgumentException.class,
                 () -> courseRecommendationService.recommend(request)
         );
+    }
+
+    @Test
+    @DisplayName("이동수단이 없으면 추천 요청을 거부한다")
+    void rejectMissingTransportMode() {
+        CourseRecommendRequest request = CourseRecommendRequest.builder()
+                .resultId(101L)
+                .dailyStartTime(LocalTime.of(10, 0))
+                .dailyPlans(List.of(DailyPlanRequest.builder()
+                        .visitDate(LocalDate.of(2026, 7, 20))
+                        .targetPlaceCount(1)
+                        .categoryTargets(Map.of(
+                                "TOUR", 1,
+                                "RESTAURANT", 0,
+                                "CAFE", 0,
+                                "HOTEL", 0
+                        ))
+                        .placeCandidates(List.of(candidate(
+                                1L,
+                                "관광지",
+                                "TOUR",
+                                90.0,
+                                37.5,
+                                127.0
+                        )))
+                        .build()))
+                .build();
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> courseRecommendationService.recommend(request)
+        );
+        assertTrue(exception.getMessage().contains("이동수단"));
     }
 
     private Map<String, Integer> categoryTargets() {

@@ -1,6 +1,10 @@
 {
   "resultId": 101,
   "travelCode": "ATBSP",
+  "transportMode": "PUBLIC_TRANSIT",
+  "estimatedTravelTimes": false,
+  "dailyStartTime": "10:00",
+  "optionCount": 3,
   "courseOptions": [
     {
       "optionNo": 1,
@@ -12,6 +16,7 @@
       "totalTravelTimeMinutes": 97,
       "totalVisitTimeMinutes": 390,
       "totalCourseTimeMinutes": 487,
+      "estimatedTravelTimes": false,
       "days": [
         {
           "dayNo": 1,
@@ -48,6 +53,7 @@
               "visitOrder": 2,
               "distanceFromPreviousKm": 1.7,
               "travelTimeFromPreviousMinutes": 23,
+              "transitPathType": "SUBWAY",
               "expectedVisitTimeHHmm": "11:23",
               "themePalaceCultureYn": "Y"
             },
@@ -63,6 +69,7 @@
               "visitOrder": 3,
               "distanceFromPreviousKm": 1.4,
               "travelTimeFromPreviousMinutes": 20,
+              "transitPathType": "BUS_SUBWAY",
               "expectedVisitTimeHHmm": "13:13",
               "themeFoodTourYn": "Y"
             },
@@ -78,6 +85,7 @@
               "visitOrder": 4,
               "distanceFromPreviousKm": 1.8,
               "travelTimeFromPreviousMinutes": 25,
+              "transitPathType": "BUS",
               "expectedVisitTimeHHmm": "14:38",
               "themeCafeTourYn": "Y"
             },
@@ -93,6 +101,7 @@
               "visitOrder": 5,
               "distanceFromPreviousKm": 2.1,
               "travelTimeFromPreviousMinutes": 29,
+              "transitPathType": "BUS_SUBWAY",
               "expectedVisitTimeHHmm": "16:07",
               "themeDateYn": "Y"
             }
@@ -110,6 +119,7 @@
       "totalTravelTimeMinutes": 48,
       "totalVisitTimeMinutes": 390,
       "totalCourseTimeMinutes": 438,
+      "estimatedTravelTimes": false,
       "days": [
         {
           "dayNo": 1,
@@ -146,6 +156,7 @@
               "visitOrder": 2,
               "distanceFromPreviousKm": 1.2,
               "travelTimeFromPreviousMinutes": 17,
+              "transitPathType": "BUS",
               "expectedVisitTimeHHmm": "11:47",
               "themeShoppingHotplaceYn": "Y"
             },
@@ -161,6 +172,7 @@
               "visitOrder": 3,
               "distanceFromPreviousKm": 0.5,
               "travelTimeFromPreviousMinutes": 8,
+              "transitPathType": "SUBWAY",
               "expectedVisitTimeHHmm": "13:25",
               "themeFoodTourYn": "Y"
             },
@@ -176,6 +188,7 @@
               "visitOrder": 4,
               "distanceFromPreviousKm": 0.6,
               "travelTimeFromPreviousMinutes": 9,
+              "transitPathType": "BUS",
               "expectedVisitTimeHHmm": "14:34",
               "themeCafeTourYn": "Y"
             },
@@ -191,6 +204,7 @@
               "visitOrder": 5,
               "distanceFromPreviousKm": 0.9,
               "travelTimeFromPreviousMinutes": 14,
+              "transitPathType": "BUS_SUBWAY",
               "expectedVisitTimeHHmm": "15:48",
               "themeNatureHangangYn": "Y"
             }
@@ -208,6 +222,7 @@
       "totalTravelTimeMinutes": 72,
       "totalVisitTimeMinutes": 390,
       "totalCourseTimeMinutes": 462,
+      "estimatedTravelTimes": false,
       "days": [
         {
           "dayNo": 1,
@@ -244,6 +259,7 @@
               "visitOrder": 2,
               "distanceFromPreviousKm": 0.7,
               "travelTimeFromPreviousMinutes": 10,
+              "transitPathType": "BUS",
               "expectedVisitTimeHHmm": "11:40",
               "themeFoodTourYn": "Y"
             },
@@ -259,6 +275,7 @@
               "visitOrder": 3,
               "distanceFromPreviousKm": 0.8,
               "travelTimeFromPreviousMinutes": 11,
+              "transitPathType": "BUS",
               "expectedVisitTimeHHmm": "12:51",
               "themeCafeTourYn": "Y"
             },
@@ -274,6 +291,7 @@
               "visitOrder": 4,
               "distanceFromPreviousKm": 1.3,
               "travelTimeFromPreviousMinutes": 18,
+              "transitPathType": "SUBWAY",
               "expectedVisitTimeHHmm": "14:09",
               "themeNatureHangangYn": "Y"
             },
@@ -289,6 +307,7 @@
               "visitOrder": 5,
               "distanceFromPreviousKm": 2.3,
               "travelTimeFromPreviousMinutes": 33,
+              "transitPathType": "BUS_SUBWAY",
               "expectedVisitTimeHHmm": "16:12",
               "themeNightViewYn": "Y"
             }

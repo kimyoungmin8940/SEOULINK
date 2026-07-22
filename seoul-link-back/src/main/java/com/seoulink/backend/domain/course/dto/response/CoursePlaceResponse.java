@@ -1,5 +1,6 @@
 package com.seoulink.backend.domain.course.dto.response;
 
+import com.seoulink.backend.domain.course.model.TransitPathType;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -47,7 +48,8 @@ public class CoursePlaceResponse {
     private String visitTime;
     private Integer expectedVisitMinutes;
 
-    // 같은 날짜의 첫 장소는 이전 장소가 없으므로 두 값이 0이다.
+    // 같은 날짜의 첫 장소는 이전 장소가 없으므로 거리·시간은 0이고 경로 종류는 null이다.
     private Double distanceFromPreviousKm;
     private Double travelTimeFromPreviousMinutes;
+    private TransitPathType transitPathType;
 }

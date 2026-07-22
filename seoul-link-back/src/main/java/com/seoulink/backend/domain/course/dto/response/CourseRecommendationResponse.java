@@ -1,5 +1,6 @@
 package com.seoulink.backend.domain.course.dto.response;
 
+import com.seoulink.backend.domain.course.model.TransportMode;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -31,6 +32,7 @@ public class CourseRecommendationResponse {
     private String description;
     private String coverImageUrl;
     private String courseType;
+    private TransportMode transportMode;
 
     @Builder.Default
     private List<String> regions = new ArrayList<>();

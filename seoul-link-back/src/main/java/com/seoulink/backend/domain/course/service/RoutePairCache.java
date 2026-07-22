@@ -1,6 +1,8 @@
 package com.seoulink.backend.domain.course.service;
 
 import com.seoulink.backend.domain.course.dto.request.PlaceCandidateDto;
+import com.seoulink.backend.domain.course.model.TransportMode;
+import com.seoulink.backend.domain.course.model.TransitPathType;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -12,8 +14,9 @@ import java.util.Optional;
 /**
  * 동일 장소 쌍의 거리와 이동시간을 메모리에 보관하는 LRU 캐시이다.
  *
- * <p>도보 경로는 방향에 따라 달라질 수 있으므로 A→B와 B→A를 서로 다른 키로 저장한다.
- * 장소 ID가 같아도 좌표가 변경되면 별도 키가 만들어져 오래된 경로가 재사용되지 않는다.</p>
+ * <p>경로는 방향과 이동수단에 따라 달라질 수 있으므로 A→B와 B→A, 도보·대중교통·
+ * 자동차를 모두 별도 키로 저장한다. 장소 ID가 같아도 좌표가 변경되면 별도 키가
+ * 만들어져 오래된 경로가 재사용되지 않는다.</p>
  */
 @Component
 public class RoutePairCache {
@@ -65,9 +68,10 @@ public class RoutePairCache {
     /** 유효기간이 남은 장소 쌍 경로가 있으면 반환하고 만료된 값은 즉시 제거한다. */
     public synchronized Optional<RoutePairValue> get(
             PlaceCandidateDto from,
-            PlaceCandidateDto to
+            PlaceCandidateDto to,
+            TransportMode transportMode
     ) {
-        RoutePairKey key = createKey(from, to);
+        RoutePairKey key = createKey(from, to, transportMode);
         CachedRoutePair cached = cache.get(key);
         if (cached == null) {
             return Optional.empty();
@@ -84,16 +88,44 @@ public class RoutePairCache {
     public synchronized void put(
             PlaceCandidateDto from,
             PlaceCandidateDto to,
+            TransportMode transportMode,
             double distanceKm,
-            double travelTimeMinutes
+            double travelTimeMinutes,
+            boolean estimated
+    ) {
+        put(
+                from,
+                to,
+                transportMode,
+                distanceKm,
+                travelTimeMinutes,
+                estimated,
+                null
+        );
+    }
+
+    /** 대중교통 실제 경로는 ODsay의 지하철·버스·혼합 종류까지 함께 보관한다. */
+    public synchronized void put(
+            PlaceCandidateDto from,
+            PlaceCandidateDto to,
+            TransportMode transportMode,
+            double distanceKm,
+            double travelTimeMinutes,
+            boolean estimated,
+            TransitPathType transitPathType
     ) {
         validateRouteValue(distanceKm, "거리");
         validateRouteValue(travelTimeMinutes, "이동시간");
 
         cache.put(
-                createKey(from, to),
+                createKey(from, to, transportMode),
                 new CachedRoutePair(
-                        new RoutePairValue(distanceKm, travelTimeMinutes),
+                        new RoutePairValue(
+                                distanceKm,
+                                travelTimeMinutes,
+                                estimated,
+                                transitPathType
+                        ),
                         System.currentTimeMillis() + ttlMillis
                 )
         );
@@ -110,8 +142,19 @@ public class RoutePairCache {
         cache.clear();
     }
 
-    private RoutePairKey createKey(PlaceCandidateDto from, PlaceCandidateDto to) {
-        return new RoutePairKey(createPlacePoint(from), createPlacePoint(to));
+    private RoutePairKey createKey(
+            PlaceCandidateDto from,
+            PlaceCandidateDto to,
+            TransportMode transportMode
+    ) {
+        if (transportMode == null) {
+            throw new IllegalArgumentException("거리 캐시 키 생성에는 이동수단이 필요합니다.");
+        }
+        return new RoutePairKey(
+                transportMode,
+                createPlacePoint(from),
+                createPlacePoint(to)
+        );
     }
 
     private PlacePoint createPlacePoint(PlaceCandidateDto place) {
@@ -141,7 +184,9 @@ public class RoutePairCache {
     /** 캐시에서 조회되는 거리(km)와 이동시간(분) 한 쌍이다. */
     public record RoutePairValue(
             double distanceKm,
-            double travelTimeMinutes
+            double travelTimeMinutes,
+            boolean estimated,
+            TransitPathType transitPathType
     ) {
     }
 
@@ -153,6 +198,7 @@ public class RoutePairCache {
     }
 
     private record RoutePairKey(
+            TransportMode transportMode,
             PlacePoint from,
             PlacePoint to
     ) {

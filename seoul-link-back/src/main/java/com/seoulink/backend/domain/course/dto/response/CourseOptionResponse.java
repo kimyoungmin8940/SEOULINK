@@ -34,6 +34,7 @@ public class CourseOptionResponse {
     private Double totalTravelTimeMinutes;
     private Integer totalVisitTimeMinutes;
     private Double totalCourseTimeMinutes;
+    private Boolean estimatedTravelTimes;
 
     // 날짜별 방문 순서와 날짜별 합계이다.
     @Builder.Default

@@ -1,7 +1,10 @@
 package com.seoulink.backend.domain.course.entity;
 
+import com.seoulink.backend.domain.course.model.TransitPathType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -70,6 +73,11 @@ public class CourseDetail {
     @Builder.Default
     @Column(name = "TRAVEL_MINUTES_FROM_PREV", nullable = false)
     private Double travelTimeFromPreviousMinutes = 0.0;
+
+    // 대중교통 코스만 ODsay 최적 경로의 지하철·버스·혼합 종류를 저장한다.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "TRANSIT_PATH_TYPE", length = 20)
+    private TransitPathType transitPathType;
 
     // Hibernate가 최초 저장 시각을 자동으로 기록한다.
     @CreationTimestamp

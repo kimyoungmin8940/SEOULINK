@@ -28,6 +28,12 @@ import {
     writeMyCourseCache,
     writeRecommendedCourseCache,
 } from '../../utils/courseHistory';
+import {
+    getTransportMeta,
+    normalizeTransitPathType,
+    normalizeTransportMode,
+    resolveTransportMode,
+} from '../../utils/courseTransport';
 import recommendationPreview from '../../mocks/courseRecommendation.json';
 import heroSeoulImage from '../../assets/images/hero-seoul-main.png';
 import hanokImage from '../../assets/images/moods/mood-hanok-photo.png';
@@ -102,7 +108,22 @@ function readStoredObject(keys) {
 /** 현재의 3개 옵션 응답과 이전 단일 코스 응답을 화면 공통 구조로 맞춥니다. */
 function normalizeRecommendationResponse(data) {
     if (Array.isArray(data?.courseOptions)) {
-        return data;
+        const courseOptions = data.courseOptions.map((option) => ({
+            ...option,
+            estimatedTravelTimes: option?.estimatedTravelTimes == null
+                ? Boolean(data.estimatedTravelTimes)
+                : Boolean(option.estimatedTravelTimes),
+        }));
+
+        return {
+            ...data,
+            transportMode: normalizeTransportMode(data.transportMode),
+            estimatedTravelTimes: Boolean(
+                data.estimatedTravelTimes
+                || courseOptions.some((option) => option.estimatedTravelTimes),
+            ),
+            courseOptions,
+        };
     }
 
     // 이전 백엔드 응답(단일 저장 코스)도 화면에서 한 개 옵션으로 볼 수 있게 유지합니다.
@@ -110,6 +131,8 @@ function normalizeRecommendationResponse(data) {
         return {
             resultId: data.resultId ?? null,
             travelCode: data.travelCode ?? null,
+            transportMode: normalizeTransportMode(data.transportMode),
+            estimatedTravelTimes: Boolean(data.estimatedTravelTimes),
             courseOptions: [
                 {
                     optionNo: 1,
@@ -121,6 +144,7 @@ function normalizeRecommendationResponse(data) {
                     totalTravelTimeMinutes: data.totalTravelTimeMinutes,
                     totalVisitTimeMinutes: data.totalVisitTimeMinutes,
                     totalCourseTimeMinutes: data.totalCourseTimeMinutes,
+                    estimatedTravelTimes: Boolean(data.estimatedTravelTimes),
                     days: data.days,
                 },
             ],
@@ -303,8 +327,21 @@ function getOptionPlaceCount(option) {
     );
 }
 
+function getCourseTip(transport, travelCode) {
+    const densityTip = travelCode.endsWith('P')
+        ? '빽빽한 일정형 성향에 맞춰 볼거리를 알차게 담았어요.'
+        : '여유 일정형 성향에 맞춰 장소별 체류 시간을 넉넉하게 잡았어요.';
+
+    return transport ? `${transport.tip} ${densityTip}` : densityTip;
+}
+
 /** 사용자가 고른 옵션에서 COURSE와 COURSE_DETAILS 저장에 필요한 값만 추립니다. */
-function buildSaveRequest(option, response, profile, travelCode) {
+function buildSaveRequest(option, response, profile, travelCode, transportMode) {
+    if (!transportMode) {
+        throw new Error('추천 결과의 이동수단을 확인할 수 없습니다. 다시 추천받아 주세요.');
+    }
+
+    // 구간별 경로 종류도 도착 장소에 귀속된 값이므로 거리·시간과 함께 저장 요청에 유지합니다.
     const places = (option.days || []).flatMap((day) => (
         (day.places || []).map((place, index) => ({
             placeId: place.placeId,
@@ -314,6 +351,7 @@ function buildSaveRequest(option, response, profile, travelCode) {
             expectedVisitMinutes: Number(place.expectedVisitMinutes) || 0,
             distanceFromPreviousKm: Number(place.distanceFromPreviousKm) || 0,
             travelTimeFromPreviousMinutes: Number(place.travelTimeFromPreviousMinutes) || 0,
+            transitPathType: normalizeTransitPathType(place.transitPathType),
         }))
     ));
 
@@ -323,6 +361,7 @@ function buildSaveRequest(option, response, profile, travelCode) {
         title: option.title || option.optionName || '서울 맞춤 추천 코스',
         description: option.description || `${option.optionName || '맞춤'} 방식으로 구성한 서울 여행 코스`,
         travelCode,
+        transportMode,
         courseType: 'SURVEY',
         region: '서울',
         publicCourse: false,
@@ -331,7 +370,13 @@ function buildSaveRequest(option, response, profile, travelCode) {
 }
 
 /** 서버 목록에 아직 없는 이미지·태그를 상세/목록 화면에서 보완할 로컬 요약을 저장합니다. */
-function storeRecommendedCourseSummary(option, savedCourse, memberId) {
+function storeRecommendedCourseSummary(
+    option,
+    savedCourse,
+    memberId,
+    transportMode,
+    estimatedTravelTimes,
+) {
     if (!savedCourse?.courseId) return;
 
     const places = (option.days || []).flatMap((day) => day.places || []);
@@ -361,6 +406,8 @@ function storeRecommendedCourseSummary(option, savedCourse, memberId) {
         courseId: savedCourse.courseId,
         title: savedCourse.title || option.title || option.optionName,
         description: option.description || '취향 검사 결과를 바탕으로 추천된 서울 여행 코스입니다.',
+        transportMode: savedCourse.transportMode || transportMode,
+        estimatedTravelTimes: Boolean(estimatedTravelTimes),
         coverImageUrl,
         imageUrl: coverImageUrl,
         regions: ['서울'],
@@ -477,6 +524,17 @@ function CourseRecommendPage() {
     const options = Array.isArray(response?.courseOptions) ? response.courseOptions : [];
     const travelCode = getStoredTravelCode(response);
     const travelBadges = getTravelTypeBadges(travelCode);
+    // 실제 응답을 우선하고, 값이 없을 때만 요청 또는 UI 미리보기의 이동수단으로 보완합니다.
+    const transportMode = resolveTransportMode(
+        response?.transportMode,
+        recommendRequest?.transportMode,
+        source === 'preview' ? recommendationPreview.transportMode : null,
+    );
+    const transport = getTransportMeta(transportMode);
+    const hasEstimatedTravelTimes = Boolean(
+        response?.estimatedTravelTimes
+        || options.some((option) => option?.estimatedTravelTimes),
+    );
     const focusedOption = options.find((option) => option.optionNo === focusedOptionNo) || options[0];
 
     const requestRecommendation = useCallback(async () => {
@@ -652,7 +710,7 @@ function CourseRecommendPage() {
 
         try {
             const requests = selectedOptions.map((option) => (
-                buildSaveRequest(option, response, profile, travelCode)
+                buildSaveRequest(option, response, profile, travelCode, transportMode)
             ));
             const savedCourses = requests.length === 1
                 ? [await saveCourse(requests[0])]
@@ -677,6 +735,8 @@ function CourseRecommendPage() {
                         option,
                         savedCourse,
                         profile.memberId,
+                        transportMode,
+                        option.estimatedTravelTimes ?? response?.estimatedTravelTimes,
                     );
                 } catch {
                     // 목록 API가 연결되면 서버 데이터로 다시 채워집니다.
@@ -777,6 +837,19 @@ function CourseRecommendPage() {
                     </div>
                 </div>
 
+                {status === 'success' && hasEstimatedTravelTimes && (
+                    <section className="course-result-estimated-notice" role="status">
+                        <span><Info size={18} aria-hidden="true" /></span>
+                        <div>
+                            <strong>일부 구간은 예상 이동시간으로 표시돼요</strong>
+                            <p>
+                                {transport?.label || '선택한 이동수단'} 경로를 불러오지 못한 구간만
+                                예상 거리와 시간으로 보완했습니다.
+                            </p>
+                        </div>
+                    </section>
+                )}
+
                 {status === 'success' && options.length > 0 && (
                     <section
                         className={`course-result-save-selection${selectedSaveOptionNos.length > 0 ? ' has-selection' : ''}`}
@@ -860,7 +933,12 @@ function CourseRecommendPage() {
                             {options.map((option, index) => (
                                 <CourseRecommendationCard
                                     option={option}
+                                    transportMode={transportMode}
                                     fallbackImage={fallbackImages[index % fallbackImages.length]}
+                                    isEstimatedTravelTime={Boolean(
+                                        option.estimatedTravelTimes
+                                        ?? response?.estimatedTravelTimes
+                                    )}
                                     isCompared={comparedOptionNos.includes(option.optionNo)}
                                     isSelectedForSave={selectedSaveOptionNos.includes(option.optionNo)}
                                     isSelectionDisabled={isRecommendingAgain}
@@ -888,11 +966,7 @@ function CourseRecommendPage() {
                                 <span className="course-result-tip-icon"><Lightbulb size={19} aria-hidden="true" /></span>
                                 <div>
                                     <h2>코스 TIP</h2>
-                                    <p>
-                                        {travelCode.endsWith('P')
-                                            ? '빽빽한 일정형 성향을 고려해 볼거리를 알차게 담았어요. 이동이 부담되면 이동 최소 코스를 골라보세요.'
-                                            : '여유 일정형 성향을 고려해 장소별 체류 시간을 넉넉하게 잡았어요.'}
-                                    </p>
+                                    <p>{getCourseTip(transport, travelCode)}</p>
                                 </div>
                             </section>
                         </aside>

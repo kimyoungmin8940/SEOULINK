@@ -1,3 +1,5 @@
+import { normalizeTransportMode, TRANSPORT_MODES } from './courseTransport';
+
 export const COURSE_RECOMMEND_REQUEST_KEY = 'seoulinkCourseRecommendRequest';
 export const COURSE_RECOMMEND_RESPONSE_KEY = 'seoulinkCourseRecommendResponse';
 
@@ -77,24 +79,50 @@ function normalizeDailyPlan(dailyPlan, index) {
         (sum, count) => sum + count,
         0,
     );
-    if (categoryTargetSum !== targetPlaceCount) {
-        requestError(`${path}.categoryTargets 합계가 targetPlaceCount와 같아야 합니다.`);
+    if (categoryTargetSum < targetPlaceCount) {
+        requestError(`${path}.categoryTargets 합계는 targetPlaceCount 이상이어야 합니다.`);
     }
 
     if (!Array.isArray(dailyPlan.placeCandidates) || dailyPlan.placeCandidates.length === 0) {
         requestError(`${path}.placeCandidates가 한 개 이상 필요합니다.`);
     }
 
+    const placeCandidates = dailyPlan.placeCandidates.map(
+        (candidate, candidateIndex) => normalizeCandidate(
+            candidate,
+            `${path}.placeCandidates[${candidateIndex}]`,
+        ),
+    );
+    if (placeCandidates.length < targetPlaceCount) {
+        requestError(`${path}.placeCandidates 수는 targetPlaceCount 이상이어야 합니다.`);
+    }
+
+    const candidateIds = new Set();
+    placeCandidates.forEach((candidate, candidateIndex) => {
+        if (candidateIds.has(candidate.placeId)) {
+            requestError(`${path}.placeCandidates[${candidateIndex}].placeId가 중복되었습니다.`);
+        }
+        candidateIds.add(candidate.placeId);
+    });
+
+    SUPPORTED_CATEGORIES.forEach((category) => {
+        const availableCount = placeCandidates.filter(
+            (candidate) => candidate.category === category,
+        ).length;
+
+        if (availableCount < categoryTargets[category]) {
+            requestError(
+                `${path}.${category} 후보가 categoryTargets보다 적습니다. `
+                + `(필요 ${categoryTargets[category]}개, 전달 ${availableCount}개)`,
+            );
+        }
+    });
+
     return {
         ...dailyPlan,
         targetPlaceCount,
         categoryTargets,
-        placeCandidates: dailyPlan.placeCandidates.map(
-            (candidate, candidateIndex) => normalizeCandidate(
-                candidate,
-                `${path}.placeCandidates[${candidateIndex}]`,
-            ),
-        ),
+        placeCandidates,
     };
 }
 
@@ -161,10 +189,18 @@ export function normalizeCourseRecommendRequest(data) {
         requestError('travelCode는 영문 대문자 5자리여야 합니다.');
     }
 
+    const transportMode = normalizeTransportMode(data.transportMode);
+    if (!transportMode) {
+        requestError(
+            `transportMode는 ${Object.values(TRANSPORT_MODES).join(', ')} 중 하나여야 합니다.`,
+        );
+    }
+
     return {
         ...data,
         resultId,
         travelCode: travelCode || null,
+        transportMode,
         dailyStartTime,
         excludedRecommendationKeys: normalizeExcludedRecommendationKeys(
             data.excludedRecommendationKeys,

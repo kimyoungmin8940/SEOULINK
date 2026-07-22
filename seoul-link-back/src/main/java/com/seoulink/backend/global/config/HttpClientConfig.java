@@ -32,6 +32,24 @@ public class HttpClientConfig {
     public RestClient openRouteServiceRestClient(
             @Value("${external.openroute.base-url}") String baseUrl
     ) {
+        return createRestClient(baseUrl);
+    }
+
+    /**
+     * ODsay 대중교통 길찾기 전용 RestClient를 생성한다.
+     *
+     * <p>Server API Key는 {@code OdsayClient}가 환경변수에서 읽어 요청 쿼리에만
+     * 추가하며, 이 공통 설정이나 로그에는 저장하지 않는다.</p>
+     */
+    @Bean("odsayRestClient")
+    public RestClient odsayRestClient(
+            @Value("${external.odsay.base-url}") String baseUrl
+    ) {
+        return createRestClient(baseUrl);
+    }
+
+    /** 외부 서비스별 기본 주소에 동일한 연결·응답 제한시간을 적용한다. */
+    private RestClient createRestClient(String baseUrl) {
         HttpClient httpClient = HttpClient.newBuilder()
                 .connectTimeout(CONNECT_TIMEOUT)
                 .build();

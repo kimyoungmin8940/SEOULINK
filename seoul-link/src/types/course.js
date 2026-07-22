@@ -1,4 +1,12 @@
 /**
+ * @typedef {'WALKING'|'PUBLIC_TRANSIT'|'DRIVING'} TransportMode
+ */
+
+/**
+ * @typedef {'SUBWAY'|'BUS'|'BUS_SUBWAY'} TransitPathType
+ */
+
+/**
  * @typedef {Object} PlaceCandidate
  * @property {number} placeId
  * @property {string} placeName
@@ -47,6 +55,7 @@
  * @property {number} expectedVisitMinutes
  * @property {number} distanceFromPreviousKm
  * @property {number} travelTimeFromPreviousMinutes
+ * @property {?TransitPathType} transitPathType ODsay 최적 경로 종류, 추정 구간은 null
  */
 
 /**
@@ -70,8 +79,13 @@
 
 /**
  * @typedef {Object} CourseRecommendRequest
+ * @property {number=} surveyId
  * @property {number} resultId
  * @property {string=} travelCode 영문 대문자 5자리
+ * @property {TransportMode} transportMode 전체 추천 옵션에 동일하게 적용할 이동수단
+ * @property {string=} startDate YYYY-MM-DD
+ * @property {string=} endDate YYYY-MM-DD
+ * @property {number=} travelDays
  * @property {string=} dailyStartTime HH:mm, 프론트 기본 10:00
  * @property {string[]=} excludedRecommendationKeys 다시 추천할 때 제외할 이전 코스 조합 키
  * @property {DailyCoursePlan[]} dailyPlans
@@ -82,18 +96,25 @@
  *   expectedVisitMinutes: number,
  *   visitOrder: number,
  *   distanceFromPreviousKm: number,
- *   travelTimeFromPreviousMinutes: number
+ *   travelTimeFromPreviousMinutes: number,
+ *   transitPathType: ?TransitPathType
  * }} OptimizedPlace
  */
 
 /**
  * @typedef {Object} CourseOptimizeRequest
+ * @property {number=} resultId
+ * @property {string=} travelCode
+ * @property {TransportMode} transportMode
+ * @property {string=} dailyStartTime HH:mm
  * @property {PlaceCandidate[]} placeCandidates
  * @property {PlaceCandidate[]=} alternativeCandidates
  */
 
 /**
  * @typedef {Object} CourseOptimizeResponse
+ * @property {TransportMode} transportMode
+ * @property {boolean} estimatedTravelTimes 외부 경로 API 대신 추정값인 구간 포함 여부
  * @property {OptimizedPlace[]} optimizedPlaces
  * @property {number} totalDistanceKm
  * @property {number} totalTravelTimeMinutes
@@ -115,6 +136,7 @@
  * @property {number=} totalTravelTimeMinutes
  * @property {number=} totalVisitTimeMinutes
  * @property {number} totalCourseTimeMinutes
+ * @property {boolean=} estimatedTravelTimes 이 옵션에 추정 이동 구간이 포함됐는지 여부
  * @property {CourseDay[]} days
  */
 
@@ -122,6 +144,8 @@
  * @typedef {Object} CourseRecommendResponse
  * @property {number} resultId
  * @property {string=} travelCode
+ * @property {TransportMode} transportMode
+ * @property {boolean} estimatedTravelTimes 세 옵션 중 추정 이동 구간 포함 여부
  * @property {string} dailyStartTime HH:mm
  * @property {number} optionCount
  * @property {CourseOption[]} courseOptions
@@ -134,6 +158,8 @@
  * @property {?string} description
  * @property {?string} coverImageUrl
  * @property {?string} travelCode
+ * @property {?TransportMode} transportMode
+ * @property {boolean=} estimatedTravelTimes 로컬 추천 요약에서 보존한 추정 구간 여부
  * @property {'CUSTOM'|'SURVEY'|'CHATBOT'} courseType
  * @property {?string} region
  * @property {boolean} publicCourse
@@ -156,6 +182,7 @@
  * @property {?string} description
  * @property {?string} coverImageUrl
  * @property {'CUSTOM'|'SURVEY'|'CHATBOT'} courseType
+ * @property {?TransportMode} transportMode
  * @property {string[]} regions
  * @property {string[]} tags
  * @property {number} placeCount
@@ -179,6 +206,7 @@
  * @property {number} expectedVisitMinutes
  * @property {number} distanceFromPreviousKm
  * @property {number} travelTimeFromPreviousMinutes
+ * @property {?TransitPathType} transitPathType
  */
 
 /**
@@ -189,6 +217,7 @@
  * @property {string} title
  * @property {string=} description
  * @property {string=} travelCode
+ * @property {TransportMode} transportMode 추천 때 사용한 이동수단
  * @property {'CUSTOM'|'SURVEY'|'CHATBOT'=} courseType
  * @property {string=} region
  * @property {boolean=} publicCourse
@@ -199,6 +228,7 @@
  * @typedef {Object} CourseSaveResponse
  * @property {number} courseId
  * @property {string} title
+ * @property {TransportMode} transportMode
  * @property {number} placeCount
  * @property {number} dayCount
  * @property {number} totalDistanceKm

@@ -22,11 +22,17 @@ import Header from '../../components/common/Header';
 import Footer from '../../components/common/Footer';
 import CoursePlaceList from '../../components/course/CoursePlaceList';
 import KakaoCourseMap from '../../components/course/KakaoCourseMap';
+import CourseTransportIcon from '../../components/course/CourseTransportIcon';
 import { getCourseDetail } from '../../api/courseApi';
 import {
     findCachedRecommendedCourse,
     getCurrentMemberId,
 } from '../../utils/courseHistory';
+import {
+    getTransportMeta,
+    normalizeTransitPathType,
+    normalizeTransportMode,
+} from '../../utils/courseTransport';
 import recommendationPreview from '../../mocks/courseRecommendation.json';
 import { mockThemeCourseListResponse } from '../../mocks/homeMockData';
 import hanokImage from '../../assets/images/moods/mood-hanok-photo.png';
@@ -151,6 +157,7 @@ function normalizeDays(rawDays) {
             timeCursor = (timeToMinutes(displayVisitTime) ?? timeCursor)
                 + toFiniteNumber(place.expectedVisitMinutes);
 
+            // 거리·시간·경로 종류는 모두 이전 장소에서 현재 장소로 들어오는 한 구간의 값입니다.
             return {
                 ...place,
                 visitOrder: toFiniteNumber(place.visitOrder, placeIndex + 1),
@@ -159,6 +166,7 @@ function normalizeDays(rawDays) {
                 travelTimeFromPreviousMinutes: toFiniteNumber(
                     place.travelTimeFromPreviousMinutes,
                 ),
+                transitPathType: normalizeTransitPathType(place.transitPathType),
                 displayVisitTime,
                 fallbackImageUrl,
                 displayImageUrl: place.imageUrl
@@ -220,6 +228,8 @@ function normalizeCourseDetail(rawCourse) {
         travelCode: /^[A-Z]{5}$/.test(rawCourse?.travelCode || '')
             ? rawCourse.travelCode
             : null,
+        transportMode: normalizeTransportMode(rawCourse?.transportMode),
+        estimatedTravelTimes: Boolean(rawCourse?.estimatedTravelTimes),
         courseType: rawCourse?.courseType || 'SURVEY',
         placeCount: toFiniteNumber(rawCourse?.placeCount, places.length),
         dayCount: toFiniteNumber(rawCourse?.dayCount, days.length),
@@ -263,6 +273,10 @@ function normalizeApiCourseDetail(response, courseId) {
             || summary?.area
             || summaryRegions.join(' · ')
             || null,
+        transportMode: response?.transportMode || summary?.transportMode || null,
+        estimatedTravelTimes: response?.estimatedTravelTimes
+            ?? summary?.estimatedTravelTimes
+            ?? false,
         tags: responseTags.length > 0 ? responseTags : summaryTags,
         liked: response?.liked ?? summary?.liked ?? false,
     });
@@ -297,6 +311,11 @@ function buildPreviewCourse(courseId) {
         description: summary?.description || previewOption.description,
         coverImageUrl: summary?.coverImageUrl || summary?.imageUrl || hanokImage,
         travelCode: summary ? null : recommendationPreview.travelCode,
+        // 목록 요약에 이동수단이 없는 예전/테마 미리보기에서도 상세 화면 표기가 사라지지 않게 합니다.
+        transportMode: summary?.transportMode || recommendationPreview.transportMode,
+        estimatedTravelTimes: summary
+            ? summary.estimatedTravelTimes
+            : recommendationPreview.estimatedTravelTimes,
         courseType: summary?.themeCode ? 'THEME' : 'SURVEY',
         region: summary?.area || summary?.region || '서울',
         tags: summary?.tags || [],
@@ -464,6 +483,11 @@ function CourseDetailPage() {
     ) ?? -1;
     const themeTags = course ? getThemeTags(course) : [];
     const dateRange = course ? getDateRange(course.days) : '';
+    const transport = getTransportMeta(course?.transportMode);
+    const scheduleNotice = course?.estimatedTravelTimes
+        ? `일부 ${transport?.label || '이동'} 구간은 경로 조회가 어려워 예상 거리와 시간으로 보완했습니다. ${transport?.scheduleNotice || '실제 이동 상황과 장소 운영 시간에 따라 일정은 달라질 수 있습니다.'}`
+        : transport?.scheduleNotice
+            || '위 일정은 예상 이동 거리와 시간을 바탕으로 구성된 추천 동선입니다. 실제 이동 상황과 장소 운영 시간에 따라 일정은 달라질 수 있습니다.';
 
     const moveActiveDay = (offset) => {
         const targetDay = course?.days[activeDayIndex + offset];
@@ -647,6 +671,16 @@ function CourseDetailPage() {
                                     <span><CalendarDays size={17} aria-hidden="true" />{dateRange}</span>
                                     <span><Route size={17} aria-hidden="true" />{course.dayCount}일 코스</span>
                                     <span><Sparkles size={17} aria-hidden="true" />{getCourseTypeLabel(course.courseType)}</span>
+                                    {transport && (
+                                        <span className="course-detail-transport-badge">
+                                            <CourseTransportIcon
+                                                transportMode={course.transportMode}
+                                                size={17}
+                                                aria-hidden="true"
+                                            />
+                                            {transport.label} 이동
+                                        </span>
+                                    )}
                                 </div>
                             </div>
 
@@ -673,8 +707,17 @@ function CourseDetailPage() {
                                 <div><small>전체 소요 시간</small><strong>약 {formatMinutes(course.totalCourseTimeMinutes)}</strong></div>
                             </article>
                             <article>
-                                <span><Route size={21} aria-hidden="true" /></span>
-                                <div><small>총 이동 시간</small><strong>약 {formatMinutes(course.totalTravelTimeMinutes)}</strong></div>
+                                <span>
+                                    <CourseTransportIcon
+                                        transportMode={course.transportMode}
+                                        size={21}
+                                        aria-hidden="true"
+                                    />
+                                </span>
+                                <div>
+                                    <small>{transport ? `${transport.label} 이동 시간` : '총 이동 시간'}</small>
+                                    <strong>약 {formatMinutes(course.totalTravelTimeMinutes)}</strong>
+                                </div>
                             </article>
                             <article>
                                 <span><Timer size={21} aria-hidden="true" /></span>
@@ -736,11 +779,14 @@ function CourseDetailPage() {
                                     )}
                                 </div>
 
-                                <CoursePlaceList day={activeDay} />
+                                <CoursePlaceList
+                                    day={activeDay}
+                                    transportMode={course.transportMode}
+                                />
 
-                                <p className="course-detail-schedule-note">
+                                <p className={`course-detail-schedule-note${course.estimatedTravelTimes ? ' is-estimated' : ''}`}>
                                     <Info size={14} aria-hidden="true" />
-                                    위 일정은 예상 이동 거리와 시간을 바탕으로 구성된 추천 동선입니다. 실시간 교통 상황과 장소 운영 시간은 반영되지 않아 실제 일정과 다를 수 있습니다.
+                                    {scheduleNotice}
                                 </p>
                                 </section>
                             </div>
@@ -762,6 +808,19 @@ function CourseDetailPage() {
                                             <dt><Route size={18} aria-hidden="true" />코스 구성</dt>
                                             <dd>{course.dayCount}일 · {course.placeCount}곳 · {getCourseTypeLabel(course.courseType)}</dd>
                                         </div>
+                                        {transport && (
+                                            <div>
+                                                <dt>
+                                                    <CourseTransportIcon
+                                                        transportMode={course.transportMode}
+                                                        size={18}
+                                                        aria-hidden="true"
+                                                    />
+                                                    이동수단
+                                                </dt>
+                                                <dd>{transport.label}</dd>
+                                            </div>
+                                        )}
                                         <div>
                                             <dt><Heart size={18} aria-hidden="true" />여행 테마</dt>
                                             <dd>{themeTags.join(', ')}</dd>

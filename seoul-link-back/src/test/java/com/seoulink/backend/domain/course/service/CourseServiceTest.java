@@ -4,6 +4,8 @@ import com.seoulink.backend.domain.course.dto.response.CourseDetailResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseRecommendationResponse;
 import com.seoulink.backend.domain.course.entity.CourseDetail;
 import com.seoulink.backend.domain.course.entity.TravelCourse;
+import com.seoulink.backend.domain.course.model.TransportMode;
+import com.seoulink.backend.domain.course.model.TransitPathType;
 import com.seoulink.backend.domain.course.repository.CourseDetailRepository;
 import com.seoulink.backend.domain.course.repository.TravelCourseRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -45,6 +47,7 @@ class CourseServiceTest {
         LocalDate visitDate = LocalDate.of(2026, 7, 20);
         LocalDateTime createdAt = LocalDateTime.of(2026, 7, 15, 15, 0);
         TravelCourse course = TravelCourse.builder()
+                .transportMode(TransportMode.PUBLIC_TRANSIT)
                 .courseId(10L)
                 .memberId(1L)
                 .title("서울 궁궐 코스")
@@ -63,7 +66,18 @@ class CourseServiceTest {
                 .build();
         List<CourseDetail> details = List.of(
                 detail(100L, 10L, 1L, 1, 1, visitDate, 90, 0.0, 0.0),
-                detail(101L, 10L, 2L, 1, 2, visitDate, 90, 0.27, 3.56),
+                detail(
+                        101L,
+                        10L,
+                        2L,
+                        1,
+                        2,
+                        visitDate,
+                        90,
+                        0.27,
+                        3.56,
+                        TransitPathType.SUBWAY
+                ),
                 detail(102L, 10L, 3L, 2, 1, visitDate.plusDays(1), 90, 0.0, 0.0)
         );
 
@@ -77,6 +91,7 @@ class CourseServiceTest {
 
         assertEquals(10L, response.getCourseId());
         assertEquals("서울 궁궐 코스", response.getTitle());
+        assertEquals(TransportMode.PUBLIC_TRANSIT, response.getTransportMode());
         assertEquals(true, response.getPublicCourse());
         assertEquals(3, response.getPlaceCount());
         assertEquals(2, response.getDayCount());
@@ -98,6 +113,10 @@ class CourseServiceTest {
         assertEquals(
                 90,
                 response.getDays().get(0).getPlaces().get(0).getExpectedVisitMinutes()
+        );
+        assertEquals(
+                TransitPathType.SUBWAY,
+                response.getDays().get(0).getPlaces().get(1).getTransitPathType()
         );
         assertEquals(
                 0.27,
@@ -141,6 +160,7 @@ class CourseServiceTest {
     void getMemberCourse() {
         LocalDate visitDate = LocalDate.of(2026, 7, 20);
         TravelCourse privateCourse = TravelCourse.builder()
+                .transportMode(TransportMode.PUBLIC_TRANSIT)
                 .courseId(11L)
                 .memberId(1L)
                 .title("내 비공개 코스")
@@ -187,6 +207,7 @@ class CourseServiceTest {
     @DisplayName("회원의 SURVEY 추천 코스만 최신순으로 조회한다")
     void getRecommendedCourses() {
         TravelCourse recommended = TravelCourse.builder()
+                .transportMode(TransportMode.PUBLIC_TRANSIT)
                 .courseId(20L)
                 .memberId(1L)
                 .title("서울 추천 코스")
@@ -217,6 +238,10 @@ class CourseServiceTest {
 
         assertEquals(1, response.size());
         assertEquals(20L, response.get(0).getCourseId());
+        assertEquals(
+                TransportMode.PUBLIC_TRANSIT,
+                response.get(0).getTransportMode()
+        );
         assertEquals(2, response.get(0).getPlaceCount());
         assertEquals(2, response.get(0).getDayCount());
         assertEquals(List.of("서울 종로구"), response.get(0).getRegions());
@@ -226,6 +251,7 @@ class CourseServiceTest {
     @DisplayName("회원의 모든 유형 코스를 최신순으로 조회한다")
     void getMemberCourses() {
         TravelCourse custom = TravelCourse.builder()
+                .transportMode(TransportMode.PUBLIC_TRANSIT)
                 .courseId(30L)
                 .memberId(1L)
                 .title("내 서울 코스")
@@ -254,6 +280,10 @@ class CourseServiceTest {
         assertEquals(1, response.size());
         assertEquals(30L, response.get(0).getCourseId());
         assertEquals("내 서울 코스", response.get(0).getTitle());
+        assertEquals(
+                TransportMode.PUBLIC_TRANSIT,
+                response.get(0).getTransportMode()
+        );
         assertEquals(1, response.get(0).getPlaceCount());
         assertEquals("CUSTOM", response.get(0).getCourseType());
         assertEquals(LocalDate.of(2026, 7, 20), response.get(0).getStartDate());
@@ -272,6 +302,32 @@ class CourseServiceTest {
             Double distanceKm,
             Double travelMinutes
     ) {
+        return detail(
+                detailId,
+                courseId,
+                placeId,
+                dayNo,
+                placeOrder,
+                visitDate,
+                stayMinutes,
+                distanceKm,
+                travelMinutes,
+                null
+        );
+    }
+
+    private CourseDetail detail(
+            Long detailId,
+            Long courseId,
+            Long placeId,
+            Integer dayNo,
+            Integer placeOrder,
+            LocalDate visitDate,
+            Integer stayMinutes,
+            Double distanceKm,
+            Double travelMinutes,
+            TransitPathType transitPathType
+    ) {
         return CourseDetail.builder()
                 .detailId(detailId)
                 .courseId(courseId)
@@ -282,6 +338,7 @@ class CourseServiceTest {
                 .stayMinutes(stayMinutes)
                 .distanceFromPreviousKm(distanceKm)
                 .travelTimeFromPreviousMinutes(travelMinutes)
+                .transitPathType(transitPathType)
                 .build();
     }
 }

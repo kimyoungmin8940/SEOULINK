@@ -337,6 +337,48 @@
   font-size: 11px;
 }
 
+/* 외부 경로 API 대신 예상값으로 보완된 구간이 있을 때만 표시합니다. */
+.course-result-estimated-notice {
+  min-height: 62px;
+  margin: -4px 0 16px;
+  padding: 11px 14px;
+  border: 1px solid #f0d9a5;
+  border-radius: 14px;
+  background: #fffaf0;
+  color: #6f5b30;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.course-result-estimated-notice > span {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  border-radius: 50%;
+  background: #fff0ca;
+  color: #b47b11;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.course-result-estimated-notice div {
+  min-width: 0;
+}
+
+.course-result-estimated-notice strong {
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.course-result-estimated-notice p {
+  margin: 3px 0 0;
+  color: #8a7448;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
 /* 추천 카드에서 고른 1~3개 코스를 단건/일괄 저장하는 선택 바 */
 .course-result-save-selection {
   min-height: 76px;
@@ -586,6 +628,30 @@
   font-size: 11px;
   font-weight: 850;
   letter-spacing: 0.02em;
+}
+
+.course-result-option-name-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.course-result-option-name-row .course-result-option-name {
+  margin-bottom: 0;
+}
+
+.course-result-estimated-badge {
+  min-height: 20px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #fff5dc;
+  color: #a96e08;
+  font-size: 9px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
 }
 
 .course-result-title-row h2 {
@@ -932,28 +998,40 @@
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  /* 이동 안내 행까지 한 묶음으로 계산해 장소와 장소 사이 간격을 동일하게 맞춥니다. */
+  gap: 0;
 }
 
 .course-result-expanded-day li {
-  min-height: 37px;
+  min-height: 52px;
   position: relative;
   display: grid;
-  grid-template-columns: 28px 19px minmax(0, 1fr) auto;
+  grid-template-columns: 19px 28px minmax(0, 1fr) auto;
   align-items: center;
   gap: 7px;
 }
 
 /* 이동 정보는 이전 장소 아래가 아니라 다음 장소 위에 배치해 모든 장소 사이 간격을 맞춥니다. */
 .course-result-expanded-day li.has-transfer {
-  grid-template-rows: auto minmax(37px, auto);
-  row-gap: 2px;
+  grid-template-rows: 30px minmax(52px, auto);
+  row-gap: 0;
+}
+
+/* 장소 사이 이동 구간을 왼쪽 순번 영역부터 가르는 옅은 구분선입니다. */
+.course-result-expanded-day li.has-transfer::before {
+  content: "";
+  position: absolute;
+  top: 15px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: #edf1f4;
 }
 
 .course-result-expanded-icon {
   width: 28px;
   height: 28px;
-  grid-column: 1;
+  grid-column: 2;
   border-radius: 9px;
   display: inline-flex;
   align-items: center;
@@ -963,7 +1041,7 @@
 .course-result-expanded-order {
   width: 18px;
   height: 18px;
-  grid-column: 2;
+  grid-column: 1;
   border-radius: 50%;
   background: #eef4f8;
   color: #6e8295;
@@ -995,13 +1073,20 @@
 
 .course-result-expanded-place strong {
   overflow: hidden;
-  color: #3a5368;
-  font-size: 11px;
+  color: #304b62;
+  font-size: 12px;
+  font-weight: 850;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
-.course-result-expanded-place small,
+.course-result-expanded-place small {
+  color: #667d91;
+  font-size: 9.5px;
+  font-weight: 750;
+}
+
+/* 아이콘·거리·시간·이동수단 배지를 분리하지 않고 오른쪽의 한 정보 묶음으로 정렬합니다. */
 .course-result-expanded-time,
 .course-result-expanded-move {
   color: #8899a8;
@@ -1012,11 +1097,58 @@
 .course-result-expanded-move {
   grid-column: 3 / -1;
   grid-row: 1;
+  min-height: 30px;
+  width: auto;
+  position: relative;
+  z-index: 1;
+  justify-self: end;
+  padding-left: 10px;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  /* 이동 문구가 위아래 장소 사이의 중앙보다 아래로 처져 보이지 않게 미세 조정합니다. */
+  transform: translateY(-1px);
+}
+
+.course-result-expanded-move-icon {
+  flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  /* 앞뒤 장소의 세로 중앙에 오도록 이동 정보만 살짝 위로 맞춥니다. */
-  transform: translateY(-3px);
+  color: #7b91a5;
+}
+
+.course-result-expanded-move-icon svg {
+  color: #7893ab;
+}
+
+.course-result-expanded-move-summary {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+
+.course-result-expanded-move-metrics {
+  color: #7b91a5;
+  font-weight: 700;
+}
+
+.course-result-expanded-move-badge {
+  flex: 0 0 auto;
+  min-width: 48px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: #4b96d7;
+  color: #ffffff;
+  font-size: 8px;
+  font-weight: 850;
+  line-height: 1;
+  text-align: center;
+  white-space: nowrap;
+  box-shadow: 0 3px 8px rgba(47, 126, 195, 0.16);
 }
 
 /* 오른쪽 사이드 카드 공통 */

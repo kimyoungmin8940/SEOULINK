@@ -1,12 +1,14 @@
 package com.seoulink.backend.domain.course.dto.request;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.seoulink.backend.domain.course.model.TransportMode;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -25,9 +27,18 @@ import java.util.List;
 @AllArgsConstructor
 public class CourseRecommendRequest {
 
-    // 추천의 기준이 된 SURVEY_RESULT 식별자와 5자리 여행 유형 코드이다.
+    // 추천의 기준이 된 설문·SURVEY_RESULT 식별자와 5자리 여행 유형 코드이다.
+    private Long surveyId;
     private Long resultId;
     private String travelCode;
+
+    // 한 요청에서 생성하는 세 추천 옵션 모두에 동일하게 적용할 이동수단이다.
+    private TransportMode transportMode;
+
+    // 1번 담당자가 전달하는 전체 여행 기간 메타데이터이다.
+    private LocalDate startDate;
+    private LocalDate endDate;
+    private Integer travelDays;
 
     // 모든 날짜 일정의 공통 시작 시각이다.
     @JsonFormat(pattern = "HH:mm")

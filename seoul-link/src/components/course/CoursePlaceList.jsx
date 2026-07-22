@@ -3,11 +3,13 @@ import {
     BedDouble,
     Clock3,
     Coffee,
-    Footprints,
     Landmark,
     MapPin,
     Utensils,
 } from 'lucide-react';
+
+import CourseTransportIcon from './CourseTransportIcon';
+import { getTravelLegMeta } from '../../utils/courseTransport';
 
 const categoryMeta = {
     TOUR: { label: '관광지', tone: 'tour', Icon: Landmark },
@@ -26,7 +28,7 @@ function formatMinutes(value) {
 }
 
 /** 선택한 일차의 장소와 장소 사이 이동 정보를 시간 순 타임라인으로 표시합니다. */
-function CoursePlaceList({ day }) {
+function CoursePlaceList({ day, transportMode }) {
     const places = Array.isArray(day?.places) ? day.places : [];
 
     if (places.length === 0) {
@@ -46,6 +48,11 @@ function CoursePlaceList({ day }) {
                 const score = Number(place.recommendationScore);
                 const hasScore = Number.isFinite(score);
                 const isLast = index === places.length - 1;
+                // 백엔드는 이전 장소→현재 장소의 이동 정보를 현재 장소에 함께 내려줍니다.
+                const legTransport = getTravelLegMeta(
+                    transportMode,
+                    place.transitPathType,
+                );
 
                 return (
                     <Fragment key={`${place.detailId ?? place.placeId}-${place.visitOrder ?? index}`}>
@@ -54,10 +61,17 @@ function CoursePlaceList({ day }) {
                                 <span aria-hidden="true" />
                                 <span className="course-detail-transfer-line" aria-hidden="true" />
                                 <p>
-                                    <Footprints size={14} aria-hidden="true" />
-                                    이전 장소에서 {Number(place.distanceFromPreviousKm || 0).toFixed(1)}km
+                                    <CourseTransportIcon
+                                        transportMode={transportMode}
+                                        transitPathType={place.transitPathType}
+                                        size={14}
+                                        aria-hidden="true"
+                                    />
+                                    {legTransport?.label || '이동'}
                                     <b>·</b>
-                                    약 {Math.round(Number(place.travelTimeFromPreviousMinutes) || 0)}분 이동
+                                    {Number(place.distanceFromPreviousKm || 0).toFixed(1)}km
+                                    <b>·</b>
+                                    약 {Math.round(Number(place.travelTimeFromPreviousMinutes) || 0)}분
                                 </p>
                             </li>
                         )}
