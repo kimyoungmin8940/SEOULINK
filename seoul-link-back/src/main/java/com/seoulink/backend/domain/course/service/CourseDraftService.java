@@ -20,6 +20,7 @@ import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.time.LocalTime;
 
 /**
  * 여행 정보와 설문 결과를 바탕으로 날짜별 추천 코스 초안을 생성하는 서비스입니다.
@@ -38,9 +39,6 @@ public class CourseDraftService {
 
     // 대표 장소 하나당 받을 대체 후보 수
     private static final int ALTERNATIVE_LIMIT = 3;
-
-    // 매일 코스를 시작하는 기본 시간
-    private static final String DAILY_START_TIME = "10:00";
 
     private static final String TOUR = "TOUR";
     private static final String RESTAURANT = "RESTAURANT";
@@ -93,13 +91,14 @@ public class CourseDraftService {
 
         char scheduleType = travelCode.charAt(4);
 
-        int targetPlaceCount = determineTargetPlaceCount(
-                scheduleType
-        );
+        LocalTime dailyStartTime =
+                determineDailyStartTime(scheduleType);
 
-        int candidatePlaceCount = determineCandidatePlaceCount(
-                scheduleType
-        );
+        int targetPlaceCount =
+                determineTargetPlaceCount(scheduleType);
+
+        int candidatePlaceCount =
+                determineCandidatePlaceCount(scheduleType);
 
         Map<String, Integer> categoryTargets =
                 determineCategoryTargets(scheduleType);
@@ -150,10 +149,12 @@ public class CourseDraftService {
                 survey.getSurveyId(),
                 surveyResult.getResultId(),
                 travelCode,
+                survey.getCompanionType(),
+                survey.getTransportType(),
                 survey.getStartDate(),
                 survey.getEndDate(),
                 travelDays,
-                DAILY_START_TIME,
+                dailyStartTime,
                 dailyPlans
         );
     }
@@ -192,6 +193,22 @@ public class CourseDraftService {
     }
 
     /**
+     * 여행 일정 유형에 따라 하루 코스 시작 시간을 결정합니다.
+     *
+     * P형은 촘촘한 일정이므로 오전 9시에 시작하고,
+     * R형은 여유로운 일정이므로 오전 10시 30분에 시작합니다.
+     */
+    private LocalTime determineDailyStartTime(char scheduleType) {
+        return switch (scheduleType) {
+            case 'P' -> LocalTime.of(9, 0);
+            case 'R' -> LocalTime.of(10, 30);
+            default -> throw new IllegalArgumentException(
+                    "여행 일정 유형은 P 또는 R이어야 합니다"
+            );
+        };
+    }
+
+    /**
      * P형과 R형에 따라 하루 목표 장소 수를 결정합니다.
      *
      * P형: 계획이 촘촘한 여행이므로 하루 6곳
@@ -210,7 +227,9 @@ public class CourseDraftService {
     /**
      * 최종 목표 장소 수보다 넉넉하게 전달할 후보 수를 결정합니다.
      *
-     * P형과 R형 모두 날짜별 최대 10개의 후보를 전달합니다.
+     * P형은 날짜별 최대 15개,
+     * R형은 날짜별 최대 10개의 후보를 전달합니다.
+     *
      * 장소가 부족하면 확보된 후보만 반환합니다.
      */
     private int determineCandidatePlaceCount(char scheduleType) {
@@ -243,10 +262,16 @@ public class CourseDraftService {
     }
 
     /**
-     * 일정 유형에 따라 카테고리별 최종 목표 개수를 결정합니다.
+     * 일정 유형에 따라 하루에 전달할 카테고리별 후보 개수를 결정합니다.
      *
-     * HOTEL은 이동 코스가 아니라 숙소로 별도 처리할 수 있기 때문에
-     * 현재 초안의 목표 카테고리에서는 제외합니다.
+     * P형은 TOUR 7개, RESTAURANT 4개, CAFE 4개로
+     * 하루 최대 15개의 후보를 구성합니다.
+     *
+     * R형은 TOUR 4개, RESTAURANT 3개, CAFE 3개로
+     * 하루 최대 10개의 후보를 구성합니다.
+     *
+     * HOTEL은 이동 코스가 아니라 숙소로 별도 처리하기 때문에
+     * 현재 코스 후보에서는 제외합니다.
      */
     private Map<String, Integer> determineCategoryTargets(
             char scheduleType
@@ -369,8 +394,11 @@ public class CourseDraftService {
 
         /*
          * 2차 배정
-         * 모든 날짜의 필수 후보가 확보된 후,
-         * 날짜별 후보 수가 7개 또는 9개가 될 때까지 추가한다.
+         * 카테고리별 기본 후보가 부족한 경우,
+         * 남아 있는 다른 카테고리의 후보를 번갈아 추가합니다.
+         *
+         * P형은 날짜별 최대 15개,
+         * R형은 날짜별 최대 10개가 될 때까지 채웁니다.
          */
         for (int dayIndex = 0;
              dayIndex < travelDays;

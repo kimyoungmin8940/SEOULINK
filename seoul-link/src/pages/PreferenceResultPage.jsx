@@ -2,7 +2,6 @@ import {
     Activity,
     ArrowRight,
     CalendarDays,
-    CheckCircle2,
     Download,
     Heart,
     Landmark,
@@ -13,6 +12,9 @@ import {
     Star,
     Wallet,
 } from 'lucide-react';
+
+import { useRef } from 'react';
+import html2canvas from 'html2canvas';
 
 import {
     getCodeTraits,
@@ -39,21 +41,34 @@ function PreferenceResultPage({
     onRecommend,
     onRestart,
 }) {
+    const resultPageRef = useRef(null);
     const traits = getCodeTraits(result.travelCode);
     const regions = getPreferredRegions(result.recommendedPlaces);
     const tags = getTravelTags(result.travelCode);
     const guideItems = getTravelGuideItems(result.travelCode);
 
-    const handleSaveResult = () => {
-        const file = new Blob([JSON.stringify(result, null, 2)], {
-            type: 'application/json',
-        });
-        const url = URL.createObjectURL(file);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `seoulink-${result.travelCode}-result.json`;
-        link.click();
-        URL.revokeObjectURL(url);
+    const handleSaveResult = async () => {
+        if (!resultPageRef.current) {
+            return;
+        }
+
+        try {
+            const canvas = await html2canvas(resultPageRef.current, {
+                scale: 2,
+                backgroundColor: '#f4f8ff',
+                useCORS: true,
+            });
+
+            const imageUrl = canvas.toDataURL('image/png');
+            const link = document.createElement('a');
+
+            link.href = imageUrl;
+            link.download = `seoulink_${result.travelCode}_여행취향검사결과.png`;
+            link.click();
+        } catch (error) {
+            console.error('결과 이미지 저장 실패:', error);
+            alert('결과 이미지를 저장하지 못했습니다.');
+        }
     };
 
     const handleRecommend = onRecommend || (() => {
@@ -66,18 +81,17 @@ function PreferenceResultPage({
 
     return (
         <div className="travel-analysis-page travel-analysis-page--embedded">
-            <main className="travel-analysis-main">
+            <main className="travel-analysis-main" ref={resultPageRef}>
                 <section className="preference-title-block">
                     <p className="page-kicker">TRAVEL TYPE CODE</p>
                     <h1>당신의 여행 취향 분석 결과</h1>
-                    <p>나만의 여행 유형 코드를 확인하고, 맞춤 여행을 준비해보세요.</p>
+                    <p>나만의 여행 유형 코드를 확인하고, 맞춤 여행을 준비해보세요</p>
                 </section>
 
                 <section className="preference-dashboard" aria-label="여행 취향 분석 결과">
                     <article className="preference-card preference-code-card">
                         <div className="preference-card-heading">
                             <h2>나의 여행 유형 코드</h2>
-                            <span className="result-id">#{result.resultId}</span>
                         </div>
 
                         <div className="travel-code-row">
@@ -100,7 +114,6 @@ function PreferenceResultPage({
                     <article className="preference-card preference-summary-card">
                         <div className="preference-card-heading">
                             <h2>취향 분석 요약</h2>
-                            <CheckCircle2 size={22} strokeWidth={2.3} />
                         </div>
 
                         <div className="analysis-list">
@@ -201,7 +214,7 @@ function PreferenceResultPage({
                         <div>
                             <p className="page-kicker">NEXT STEP</p>
                             <h2>이제 맞춤 코스를 추천받아보세요!</h2>
-                            <p>취향 코드와 장소 태그를 바탕으로 서울 여행 코스를 준비해드릴게요.</p>
+                            <p>취향 코드와 장소 태그를 바탕으로 서울 여행 코스를 준비해드릴게요</p>
                         </div>
 
                         <button className="recommend-primary-button" type="button" onClick={handleRecommend}>
@@ -212,7 +225,7 @@ function PreferenceResultPage({
                     </article>
                 </section>
 
-                <section className="preference-action-bar" aria-label="결과 화면 작업">
+                <section className="preference-action-bar" aria-label="결과 화면 작업" data-html2canvas-ignore="true">
                     <button className="preference-ghost-button" type="button" onClick={handleRestart}>
                         <RefreshCw size={18} strokeWidth={2.1} />
                         검사 다시하기
