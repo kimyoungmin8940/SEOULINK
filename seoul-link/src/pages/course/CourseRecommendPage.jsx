@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     ArrowLeft,
+    Bookmark,
     Check,
     GitCompareArrows,
     Info,
@@ -15,7 +16,7 @@ import Header from '../../components/common/Header';
 import Footer from '../../components/common/Footer';
 import CourseRecommendationCard from '../../components/course/CourseRecommendationCard';
 import CourseMapPreview from '../../components/course/CourseMapPreview';
-import { recommendCourse, saveCourse } from '../../api/courseApi';
+import { recommendCourse, saveCourse, saveCourses } from '../../api/courseApi';
 import {
     buildCourseRecommendAgainRequest,
     COURSE_RECOMMEND_REQUEST_KEY,
@@ -127,6 +128,15 @@ function normalizeRecommendationResponse(data) {
     return null;
 }
 
+/** 옵션·일차 배열만 있고 실제 장소가 없는 응답은 빈 추천 결과로 처리합니다. */
+function hasRecommendationPlaces(data) {
+    return Array.isArray(data?.courseOptions) && data.courseOptions.some((option) => (
+        Array.isArray(option?.days) && option.days.some((day) => (
+            Array.isArray(day?.places) && day.places.length > 0
+        ))
+    ));
+}
+
 /** 동일 요청이 진행 중이면 기존 Promise를 반환하고, 실패한 요청만 캐시에서 제거합니다. */
 function requestRecommendationOnce(request) {
     const cacheKey = JSON.stringify(request);
@@ -167,7 +177,7 @@ function getInitialRecommendationState() {
             response: navigationResponse,
             request,
             source: 'api',
-            status: 'success',
+            status: hasRecommendationPlaces(navigationResponse) ? 'success' : 'empty',
         };
     }
 
@@ -186,7 +196,7 @@ function getInitialRecommendationState() {
             response: storedResponse,
             request: storedRequest,
             source: 'api',
-            status: 'success',
+            status: hasRecommendationPlaces(storedResponse) ? 'success' : 'empty',
         };
     }
 
@@ -433,7 +443,7 @@ function ComparisonPanel({ options, selectedOptionNos, onRemove, onReset }) {
     );
 }
 
-/** 취향 기반 3개 코스를 조회·비교하고, 사용자가 선택한 한 코스를 저장하는 결과 화면입니다. */
+/** 취향 기반 3개 코스를 조회·비교하고, 사용자가 선택한 1~3개 코스를 저장하는 결과 화면입니다. */
 function CourseRecommendPage() {
     const [initialState] = useState(getInitialRecommendationState);
     const [response, setResponse] = useState(initialState.response);
@@ -441,10 +451,11 @@ function CourseRecommendPage() {
     const [source, setSource] = useState(initialState.source);
     const [requestError, setRequestError] = useState('');
     const [comparedOptionNos, setComparedOptionNos] = useState([]);
+    const [selectedSaveOptionNos, setSelectedSaveOptionNos] = useState([]);
     const [focusedOptionNo, setFocusedOptionNo] = useState(null);
-    const [savingOptionNo, setSavingOptionNo] = useState(null);
-    const [savedOptionNo, setSavedOptionNo] = useState(null);
-    const [savedCourseId, setSavedCourseId] = useState(null);
+    const [isSavingSelected, setIsSavingSelected] = useState(false);
+    const [savedCourseIdsByOption, setSavedCourseIdsByOption] = useState({});
+    const [lastSavedCourseIds, setLastSavedCourseIds] = useState([]);
     const [notice, setNotice] = useState(null);
     const [recommendRequest, setRecommendRequest] = useState(initialState.request);
     const [isRecommendingAgain, setIsRecommendingAgain] = useState(false);
@@ -481,7 +492,7 @@ function CourseRecommendPage() {
             setResponse(data);
             setSource('api');
             setFocusedOptionNo(data.courseOptions[0]?.optionNo ?? null);
-            setStatus(data.courseOptions.length > 0 ? 'success' : 'empty');
+            setStatus(hasRecommendationPlaces(data) ? 'success' : 'empty');
         } catch (error) {
             setStatus('error');
             setRequestError(error?.message || '추천 코스를 불러오지 못했습니다.');
@@ -548,8 +559,8 @@ function CourseRecommendPage() {
                 await requestRecommendationOnce(nextRequest),
             );
 
-            if (!data || data.courseOptions.length === 0) {
-                throw new Error('새로운 추천 결과 형식을 확인할 수 없습니다.');
+            if (!data || !hasRecommendationPlaces(data)) {
+                throw new Error('새로운 추천 결과에 표시할 장소가 없습니다.');
             }
 
             sessionStorage.setItem(COURSE_RECOMMEND_REQUEST_KEY, JSON.stringify(nextRequest));
@@ -560,9 +571,10 @@ function CourseRecommendPage() {
             setStatus('success');
             setRequestError('');
             setComparedOptionNos([]);
+            setSelectedSaveOptionNos([]);
             setFocusedOptionNo(data.courseOptions[0]?.optionNo ?? null);
-            setSavedOptionNo(null);
-            setSavedCourseId(null);
+            setSavedCourseIdsByOption({});
+            setLastSavedCourseIds([]);
             setNotice({
                 tone: 'success',
                 message: '같은 취향을 바탕으로 다른 추천 코스를 새로 준비했어요.',
@@ -577,11 +589,36 @@ function CourseRecommendPage() {
         }
     };
 
-    const handleSave = async (option) => {
+    const toggleSaveSelection = (optionNo) => {
+        if (isSavingSelected || isRecommendingAgain || savedCourseIdsByOption[optionNo]) return;
+
+        setSelectedSaveOptionNos((previous) => (
+            previous.includes(optionNo)
+                ? previous.filter((currentOptionNo) => currentOptionNo !== optionNo)
+                : [...previous, optionNo].slice(-3)
+        ));
+    };
+
+    const handleSaveSelected = async () => {
+        if (isRecommendingAgain) return;
+
+        const selectedOptions = options.filter((option) => (
+            selectedSaveOptionNos.includes(option.optionNo)
+            && !savedCourseIdsByOption[option.optionNo]
+        ));
+
+        if (selectedOptions.length === 0) {
+            setNotice({
+                tone: 'info',
+                message: '저장할 코스를 한 개 이상 선택해주세요.',
+            });
+            return;
+        }
+
         if (source === 'preview') {
             setNotice({
                 tone: 'info',
-                message: '현재는 화면 미리보기입니다. 실제 추천 응답이 들어오면 선택한 코스만 백엔드에 저장됩니다.',
+                message: '현재는 화면 미리보기입니다. 실제 추천 응답이 들어오면 선택한 코스를 저장할 수 있습니다.',
             });
             return;
         }
@@ -595,20 +632,50 @@ function CourseRecommendPage() {
             return;
         }
 
-        setSavingOptionNo(option.optionNo);
+        setIsSavingSelected(true);
+        setLastSavedCourseIds([]);
         setNotice(null);
 
         try {
-            // 추천 옵션 전체를 저장하지 않고 사용자가 확정한 한 옵션만 서버에 저장합니다.
-            const savedCourse = await saveCourse(
-                buildSaveRequest(option, response, profile, travelCode),
-            );
-            storeRecommendedCourseSummary(option, savedCourse);
-            setSavedOptionNo(option.optionNo);
-            setSavedCourseId(savedCourse?.courseId ?? null);
+            const requests = selectedOptions.map((option) => (
+                buildSaveRequest(option, response, profile, travelCode)
+            ));
+            const savedCourses = requests.length === 1
+                ? [await saveCourse(requests[0])]
+                : (await saveCourses({ courses: requests }))?.savedCourses;
+
+            if (
+                !Array.isArray(savedCourses)
+                || savedCourses.length !== selectedOptions.length
+                || savedCourses.some((savedCourse) => !Number.isInteger(savedCourse?.courseId))
+            ) {
+                throw new Error('저장 결과의 코스 ID를 확인할 수 없습니다.');
+            }
+
+            const savedIdsByOption = {};
+            selectedOptions.forEach((option, index) => {
+                const savedCourse = savedCourses[index];
+                savedIdsByOption[option.optionNo] = savedCourse.courseId;
+
+                // 서버 저장 성공 뒤 로컬 요약 보완이 실패해도 같은 코스를 다시 저장하지 않게 합니다.
+                try {
+                    storeRecommendedCourseSummary(option, savedCourse);
+                } catch {
+                    // 목록 API가 연결되면 서버 데이터로 다시 채워집니다.
+                }
+            });
+
+            setSavedCourseIdsByOption((previous) => ({
+                ...previous,
+                ...savedIdsByOption,
+            }));
+            setLastSavedCourseIds(savedCourses.map((savedCourse) => savedCourse.courseId));
+            setSelectedSaveOptionNos([]);
             setNotice({
                 tone: 'success',
-                message: '선택한 코스를 내 코스에 담았습니다.',
+                message: selectedOptions.length === 1
+                    ? '선택한 코스를 내 코스에 담았습니다.'
+                    : `선택한 코스 ${selectedOptions.length}개를 각각 내 코스에 담았습니다.`,
             });
         } catch (error) {
             setNotice({
@@ -616,7 +683,7 @@ function CourseRecommendPage() {
                 message: error?.message || '코스를 저장하지 못했습니다. 잠시 후 다시 시도해주세요.',
             });
         } finally {
-            setSavingOptionNo(null);
+            setIsSavingSelected(false);
         }
     };
 
@@ -668,7 +735,7 @@ function CourseRecommendPage() {
                         <button
                             type="button"
                             onClick={handleRecommendAgain}
-                            disabled={isRecommendingAgain || status === 'loading'}
+                            disabled={isRecommendingAgain || isSavingSelected || status === 'loading'}
                             aria-label="같은 취향 검사 결과로 다른 코스 다시 추천받기"
                         >
                             <RefreshCw
@@ -691,6 +758,48 @@ function CourseRecommendPage() {
                         </button>
                     </div>
                 </div>
+
+                {status === 'success' && options.length > 0 && (
+                    <section
+                        className={`course-result-save-selection${selectedSaveOptionNos.length > 0 ? ' has-selection' : ''}`}
+                        aria-label="저장할 추천 코스 선택"
+                        aria-busy={isSavingSelected}
+                    >
+                        <div className="course-result-save-selection-copy">
+                            <span><Bookmark size={19} aria-hidden="true" /></span>
+                            <div>
+                                <strong>저장할 코스를 선택해 주세요</strong>
+                                <small>한 개는 단건으로, 두 개 이상은 한 번에 각각 별도 코스로 저장돼요.</small>
+                            </div>
+                        </div>
+
+                        <div className="course-result-save-selection-actions">
+                            <span><b>{selectedSaveOptionNos.length}</b> / 3 선택</span>
+                            {selectedSaveOptionNos.length > 0 && (
+                                <button
+                                    className="secondary"
+                                    type="button"
+                                    disabled={isSavingSelected || isRecommendingAgain}
+                                    onClick={() => setSelectedSaveOptionNos([])}
+                                >
+                                    선택 해제
+                                </button>
+                            )}
+                            <button
+                                className="primary"
+                                type="button"
+                                disabled={isSavingSelected || isRecommendingAgain || selectedSaveOptionNos.length === 0}
+                                onClick={handleSaveSelected}
+                            >
+                                {isSavingSelected
+                                    ? '저장 중...'
+                                    : selectedSaveOptionNos.length > 1
+                                        ? `${selectedSaveOptionNos.length}개 코스 함께 저장`
+                                        : '선택한 코스 저장'}
+                            </button>
+                        </div>
+                    </section>
+                )}
 
                 {status === 'loading' && <LoadingCards />}
 
@@ -735,10 +844,12 @@ function CourseRecommendPage() {
                                     option={option}
                                     fallbackImage={fallbackImages[index % fallbackImages.length]}
                                     isCompared={comparedOptionNos.includes(option.optionNo)}
-                                    isSaving={savingOptionNo === option.optionNo}
-                                    isSaved={savedOptionNo === option.optionNo}
+                                    isSelectedForSave={selectedSaveOptionNos.includes(option.optionNo)}
+                                    isSelectionDisabled={isRecommendingAgain}
+                                    isSaving={isSavingSelected}
+                                    isSaved={Boolean(savedCourseIdsByOption[option.optionNo])}
                                     onToggleCompare={toggleCompare}
-                                    onSave={handleSave}
+                                    onToggleSaveSelection={toggleSaveSelection}
                                     onFocusOption={(nextOption) => setFocusedOptionNo(nextOption.optionNo)}
                                     key={option.optionNo ?? option.optionType}
                                 />
@@ -777,8 +888,13 @@ function CourseRecommendPage() {
                 <div className={`course-result-toast ${notice.tone}`} role="status">
                     <span>{notice.tone === 'success' ? <Check size={18} aria-hidden="true" /> : <Info size={18} aria-hidden="true" />}</span>
                     <p>{notice.message}</p>
-                    {savedCourseId && (
-                        <a href="/courses/recommendations">추천 코스 목록 보기</a>
+                    {lastSavedCourseIds.length === 1 && (
+                        <a href={`/courses/recommendations/${lastSavedCourseIds[0]}`}>
+                            저장한 코스 상세보기
+                        </a>
+                    )}
+                    {lastSavedCourseIds.length > 1 && (
+                        <a href="/courses/recommendations">저장한 코스 목록 보기</a>
                     )}
                     <button type="button" aria-label="알림 닫기" onClick={() => setNotice(null)}>
                         <X size={16} aria-hidden="true" />

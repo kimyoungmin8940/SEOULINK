@@ -54,12 +54,21 @@ const themeFields = [
 const travelTypeTones = ['blue', 'purple', 'green', 'orange', 'pink'];
 const COURSE_DETAIL_ENTRY_KEY = 'seoulinkCourseDetailEntry';
 
-/** 경량 라우터의 마지막 경로 조각에서 조회할 courseId를 구합니다. */
+/** 지원하는 상세 경로 전체가 정확히 일치할 때만 조회할 courseId를 구합니다. */
 function getCourseId() {
-    const lastPathSegment = window.location.pathname.split('/').filter(Boolean).pop();
-    const courseId = Number(lastPathSegment);
+    const match = window.location.pathname.match(
+        /^\/courses\/(?:recommendations\/)?([1-9]\d*)\/?$/,
+    );
+    const courseId = Number(match?.[1]);
 
     return Number.isInteger(courseId) && courseId > 0 ? courseId : null;
+}
+
+/** 현재 상세 경로의 종류에 맞는 안전한 목록 복귀 경로를 반환합니다. */
+function getCourseListPath() {
+    return window.location.pathname.startsWith('/courses/recommendations/')
+        ? '/courses/recommendations'
+        : '/courses/list';
 }
 
 function toFiniteNumber(value, fallback = 0) {
@@ -252,7 +261,7 @@ function normalizeApiCourseDetail(response, courseId) {
     });
 }
 
-/** API 오류 시에도 레이아웃을 확인할 수 있도록 캐시·더미 데이터로 미리보기를 만듭니다. */
+/** API 오류 시에도 상세 화면 디자인을 확인할 수 있도록 캐시·더미 데이터로 임시 코스를 만듭니다. */
 function buildPreviewCourse(courseId) {
     const entrySummary = readCourseDetailEntry(courseId)?.summary
         || findCachedRecommendedCourse(courseId)
@@ -385,21 +394,23 @@ function CourseRouteMap({ day }) {
 /** 저장 코스를 조회해 날짜별 일정·합계·지도 정보를 보여주는 상세 화면입니다. */
 function CourseDetailPage() {
     const courseId = useMemo(() => getCourseId(), []);
+    const courseListPath = useMemo(() => getCourseListPath(), []);
     const previewCourse = useMemo(() => buildPreviewCourse(courseId), [courseId]);
-    const [course, setCourse] = useState(courseId ? null : previewCourse);
-    const [status, setStatus] = useState(courseId ? 'loading' : 'success');
-    const [source, setSource] = useState(courseId ? 'api' : 'preview');
+    const [course, setCourse] = useState(null);
+    const [status, setStatus] = useState(courseId ? 'loading' : 'redirecting');
+    const [source, setSource] = useState('api');
     const [errorMessage, setErrorMessage] = useState('');
     const [reloadKey, setReloadKey] = useState(0);
-    const [activeDayNo, setActiveDayNo] = useState(previewCourse.days[0]?.dayNo ?? 1);
+    const [activeDayNo, setActiveDayNo] = useState(1);
     // 북마크 API가 연결되기 전까지 상세 화면 안에서 선택 상태만 표시합니다.
-    const [isBookmarked, setIsBookmarked] = useState(
-        previewCourse.bookmarked ?? previewCourse.liked ?? false,
-    );
+    const [isBookmarked, setIsBookmarked] = useState(false);
     const [toast, setToast] = useState(null);
 
     useEffect(() => {
-        if (!courseId) return undefined;
+        if (!courseId) {
+            window.location.replace(courseListPath);
+            return undefined;
+        }
 
         const controller = new AbortController();
 
@@ -407,19 +418,32 @@ function CourseDetailPage() {
         getCourseDetail(courseId, { signal: controller.signal })
             .then((response) => {
                 const normalizedCourse = normalizeApiCourseDetail(response, courseId);
+
+                if (!normalizedCourse.days.some((day) => day.places.length > 0)) {
+                    setCourse(null);
+                    setStatus('empty');
+                    return;
+                }
+
                 setCourse(normalizedCourse);
                 setActiveDayNo(normalizedCourse.days[0]?.dayNo ?? 1);
+                setIsBookmarked(normalizedCourse.bookmarked ?? normalizedCourse.liked ?? false);
                 setSource('api');
+                setErrorMessage('');
                 setStatus('success');
             })
             .catch((error) => {
                 if (error?.name === 'AbortError') return;
                 setErrorMessage(error?.message || '코스 상세 정보를 불러오지 못했습니다.');
-                setStatus('error');
+                setStatus(
+                    error?.status === 404 || error?.code === 'COURSE_NOT_FOUND'
+                        ? 'not-found'
+                        : 'error',
+                );
             });
 
         return () => controller.abort();
-    }, [courseId, reloadKey]);
+    }, [courseId, courseListPath, reloadKey]);
 
     const activeDay = course?.days.find((day) => day.dayNo === activeDayNo)
         || course?.days[0]
@@ -438,9 +462,10 @@ function CourseDetailPage() {
     const showPreview = () => {
         setCourse(previewCourse);
         setActiveDayNo(previewCourse.days[0]?.dayNo ?? 1);
+        setIsBookmarked(previewCourse.bookmarked ?? previewCourse.liked ?? false);
         setSource('preview');
-        setStatus('success');
         setErrorMessage('');
+        setStatus('success');
     };
 
     const retryCourseDetail = () => {
@@ -485,9 +510,7 @@ function CourseDetailPage() {
             return;
         }
 
-        window.location.href = window.location.pathname.startsWith('/courses/recommendations/')
-            ? '/courses/recommendations'
-            : '/courses/list';
+        window.location.href = courseListPath;
     };
 
     return (
@@ -525,11 +548,45 @@ function CourseDetailPage() {
                     )}
                 </div>
 
-                {status === 'loading' && (
+                {(status === 'loading' || status === 'redirecting') && (
                     <section className="course-detail-state-card" aria-live="polite">
                         <span className="course-detail-spinner" aria-hidden="true" />
-                        <h1>코스 상세 정보를 불러오고 있어요</h1>
-                        <p>날짜별 일정과 이동 동선을 정리하는 중입니다.</p>
+                        <h1>
+                            {status === 'redirecting'
+                                ? '코스 목록으로 이동하고 있어요'
+                                : '코스 상세 정보를 불러오고 있어요'}
+                        </h1>
+                        <p>
+                            {status === 'redirecting'
+                                ? '올바른 코스를 다시 선택할 수 있도록 목록으로 안내할게요.'
+                                : '날짜별 일정과 이동 동선을 정리하는 중입니다.'}
+                        </p>
+                    </section>
+                )}
+
+                {status === 'not-found' && (
+                    <section className="course-detail-state-card" role="alert">
+                        <span className="course-detail-state-icon error"><Info size={25} aria-hidden="true" /></span>
+                        <h1>코스를 찾을 수 없어요</h1>
+                        <p>{errorMessage || '삭제되었거나 존재하지 않는 코스입니다.'}</p>
+                        <div>
+                            <button type="button" onClick={showPreview}>
+                                임시 페이지 보기
+                            </button>
+                        </div>
+                    </section>
+                )}
+
+                {status === 'empty' && (
+                    <section className="course-detail-state-card">
+                        <span className="course-detail-state-icon"><Route size={25} aria-hidden="true" /></span>
+                        <h1>표시할 코스 일정이 없어요</h1>
+                        <p>저장된 장소 정보가 비어 있습니다. 목록에서 다른 코스를 선택해주세요.</p>
+                        <div>
+                            <button type="button" onClick={showPreview}>
+                                임시 페이지 보기
+                            </button>
+                        </div>
                     </section>
                 )}
 
@@ -543,7 +600,7 @@ function CourseDetailPage() {
                                 <RefreshCw size={16} aria-hidden="true" /> 다시 불러오기
                             </button>
                             <button className="secondary" type="button" onClick={showPreview}>
-                                화면 미리보기
+                                임시 페이지 보기
                             </button>
                         </div>
                     </section>
@@ -599,11 +656,15 @@ function CourseDetailPage() {
                                 <div><small>전체 소요 시간</small><strong>약 {formatMinutes(course.totalCourseTimeMinutes)}</strong></div>
                             </article>
                             <article>
+                                <span><Route size={21} aria-hidden="true" /></span>
+                                <div><small>총 이동 시간</small><strong>약 {formatMinutes(course.totalTravelTimeMinutes)}</strong></div>
+                            </article>
+                            <article>
                                 <span><Timer size={21} aria-hidden="true" /></span>
                                 <div><small>장소 체류 시간</small><strong>약 {formatMinutes(course.totalVisitTimeMinutes)}</strong></div>
                             </article>
                             <article>
-                                <span><Route size={21} aria-hidden="true" /></span>
+                                <span><Sparkles size={21} aria-hidden="true" /></span>
                                 <div><small>방문 장소</small><strong>{course.placeCount}곳</strong></div>
                             </article>
                                 </section>

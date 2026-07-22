@@ -73,9 +73,6 @@
  * @property {number} resultId
  * @property {string=} travelCode 영문 대문자 5자리
  * @property {string=} dailyStartTime HH:mm, 프론트 기본 10:00
- * @property {string=} weatherStatus
- * @property {number=} temperature
- * @property {number=} rainProbability 0~100
  * @property {string[]=} excludedRecommendationKeys 다시 추천할 때 제외할 이전 코스 조합 키
  * @property {DailyCoursePlan[]} dailyPlans
  */
@@ -126,9 +123,6 @@
  * @property {number} resultId
  * @property {string=} travelCode
  * @property {string} dailyStartTime HH:mm
- * @property {?string} weatherStatus
- * @property {?number} temperature
- * @property {?number} rainProbability
  * @property {number} optionCount
  * @property {CourseOption[]} courseOptions
  */
@@ -207,6 +201,17 @@
  * @property {number} totalTravelTimeMinutes
  * @property {number} totalVisitTimeMinutes
  * @property {number} totalCourseTimeMinutes
+ */
+
+/**
+ * @typedef {Object} CourseBatchSaveRequest
+ * @property {CourseSaveRequest[]} courses 한 번에 저장할 1~3개 코스
+ */
+
+/**
+ * @typedef {Object} CourseBatchSaveResponse
+ * @property {number} savedCount
+ * @property {CourseSaveResponse[]} savedCourses
  */
 
 /**

@@ -35,7 +35,7 @@ export const optimizeCourse = (data, options = {}) => apiClient.post(
 
 /**
  * 추천 후보를 최적화해 PREFERENCE/MIN_DISTANCE/BALANCED 3개 옵션을 받습니다.
- * 이 단계에서는 저장하지 않고, 사용자가 결과 화면에서 선택한 한 코스만 saveCourse로 저장합니다.
+ * 이 단계에서는 저장하지 않고, 결과 화면에서 고른 개수에 따라 saveCourse/saveCourses로 저장합니다.
  * @param {import('../types/course').CourseRecommendRequest} data
  * @param {RequestInit} [options]
  * @returns {Promise<import('../types/course').CourseRecommendResponse>}
@@ -54,6 +54,18 @@ export const recommendCourse = (data, options = {}) => apiClient.post(
  */
 export const saveCourse = (data, options = {}) => apiClient.post(
     '/courses',
+    data,
+    options,
+);
+
+/**
+ * 사용자가 선택한 추천 코스 1~3개를 한 트랜잭션으로 저장합니다.
+ * @param {import('../types/course').CourseBatchSaveRequest} data
+ * @param {RequestInit} [options]
+ * @returns {Promise<import('../types/course').CourseBatchSaveResponse>}
+ */
+export const saveCourses = (data, options = {}) => apiClient.post(
+    '/courses/batch',
     data,
     options,
 );

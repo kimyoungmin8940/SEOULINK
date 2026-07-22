@@ -219,7 +219,7 @@
   background: rgba(255, 255, 255, 0.96);
   box-shadow: 0 10px 26px rgba(31, 68, 101, 0.07);
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .course-detail-metrics article {
@@ -1088,7 +1088,7 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .course-detail-metrics article:nth-child(3) {
+  .course-detail-metrics article:nth-child(odd) {
     border-left: none;
   }
 

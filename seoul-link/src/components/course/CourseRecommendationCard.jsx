@@ -186,15 +186,17 @@ function ExpandedSchedule({ days }) {
     );
 }
 
-/** 추천 전략 한 개의 요약, 일차별 동선, 비교·저장 동작을 묶은 카드입니다. */
+/** 추천 전략 한 개의 요약, 일차별 동선, 비교·저장 선택 동작을 묶은 카드입니다. */
 function CourseRecommendationCard({
     option,
     fallbackImage,
     isCompared,
+    isSelectedForSave,
+    isSelectionDisabled,
     isSaving,
     isSaved,
     onToggleCompare,
-    onSave,
+    onToggleSaveSelection,
     onFocusOption,
 }) {
     const days = useMemo(
@@ -220,6 +222,8 @@ function CourseRecommendationCard({
         ?? days.reduce((sum, day) => sum + Number(day.dailyCourseTimeMinutes || 0), 0);
     const totalDistance = Number(option.totalDistanceKm
         ?? days.reduce((sum, day) => sum + Number(day.dailyDistanceKm || 0), 0));
+    const totalTravelTime = option.totalTravelTimeMinutes
+        ?? days.reduce((sum, day) => sum + Number(day.dailyTravelTimeMinutes || 0), 0);
 
     return (
         <article
@@ -268,6 +272,7 @@ function CourseRecommendationCard({
 
                     <div className="course-result-meta">
                         <span><Clock3 size={15} aria-hidden="true" />{formatMinutes(totalCourseTime)}</span>
+                        <span><Footprints size={15} aria-hidden="true" />이동 {formatMinutes(totalTravelTime)}</span>
                         <span><MapPinned size={15} aria-hidden="true" />{totalDistance.toFixed(1)}km</span>
                         <span><Route size={15} aria-hidden="true" />{allPlaces.length}곳 방문</span>
                         {days.length > 1 && (
@@ -347,13 +352,28 @@ function CourseRecommendationCard({
                     </button>
 
                     <button
-                        className={`course-result-save-btn${isSaved ? ' saved' : ''}`}
+                        className={`course-result-save-btn${isSelectedForSave ? ' selected' : ''}${isSaved ? ' saved' : ''}`}
                         type="button"
-                        disabled={isSaving || isSaved}
-                        onClick={() => onSave(option)}
+                        disabled={isSelectionDisabled || isSaving || isSaved}
+                        aria-pressed={isSelectedForSave || isSaved}
+                        onClick={() => onToggleSaveSelection(option.optionNo)}
                     >
-                        {isSaved ? <Check size={16} aria-hidden="true" /> : null}
-                        {isSaving ? '저장 중...' : isSaved ? '저장 완료' : '이 코스 담기'}
+                        {isSelectedForSave || isSaved
+                            ? <Check size={16} aria-hidden="true" />
+                            : <Plus size={16} aria-hidden="true" />}
+                        {isSaving && isSelectedForSave
+                            ? '저장 중...'
+                            : isSaved
+                                ? '저장 완료'
+                                : isSelectedForSave
+                                    ? (
+                                        <span className="course-result-save-label">
+                                            저장
+                                            <br />
+                                            선택됨
+                                        </span>
+                                    )
+                                    : '저장 선택'}
                     </button>
                 </div>
             </div>
