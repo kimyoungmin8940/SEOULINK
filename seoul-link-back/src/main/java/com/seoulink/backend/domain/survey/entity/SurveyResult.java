@@ -14,9 +14,9 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 
 /**
- * ERD의 {@code SURVEY_RESULT} 테이블과 매핑될 설문 결과 엔티티이다.
+ * SURVEY_RESULT 테이블과 매핑되는 설문 결과 엔티티이다.
  *
- * <p>설문별 최종 여행 유형, 점수, 순위, 추천 가능 상태 등을 저장한다.</p>
+ * <p>설문별로 계산된 최종 여행 유형 코드를 저장한다.</p>
  */
 
 @Entity

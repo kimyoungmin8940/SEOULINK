@@ -6,7 +6,7 @@ import com.seoulink.backend.domain.survey.entity.TravelTypeMaster;
 import java.time.LocalDateTime;
 
 /**
- * //설문 결과 조회 응답 DTO이다.
+ * 설문 결과와 여행 유형 정보를 반환하는 응답 DTO이다.
  */
 public record SurveyResultResponse(
 
