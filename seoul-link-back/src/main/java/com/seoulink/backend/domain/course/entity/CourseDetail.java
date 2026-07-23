@@ -56,7 +56,7 @@ public class CourseDetail {
     @Column(name = "MEMO", length = 500)
     private String memo;
 
-    @Column(name = "VISIT_TIME", length = 50)
+    @Column(name = "VISIT_TIME", length = 5)
     private String visitTime;
 
     @Column(name = "STAY_MINUTES")
@@ -78,6 +78,11 @@ public class CourseDetail {
     @Enumerated(EnumType.STRING)
     @Column(name = "TRANSIT_PATH_TYPE", length = 20)
     private TransitPathType transitPathType;
+
+    // 실제 외부 경로가 아닌 임시 계산값인지 구간별로 저장한다.
+    @Builder.Default
+    @Column(name = "ROUTE_ESTIMATED", nullable = false)
+    private Boolean routeEstimated = false;
 
     // Hibernate가 최초 저장 시각을 자동으로 기록한다.
     @CreationTimestamp

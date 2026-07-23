@@ -28,9 +28,8 @@ public class DailyCourseDraftResponse {
     // 해당 날짜에 최종적으로 선택할 목표 장소 수
     private final int targetPlaceCount;
 
-    // 최종 장소를 선택하기 전에 전달하는 카테고리별 후보 개수
-    // P형 예: {"TOUR": 7, "RESTAURANT": 4, "CAFE": 4, "HOTEL": 0}
-    // R형 예: {"TOUR": 4, "RESTAURANT": 3, "CAFE": 3, "HOTEL": 0}
+    // 최종 장소를 선택하기 전에 실제로 배정된 카테고리별 후보 개수이다.
+    // 장소가 부족해 다른 카테고리로 보충된 경우에도 placeCandidates와 같은 수를 반환한다.
     private final Map<String, Integer> categoryTargets;
 
     // 최종 장소 선택에 사용할 넉넉한 추천 후보 목록

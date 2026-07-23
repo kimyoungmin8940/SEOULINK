@@ -124,6 +124,40 @@ class PlaceRecommendationServiceTest {
         verify(placeRepository).findByRegionContainingAndIsActive("성동구", "Y");
     }
 
+    @Test
+    void normalizesDisplayedScoresWithoutChangingCompanionRanking() {
+        Place genericPlace = place(1L, "일반 관광지", "TOUR", true);
+        Place datePlace = place(2L, "데이트 관광지", "TOUR", true);
+        datePlace.setThemeDateYn("Y");
+        when(placeRepository.findByIsActive("Y"))
+                .thenReturn(List.of(genericPlace, datePlace));
+
+        PlaceRecommendationListResponse response =
+                placeRecommendationService.recommend(
+                        "ATBSP",
+                        null,
+                        2,
+                        null,
+                        1,
+                        "COUPLE"
+                );
+
+        assertEquals(2L, response.getRecommendedPlaces().get(0).getPlaceId());
+        assertTrue(response.getRecommendedPlaces().stream()
+                .allMatch(place -> place.getRecommendationScore() >= 70.0
+                        && place.getRecommendationScore() <= 95.0));
+        assertEquals(
+                95.0,
+                response.getRecommendedPlaces().get(0).getRecommendationScore(),
+                0.000001
+        );
+        assertEquals(
+                70.0,
+                response.getRecommendedPlaces().get(1).getRecommendationScore(),
+                0.000001
+        );
+    }
+
     private Place place(Long id, String name, String category, boolean matchesHistory) {
         Place place = new Place();
         place.setPlaceId(id);

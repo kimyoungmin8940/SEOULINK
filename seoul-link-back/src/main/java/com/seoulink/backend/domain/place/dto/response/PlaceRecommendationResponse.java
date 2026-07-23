@@ -14,6 +14,8 @@ public class PlaceRecommendationResponse {
     private final Double recommendationScore;
     private final Double latitude;
     private final Double longitude;
+    private final String address;
+    private final String roadAddress;
     private final String themePalaceCultureYn;
     private final String themeNatureHangangYn;
     private final String themeDateYn;
@@ -37,6 +39,8 @@ public class PlaceRecommendationResponse {
         this.recommendationScore = recommendationScore;
         this.latitude = place.getLatitude();
         this.longitude = place.getLongitude();
+        this.address = place.getAddress();
+        this.roadAddress = place.getRoadAddress();
         this.themePalaceCultureYn = place.getThemePalaceCultureYn();
         this.themeNatureHangangYn = place.getThemeNatureHangangYn();
         this.themeDateYn = place.getThemeDateYn();

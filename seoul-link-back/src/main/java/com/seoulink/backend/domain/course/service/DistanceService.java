@@ -81,7 +81,10 @@ public class DistanceService {
         return new RouteCalculatorFactory(List.of(
                 new WalkingRouteCalculator(openRouteServiceClient),
                 new DrivingRouteCalculator(openRouteServiceClient),
-                new PublicTransitRouteCalculator(odsayClient)
+                new PublicTransitRouteCalculator(
+                        odsayClient,
+                        openRouteServiceClient
+                )
         ));
     }
 
@@ -161,20 +164,19 @@ public class DistanceService {
     /**
      * 추천 조합을 만들기 위한 대규모 후보 풀의 1차 거리·시간 행렬을 계산한다.
      *
-     * <p>ODsay는 장소 쌍 단일 호출 API이므로 대중교통 후보 풀 전체를 실제 API로
-     * 계산하면 후보 수의 제곱에 비례해 호출량이 커진다. 따라서 이 단계만 외부 호출
-     * 없는 대중교통 추정값을 사용하고, 선택된 최종 코스는 {@link #calculateRouteMatrix}
-     * 에서 ODsay 실제 값으로 다시 최적화한다. 도보·자동차는 기존 ORS 행렬을 사용한다.</p>
+     * <p>추천 옵션을 고르는 과정에서는 후보 조합마다 외부 API를 호출하지 않는다.
+     * 세 이동수단 모두 외부 호출 없는 추정 행렬로 방문 순서만 정하고, 카드에 실제로
+     * 표시되는 최종 DAY는 {@link #calculateRouteLegMatrix}에서 보정한다.</p>
      */
     public RouteMatrix calculateCandidatePoolMatrix(
             List<PlaceCandidateDto> candidates,
             TransportMode transportMode
     ) {
-        if (transportMode != TransportMode.PUBLIC_TRANSIT) {
-            return calculateRouteMatrix(candidates, transportMode);
-        }
         if (candidates == null) {
             throw new IllegalArgumentException("장소 후보 목록은 null일 수 없습니다.");
+        }
+        if (transportMode == null) {
+            throw new IllegalArgumentException("이동수단은 필수입니다.");
         }
 
         validateCoordinates(candidates);
@@ -192,6 +194,100 @@ public class DistanceService {
                 estimation.travelTimesMinutes(),
                 estimation.estimatedPairs(),
                 estimation.transitPathTypes()
+        );
+    }
+
+    /**
+     * 이미 정해진 방문 순서에서 실제로 화면에 표시할 인접 구간만 조회한다.
+     *
+     * <p>ODsay는 행렬 API가 아니라 장소 쌍마다 한 번씩 호출해야 한다. 기존처럼
+     * 6개 장소의 모든 방향 30개를 조회하면 재추천 한 번에 호출 수가 급증하므로,
+     * 최적화는 추정 행렬로 끝내고 최종 순서의 5개 구간만 실제 경로로 보정한다.</p>
+     */
+    public RouteMatrix calculateRouteLegMatrix(
+            List<PlaceCandidateDto> candidates,
+            TransportMode transportMode,
+            List<Integer> routeIndexes
+    ) {
+        if (candidates == null) {
+            throw new IllegalArgumentException("장소 후보 목록은 null일 수 없습니다.");
+        }
+        if (transportMode == null) {
+            throw new IllegalArgumentException("이동수단은 필수입니다.");
+        }
+        validateRouteIndexes(candidates.size(), routeIndexes);
+
+        // ORS는 한 번의 행렬 요청으로 모든 쌍을 받으므로 기존 경로를 그대로 사용한다.
+        if (transportMode != TransportMode.PUBLIC_TRANSIT) {
+            return calculateRouteMatrix(candidates, transportMode);
+        }
+
+        validateCoordinates(candidates);
+        RouteCalculator calculator = routeCalculatorFactory.get(transportMode);
+        List<RouteCoordinate> coordinates = candidates.stream()
+                .map(candidate -> new RouteCoordinate(
+                        candidate.getLongitude(),
+                        candidate.getLatitude()
+                ))
+                .toList();
+
+        // 조회 대상이 아닌 셀도 안전한 값으로 유지하도록 추정 행렬을 기본값으로 둔다.
+        RouteCalculation estimation = calculator.estimate(coordinates);
+        double[][] distancesKm = estimation.distancesKm();
+        double[][] travelTimesMinutes = estimation.travelTimesMinutes();
+        boolean[][] estimatedPairs = estimation.estimatedPairs();
+        TransitPathType[][] transitPathTypes = estimation.transitPathTypes();
+
+        for (int routePosition = 1;
+                routePosition < routeIndexes.size();
+                routePosition++) {
+            int fromIndex = routeIndexes.get(routePosition - 1);
+            int toIndex = routeIndexes.get(routePosition);
+            RoutePairValue value = routePairCache.getOrLoad(
+                    candidates.get(fromIndex),
+                    candidates.get(toIndex),
+                    transportMode,
+                    () -> calculateSingleTransitPair(
+                            calculator,
+                            coordinates.get(fromIndex),
+                            coordinates.get(toIndex)
+                    )
+            );
+            distancesKm[fromIndex][toIndex] = value.distanceKm();
+            travelTimesMinutes[fromIndex][toIndex] =
+                    value.travelTimeMinutes();
+            estimatedPairs[fromIndex][toIndex] = value.estimated();
+            transitPathTypes[fromIndex][toIndex] =
+                    value.transitPathType();
+        }
+
+        return new RouteMatrix(
+                distancesKm,
+                travelTimesMinutes,
+                estimatedPairs,
+                transitPathTypes
+        );
+    }
+
+    /** 동시 요청 공유가 가능하도록 ODsay 한 구간을 독립적인 2x2 행렬로 계산한다. */
+    private RoutePairValue calculateSingleTransitPair(
+            RouteCalculator calculator,
+            RouteCoordinate from,
+            RouteCoordinate to
+    ) {
+        boolean[][] requiredPairs = {
+                {false, true},
+                {false, false}
+        };
+        RouteCalculation calculation = calculator.calculate(
+                List.of(from, to),
+                requiredPairs
+        );
+        return new RoutePairValue(
+                calculation.getDistanceKm(0, 1),
+                calculation.getTravelTimeMinutes(0, 1),
+                calculation.isEstimated(0, 1),
+                calculation.getTransitPathType(0, 1)
         );
     }
 
@@ -300,15 +396,18 @@ public class DistanceService {
         travelTimesMinutes[fromIndex][toIndex] = travelTimeMinutes;
         estimatedPairs[fromIndex][toIndex] = estimated;
         transitPathTypes[fromIndex][toIndex] = transitPathType;
-        routePairCache.put(
-                candidates.get(fromIndex),
-                candidates.get(toIndex),
-                transportMode,
-                distanceKm,
-                travelTimeMinutes,
-                estimated,
-                transitPathType
-        );
+        // 외부 API의 일시 실패값을 24시간 재사용하지 않도록 실제 경로만 캐시한다.
+        if (!estimated) {
+            routePairCache.put(
+                    candidates.get(fromIndex),
+                    candidates.get(toIndex),
+                    transportMode,
+                    distanceKm,
+                    travelTimeMinutes,
+                    false,
+                    transitPathType
+            );
+        }
     }
 
     /**
@@ -356,6 +455,28 @@ public class DistanceService {
             }
             validateLatitude(candidate.getLatitude());
             validateLongitude(candidate.getLongitude());
+        }
+    }
+
+    /** 최종 경로 인덱스가 모든 장소를 정확히 한 번씩 가리키는지 검증한다. */
+    private void validateRouteIndexes(int candidateCount, List<Integer> routeIndexes) {
+        if (routeIndexes == null || routeIndexes.size() != candidateCount) {
+            throw new IllegalArgumentException(
+                    "최종 경로 인덱스 수는 장소 후보 수와 같아야 합니다."
+            );
+        }
+
+        boolean[] visited = new boolean[candidateCount];
+        for (Integer routeIndex : routeIndexes) {
+            if (routeIndex == null
+                    || routeIndex < 0
+                    || routeIndex >= candidateCount
+                    || visited[routeIndex]) {
+                throw new IllegalArgumentException(
+                        "최종 경로 인덱스가 올바르지 않습니다."
+                );
+            }
+            visited[routeIndex] = true;
         }
     }
 

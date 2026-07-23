@@ -1,5 +1,6 @@
 package com.seoulink.backend.domain.course.dto.response;
 
+import com.seoulink.backend.domain.place.dto.response.PlaceRecommendationResponse;
 import lombok.Getter;
 
 import java.time.LocalDate;
@@ -33,6 +34,7 @@ public class CourseDraftResponse {
     private final int travelDays;
     @JsonFormat(pattern = "HH:mm")
     private final LocalTime dailyStartTime;
+    private final List<PlaceRecommendationResponse> hotelCandidates;
     private final List<DailyCourseDraftResponse> dailyPlans;
 
     public CourseDraftResponse(
@@ -45,6 +47,7 @@ public class CourseDraftResponse {
             LocalDate endDate,
             int travelDays,
             LocalTime dailyStartTime,
+            List<PlaceRecommendationResponse> hotelCandidates,
             List<DailyCourseDraftResponse> dailyPlans
     ) {
         this.surveyId = surveyId;
@@ -56,6 +59,7 @@ public class CourseDraftResponse {
         this.endDate = endDate;
         this.travelDays = travelDays;
         this.dailyStartTime = dailyStartTime;
+        this.hotelCandidates = hotelCandidates;
         this.dailyPlans = dailyPlans;
     }
 }

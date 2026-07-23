@@ -56,6 +56,7 @@ public class PlaceController {
     public PlaceRecommendationListResponse recommendPlaces(
             @RequestParam String travelCode,
             @RequestParam(required = false) String region,
+            @RequestParam(required = false) String companionType,
             @RequestParam(required = false) Integer limit,
             @RequestParam(required = false) Integer limitPerCategory,
             @RequestParam(required = false) Integer alternativeLimit
@@ -65,7 +66,8 @@ public class PlaceController {
                 region,
                 limit,
                 limitPerCategory,
-                alternativeLimit
+                alternativeLimit,
+                companionType
         );
     }
 

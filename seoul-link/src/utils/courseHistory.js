@@ -1,11 +1,4 @@
-const RECOMMENDATION_STORAGE_KEYS = [
-    'recommendedCourses',
-    'myRecommendedCourses',
-    'recommendationCourses',
-];
-const MY_COURSE_STORAGE_KEY = 'seoulinkMyCourses';
-
-/** 로그인·코스 캐시의 손상된 JSON을 무시하고 null로 처리합니다. */
+/** 로그인 저장값의 손상된 JSON을 무시하고 null로 처리합니다. */
 function safelyParse(value) {
     if (!value || typeof value !== 'string') return null;
 
@@ -70,54 +63,6 @@ export function getCurrentMemberId() {
     return Number.isInteger(memberId) && memberId > 0 ? memberId : null;
 }
 
-/** 백엔드에 아직 없는 대표 이미지·태그를 유지하기 위한 화면 보조 캐시입니다. */
-export function readRecommendedCourseCache() {
-    for (const key of RECOMMENDATION_STORAGE_KEYS) {
-        const parsed = safelyParse(localStorage.getItem(key));
-        if (Array.isArray(parsed)) return parsed;
-    }
-
-    return [];
-}
-
-/** 선택 저장 직후 목록·상세 화면이 사용할 추천 코스 요약을 갱신합니다. */
-export function writeRecommendedCourseCache(courses) {
-    localStorage.setItem(
-        RECOMMENDATION_STORAGE_KEYS[0],
-        JSON.stringify(Array.isArray(courses) ? courses : []),
-    );
-}
-
-/** 내 코스 화면을 서버 응답 전에도 바로 채우기 위한 최근 저장 목록을 읽습니다. */
-export function readMyCourseCache(memberId = null) {
-    const parsed = safelyParse(localStorage.getItem(MY_COURSE_STORAGE_KEY));
-
-    // 이전 개발 데이터의 배열 형식도 한동안 읽을 수 있게 유지합니다.
-    if (Array.isArray(parsed)) return parsed;
-    if (!parsed || !Array.isArray(parsed.courses)) return [];
-    if (memberId && Number(parsed.memberId) !== Number(memberId)) return [];
-
-    return parsed.courses;
-}
-
-/** 저장 성공 직후 내 코스 화면에서 사용할 요약 목록을 갱신합니다. */
-export function writeMyCourseCache(courses, memberId = null) {
-    localStorage.setItem(
-        MY_COURSE_STORAGE_KEY,
-        JSON.stringify({
-            memberId,
-            courses: Array.isArray(courses) ? courses : [],
-        }),
-    );
-}
-
-/** 서버 상세 응답의 이미지·태그를 보완할 같은 코스의 로컬 요약을 찾습니다. */
-export function findCachedRecommendedCourse(courseId) {
-    return readRecommendedCourseCache().find(
-        (course) => getCourseId(course) === Number(courseId),
-    ) || null;
-}
-
 function formatMinutes(value) {
     const minutes = Math.max(0, Math.round(Number(value) || 0));
     const hours = Math.floor(minutes / 60);
@@ -131,10 +76,10 @@ function nonEmptyArray(value) {
     return Array.isArray(value) ? value.filter(Boolean) : [];
 }
 
-/** 목록 API 응답을 카드 형식으로 바꾸고, 서버의 null 필드만 기존 화면값으로 보완합니다. */
+/** 목록 API 응답을 서버 데이터 기준의 카드 형식으로 정규화합니다. */
 export function normalizeRecommendedCourseList(
     response,
-    { cachedCourses = [], fallbackImages = [] } = {},
+    { fallbackImages = [] } = {},
 ) {
     const list = Array.isArray(response)
         ? response
@@ -145,60 +90,39 @@ export function normalizeRecommendedCourseList(
                 : Array.isArray(response?.data?.content)
                     ? response.data.content
                     : [];
-    const cachedById = new Map(
-        cachedCourses
-            .map((course) => [getCourseId(course), course])
-            .filter(([courseId]) => courseId),
-    );
-
     return list
         .map((course, index) => {
             const courseId = getCourseId(course);
-            const cached = cachedById.get(courseId) || {};
             const serverRegions = nonEmptyArray(course?.regions);
-            const cachedRegions = nonEmptyArray(cached?.regions);
-            const regions = serverRegions.length > 0 ? serverRegions : cachedRegions;
             const serverTags = nonEmptyArray(course?.tags);
-            const cachedTags = nonEmptyArray(cached?.tags);
             const totalMinutes = course?.totalCourseTimeMinutes
-                ?? course?.totalVisitTimeMinutes
-                ?? cached?.totalCourseTimeMinutes
-                ?? cached?.totalVisitTimeMinutes;
+                ?? course?.totalVisitTimeMinutes;
             const fallbackImage = fallbackImages.length > 0
                 ? fallbackImages[index % fallbackImages.length]
                 : null;
             const coverImageUrl = course?.coverImageUrl
                 || course?.imageUrl
-                || cached?.coverImageUrl
-                || cached?.imageUrl
                 || fallbackImage;
 
             return {
-                ...cached,
                 ...course,
                 courseId,
-                title: course?.title || cached?.title || '서울 맞춤 추천 코스',
+                title: course?.title || '서울 맞춤 추천 코스',
                 description: course?.description
-                    || cached?.description
                     || '취향 검사 결과를 바탕으로 추천된 서울 여행 코스입니다.',
                 coverImageUrl,
                 imageUrl: coverImageUrl,
-                regions,
+                regions: serverRegions,
                 duration: course?.duration
-                    || cached?.duration
                     || `약 ${formatMinutes(totalMinutes)}`,
                 area: course?.area
-                    || regions.join(' · ')
+                    || serverRegions.join(' · ')
                     || course?.region
-                    || cached?.area
-                    || cached?.region
                     || '서울',
                 tags: serverTags.length > 0
                     ? serverTags
-                    : cachedTags.length > 0
-                        ? cachedTags
-                        : ['추천코스', '취향맞춤'],
-                liked: course?.liked ?? cached?.liked ?? false,
+                    : ['추천코스', '취향맞춤'],
+                liked: course?.liked ?? false,
             };
         })
         .filter((course) => course.courseId);
@@ -207,10 +131,9 @@ export function normalizeRecommendedCourseList(
 /** 내 코스 API 응답을 카드 모델로 통일하고 여행 시작·종료일을 보존합니다. */
 export function normalizeMyCourseList(
     response,
-    { cachedCourses = [], fallbackImages = [] } = {},
+    { fallbackImages = [] } = {},
 ) {
     return normalizeRecommendedCourseList(response, {
-        cachedCourses,
         fallbackImages,
     }).map((course) => ({
         ...course,

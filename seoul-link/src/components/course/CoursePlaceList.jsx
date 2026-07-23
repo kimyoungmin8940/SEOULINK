@@ -72,6 +72,9 @@ function CoursePlaceList({ day, transportMode }) {
                                     {Number(place.distanceFromPreviousKm || 0).toFixed(1)}km
                                     <b>·</b>
                                     약 {Math.round(Number(place.travelTimeFromPreviousMinutes) || 0)}분
+                                    {place.routeEstimated && (
+                                        <em className="course-route-estimated-badge">예상</em>
+                                    )}
                                 </p>
                             </li>
                         )}

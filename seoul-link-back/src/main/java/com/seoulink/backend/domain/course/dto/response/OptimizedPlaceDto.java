@@ -51,4 +51,5 @@ public class OptimizedPlaceDto {
     private Double distanceFromPreviousKm;
     private Double travelTimeFromPreviousMinutes;
     private TransitPathType transitPathType;
+    private Boolean routeEstimated;
 }

@@ -12,6 +12,8 @@ import com.seoulink.backend.domain.course.dto.response.CourseRecommendResponse;
 import com.seoulink.backend.domain.course.dto.response.OptimizedPlaceDto;
 import com.seoulink.backend.domain.course.model.TransportMode;
 import com.seoulink.backend.domain.course.service.DistanceService.RouteMatrix;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -30,20 +32,29 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 
-/** 날짜별 후보 풀에서 서로 다른 세 가지 추천 코스를 생성한다. */
+/** 날짜별 후보 풀에서 서로 다른 세 가지 추천 코스를 순차 생성한다. */
 @Service
 public class CourseRecommendationService {
 
+    private static final Logger log = LoggerFactory.getLogger(
+            CourseRecommendationService.class
+    );
     private static final List<String> SUPPORTED_CATEGORIES = List.of(
             "TOUR",
             "RESTAURANT",
             "CAFE",
             "HOTEL"
     );
-    private static final int OPTION_COUNT = 3;
-    private static final int MAX_DAILY_SELECTIONS = 10_000;
-    private static final int MAX_GLOBAL_SELECTIONS = 10_000;
     private static final int MAX_EXCLUDED_RECOMMENDATIONS = 60;
+    private static final int MAX_PREVIOUSLY_RECOMMENDED_PLACES = 500;
+    private static final int PACKED_DAILY_OVERLAP_LIMIT = 2;
+    private static final int RELAXED_DAILY_OVERLAP_LIMIT = 1;
+    private static final double PREVIOUSLY_RECOMMENDED_PENALTY = 20.0;
+    private static final double NEW_PLACE_BONUS = 5.0;
+    private static final double DISPLAY_SCORE_MIN = 70.0;
+    private static final double DISPLAY_SCORE_MAX = 95.0;
+    private static final double EQUAL_SCORE_DISPLAY_VALUE = 85.0;
+    private static final double EPSILON = 0.000000001;
 
     private final CourseOptimizationService courseOptimizationService;
     private final DistanceService distanceService;
@@ -57,72 +68,118 @@ public class CourseRecommendationService {
     }
 
     /**
-     * 최종 요청 JSON의 날짜별 후보 풀에서 취향 우선·이동 최소·균형 코스를 만든다.
+     * 후보 전체 조합을 만들지 않고 취향·이동 최소·균형 코스를 하나씩 순차 생성한다.
      *
-     * <p>각 날짜의 후보 카테고리 비율을 {@code targetPlaceCount}에 맞게 축소한 뒤
-     * 가능한 장소 조합을 만들고 세 전략으로 순위를 계산한다. 후보 조합이 세 개 이상이면
-     * 서로 다른 조합을 우선 반환하며, 후보가 부족해 세 조합을 만들 수 없는 경우에는
-     * 전략별 최선 결과가 일부 겹칠 수 있다. 추천 결과는 저장하지 않고 사용자가 선택한
-     * 한 코스만 기존 {@code POST /api/courses}로 저장한다.</p>
+     * <p>날짜별 후보의 좌표 기반 추정 행렬을 한 번만 만든다. 두 번째와 세 번째 옵션은
+     * 앞 옵션에서 쓰지 않은 장소를 먼저 선택하고, 재추천은 직전 세 옵션에 등장한 장소를
+     * 먼저 완전히 제외한다. 해당 카테고리 후보가 모자랄 때만 제한을 단계적으로 풀어
+     * 가장 적게 겹치는 장소를 재사용한다.</p>
      */
     public CourseRecommendResponse recommend(CourseRecommendRequest request) {
         ValidatedRecommendation validated = validateAndPrepare(request);
-        List<List<DailySelection>> selectionsByDay = new ArrayList<>();
-
-        for (ValidatedDailyPlan dailyPlan : validated.dailyPlans()) {
-            selectionsByDay.add(createDailySelections(
-                    dailyPlan,
-                    validated.transportMode()
-            ));
-        }
-
-        List<GlobalSelection> globalSelections = createGlobalSelections(
-                selectionsByDay
-        );
-        if (globalSelections.isEmpty()) {
-            throw new IllegalArgumentException("조건에 맞는 추천 코스 조합을 만들 수 없습니다.");
-        }
-
-        Set<String> excludedSignatures = validated.excludedRecommendationKeys();
-        if (!excludedSignatures.isEmpty()) {
-            long remainingSelectionCount = globalSelections.stream()
-                    .map(GlobalSelection::signature)
-                    .distinct()
-                    .filter(signature -> !excludedSignatures.contains(signature))
-                    .count();
-            if (remainingSelectionCount < OPTION_COUNT) {
-                throw new IllegalArgumentException(
-                        "같은 취향으로 새롭게 추천할 다른 코스 조합이 부족합니다."
+        Map<LocalDate, DailyRouteContext> routeContexts =
+                createDailyRouteContexts(
+                        validated.dailyPlans(),
+                        validated.transportMode()
                 );
-            }
-        }
+        int dailyOverlapLimit = resolveDailyOverlapLimit(
+                request.getTravelCode(),
+                validated.dailyPlans()
+        );
 
         List<CourseOptionResponse> courseOptions = new ArrayList<>();
-        Set<String> usedSignatures = new HashSet<>(excludedSignatures);
+        List<Map<LocalDate, Set<Long>>> generatedOptionPlaces =
+                new ArrayList<>();
+        Set<Long> usedHotelIds = new LinkedHashSet<>();
+        Set<String> generatedRecommendationKeys = new LinkedHashSet<>();
         int optionNo = 1;
 
         for (OptionStrategy strategy : OptionStrategy.values()) {
-            GlobalSelection selected = selectGlobalOption(
-                    globalSelections,
+            SequentialSelection selection = createSequentialSelection(
+                    routeContexts,
                     strategy,
-                    usedSignatures
+                    validated.previouslyRecommendedPlaceIds(),
+                    generatedOptionPlaces,
+                    dailyOverlapLimit
             );
-            usedSignatures.add(selected.signature());
+            CourseOptimizeResponse optimized =
+                    courseOptimizationService.optimizeForRecommendation(
+                            CourseOptimizeRequest.builder()
+                                    .transportMode(validated.transportMode())
+                                    .placeCandidates(selection.placeCandidates())
+                                    .build(),
+                            selection.preferredFirstPlaceIdsByDate()
+                    );
 
-            CourseOptimizeResponse optimized = courseOptimizationService.optimize(
-                    CourseOptimizeRequest.builder()
-                            .transportMode(validated.transportMode())
-                            .placeCandidates(selected.placeCandidates())
-                            .build()
+            if (validated.dailyPlans().size() >= 2) {
+                PlaceCandidateDto selectedHotel =
+                        selectHotelCandidateForOption(
+                                validated.hotelCandidates(),
+                                optimized,
+                                strategy,
+                                validated.previouslyRecommendedPlaceIds(),
+                                usedHotelIds
+                        );
+                if (selectedHotel != null) {
+                    optimized =
+                            courseOptimizationService
+                                    .appendFixedHotelBeforeFinalDayForRecommendation(
+                                            optimized,
+                                            selectedHotel
+                                    );
+                    usedHotelIds.add(selectedHotel.getPlaceId());
+                } else {
+                    log.warn(
+                            "다일 추천에 사용할 숙소 후보가 없습니다: resultId={}, strategy={}",
+                            request.getResultId(),
+                            strategy
+                    );
+                }
+            }
+
+            String recommendationKey =
+                    createOptimizedCompositionSignature(
+                            optimized.getOptimizedPlaces(),
+                            validated.transportMode()
+                    );
+            if (validated.excludedRecommendationKeys().contains(recommendationKey)
+                    || !generatedRecommendationKeys.add(recommendationKey)) {
+                log.warn(
+                        "후보 부족으로 기존 코스 구성이 다시 선택되었습니다: "
+                                + "resultId={}, strategy={}, recommendationKey={}",
+                        request.getResultId(),
+                        strategy,
+                        recommendationKey
+                );
+            }
+
+            Map<LocalDate, Set<Long>> ordinaryPlacesByDate =
+                    ordinaryPlaceIdsByDate(optimized);
+            logOverlapResult(
+                    request.getResultId(),
+                    strategy,
+                    ordinaryPlacesByDate,
+                    generatedOptionPlaces,
+                    dailyOverlapLimit
             );
+            generatedOptionPlaces.add(ordinaryPlacesByDate);
             courseOptions.add(toOptionResponse(
                     optionNo++,
                     strategy,
                     optimized,
                     request.getDailyStartTime(),
-                    selected.signature()
+                    recommendationKey
             ));
         }
+
+        log.info(
+                "추천 코스 순차 생성 완료: resultId={}, options={}, days={}, "
+                        + "dailyOverlapLimit={}, routeApiCallsDuringGeneration=0",
+                request.getResultId(),
+                courseOptions.size(),
+                validated.dailyPlans().size(),
+                dailyOverlapLimit
+        );
 
         return CourseRecommendResponse.builder()
                 .resultId(request.getResultId())
@@ -162,13 +219,24 @@ public class CourseRecommendationService {
         if (request.getDailyStartTime() == null) {
             throw new IllegalArgumentException("일정 시작 시각은 필수입니다.");
         }
-        if (request.getDailyPlans() == null || request.getDailyPlans().isEmpty()) {
+        if (request.getDailyPlans() == null
+                || request.getDailyPlans().isEmpty()) {
             throw new IllegalArgumentException("날짜별 일정이 한 개 이상 필요합니다.");
         }
 
-        Set<String> excludedRecommendationKeys = normalizeExcludedRecommendationKeys(
-                request.getExcludedRecommendationKeys()
-        );
+        Set<String> excludedRecommendationKeys =
+                normalizeExcludedRecommendationKeys(
+                        request.getExcludedRecommendationKeys()
+                );
+        Set<Long> previouslyRecommendedPlaceIds =
+                normalizePreviouslyRecommendedPlaceIds(
+                        request.getPreviouslyRecommendedPlaceIds()
+                );
+        Set<Long> combinedPreviousPlaceIds =
+                new LinkedHashSet<>(previouslyRecommendedPlaceIds);
+        excludedRecommendationKeys.stream()
+                .map(this::extractPlaceIds)
+                .forEach(combinedPreviousPlaceIds::addAll);
 
         Map<LocalDate, ValidatedDailyPlan> plansByDate = new TreeMap<>();
         for (DailyPlanRequest dailyPlan : request.getDailyPlans()) {
@@ -184,15 +252,31 @@ public class CourseRecommendationService {
             }
         }
 
+        List<ValidatedDailyPlan> dailyPlans =
+                new ArrayList<>(plansByDate.values());
+        List<PlaceCandidateDto> hotelCandidates = validateHotelCandidates(
+                request.getHotelCandidates(),
+                dailyPlans.get(0).visitDate()
+        );
+        applyRerecommendationScores(
+                dailyPlans,
+                hotelCandidates,
+                combinedPreviousPlaceIds
+        );
+
         return new ValidatedRecommendation(
-                new ArrayList<>(plansByDate.values()),
+                dailyPlans,
                 excludedRecommendationKeys,
-                request.getTransportMode()
+                request.getTransportMode(),
+                Set.copyOf(combinedPreviousPlaceIds),
+                hotelCandidates
         );
     }
 
     /** 재추천 요청의 제외 키를 검증하고 중복을 제거한다. */
-    private Set<String> normalizeExcludedRecommendationKeys(List<String> source) {
+    private Set<String> normalizeExcludedRecommendationKeys(
+            List<String> source
+    ) {
         if (source == null || source.isEmpty()) {
             return Set.of();
         }
@@ -213,6 +297,185 @@ public class CourseRecommendationService {
             normalized.add(key.trim());
         }
         return Set.copyOf(normalized);
+    }
+
+    /** 프런트가 전달한 이전 장소 ID를 양의 정수·중복 제거 형태로 검증한다. */
+    private Set<Long> normalizePreviouslyRecommendedPlaceIds(
+            List<Long> source
+    ) {
+        if (source == null || source.isEmpty()) {
+            return Set.of();
+        }
+        if (source.size() > MAX_PREVIOUSLY_RECOMMENDED_PLACES) {
+            throw new IllegalArgumentException(
+                    "previouslyRecommendedPlaceIds는 최대 "
+                            + MAX_PREVIOUSLY_RECOMMENDED_PLACES
+                            + "개까지 보낼 수 있습니다."
+            );
+        }
+
+        Set<Long> normalized = new LinkedHashSet<>();
+        for (Long placeId : source) {
+            if (placeId == null || placeId < 1) {
+                throw new IllegalArgumentException(
+                        "previouslyRecommendedPlaceIds에는 1 이상의 장소 ID만 넣을 수 있습니다."
+                );
+            }
+            normalized.add(placeId);
+        }
+        return Set.copyOf(normalized);
+    }
+
+    /** 일반 방문 후보와 섞지 않을 HOTEL 후보를 별도로 검증하고 복사한다. */
+    private List<PlaceCandidateDto> validateHotelCandidates(
+            List<PlaceCandidateDto> source,
+            LocalDate referenceDate
+    ) {
+        if (source == null || source.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        List<PlaceCandidateDto> hotels = new ArrayList<>();
+        Set<Long> hotelIds = new HashSet<>();
+        for (PlaceCandidateDto candidate : source) {
+            PlaceCandidateDto copied = copyCandidateWithDate(
+                    candidate,
+                    referenceDate,
+                    false
+            );
+            if (!"HOTEL".equals(copied.getCategory())) {
+                throw new IllegalArgumentException(
+                        "hotelCandidates에는 HOTEL 카테고리만 넣을 수 있습니다."
+                );
+            }
+            validateCandidateForRecommendation(copied);
+            if (!hotelIds.add(copied.getPlaceId())) {
+                throw new IllegalArgumentException(
+                        "hotelCandidates에 장소 ID가 중복되었습니다. placeId="
+                                + copied.getPlaceId()
+                );
+            }
+            hotels.add(copied);
+        }
+        return hotels;
+    }
+
+    private void validateCandidateForRecommendation(
+            PlaceCandidateDto candidate
+    ) {
+        if (candidate.getPlaceName() == null
+                || candidate.getPlaceName().isBlank()) {
+            throw new IllegalArgumentException("장소명은 필수입니다.");
+        }
+        if (candidate.getRecommendationScore() == null
+                || !Double.isFinite(candidate.getRecommendationScore())) {
+            throw new IllegalArgumentException("추천 점수는 유한한 숫자여야 합니다.");
+        }
+        if (candidate.getLatitude() == null
+                || candidate.getLongitude() == null) {
+            throw new IllegalArgumentException("장소의 위도와 경도는 필수입니다.");
+        }
+        distanceService.calculateDistanceKm(
+                candidate.getLatitude(),
+                candidate.getLongitude(),
+                candidate.getLatitude(),
+                candidate.getLongitude()
+        );
+    }
+
+    /**
+     * 재추천일 때 이전 장소는 20점 감점하고 새 장소는 5점 가산한 뒤,
+     * 화면 점수만 다시 70~95 범위로 보정한다.
+     */
+    private void applyRerecommendationScores(
+            List<ValidatedDailyPlan> dailyPlans,
+            List<PlaceCandidateDto> hotelCandidates,
+            Set<Long> previouslyRecommendedPlaceIds
+    ) {
+        if (previouslyRecommendedPlaceIds.isEmpty()) {
+            return;
+        }
+
+        List<PlaceCandidateDto> candidates = new ArrayList<>();
+        for (ValidatedDailyPlan dailyPlan : dailyPlans) {
+            for (PlaceCandidateDto candidate : dailyPlan.placeCandidates()) {
+                collectCandidateAndAlternatives(candidate, candidates);
+            }
+        }
+        for (PlaceCandidateDto hotelCandidate : hotelCandidates) {
+            collectCandidateAndAlternatives(hotelCandidate, candidates);
+        }
+        if (candidates.isEmpty()) {
+            return;
+        }
+
+        double minimum = candidates.stream()
+                .mapToDouble(candidate -> adjustedRerecommendationScore(
+                        candidate,
+                        previouslyRecommendedPlaceIds
+                ))
+                .min()
+                .orElse(0.0);
+        double maximum = candidates.stream()
+                .mapToDouble(candidate -> adjustedRerecommendationScore(
+                        candidate,
+                        previouslyRecommendedPlaceIds
+                ))
+                .max()
+                .orElse(0.0);
+
+        for (PlaceCandidateDto candidate : candidates) {
+            double adjusted = adjustedRerecommendationScore(
+                    candidate,
+                    previouslyRecommendedPlaceIds
+            );
+            candidate.setRecommendationScore(normalizeDisplayScore(
+                    adjusted,
+                    minimum,
+                    maximum
+            ));
+        }
+    }
+
+    private void collectCandidateAndAlternatives(
+            PlaceCandidateDto candidate,
+            List<PlaceCandidateDto> output
+    ) {
+        output.add(candidate);
+        if (candidate.getAlternativeCandidates() != null) {
+            output.addAll(candidate.getAlternativeCandidates());
+        }
+    }
+
+    private double adjustedRerecommendationScore(
+            PlaceCandidateDto candidate,
+            Set<Long> previouslyRecommendedPlaceIds
+    ) {
+        double score = valueOrZero(candidate.getRecommendationScore());
+        return previouslyRecommendedPlaceIds.contains(candidate.getPlaceId())
+                ? score - PREVIOUSLY_RECOMMENDED_PENALTY
+                : score + NEW_PLACE_BONUS;
+    }
+
+    private double normalizeDisplayScore(
+            double value,
+            double minimum,
+            double maximum
+    ) {
+        if (Math.abs(maximum - minimum) < EPSILON) {
+            return EQUAL_SCORE_DISPLAY_VALUE;
+        }
+        double normalized = DISPLAY_SCORE_MIN
+                + (value - minimum)
+                / (maximum - minimum)
+                * (DISPLAY_SCORE_MAX - DISPLAY_SCORE_MIN);
+        return round(
+                Math.max(
+                        DISPLAY_SCORE_MIN,
+                        Math.min(DISPLAY_SCORE_MAX, normalized)
+                ),
+                1
+        );
     }
 
     /** 날짜 한 건의 목표 수량과 후보 풀을 검증한다. */
@@ -266,6 +529,7 @@ public class CourseRecommendationService {
                     visitDate,
                     true
             );
+            validateCandidateForRecommendation(copied);
             if (!candidateIds.add(copied.getPlaceId())) {
                 throw new IllegalArgumentException(
                         "같은 날짜의 placeCandidates에 장소 ID가 중복되었습니다. placeId="
@@ -298,10 +562,11 @@ public class CourseRecommendationService {
             }
         }
 
-        Map<String, Integer> finalCategoryTargets = deriveFinalCategoryTargets(
-                categoryTargets,
-                targetPlaceCount
-        );
+        Map<String, Integer> finalCategoryTargets =
+                deriveFinalCategoryTargets(
+                        categoryTargets,
+                        targetPlaceCount
+                );
 
         return new ValidatedDailyPlan(
                 visitDate,
@@ -314,9 +579,8 @@ public class CourseRecommendationService {
     /**
      * 후보 풀 카테고리 수를 비율로 축소해 실제 코스에 뽑을 정확한 개수로 변환한다.
      *
-     * <p>예를 들어 TOUR 7, RESTAURANT 4, CAFE 4 후보에서 6곳을 뽑으면
-     * 최대 나머지 방식으로 TOUR 3, RESTAURANT 2, CAFE 1을 선택한다.
-     * 나머지가 같을 때는 {@link #SUPPORTED_CATEGORIES} 순서를 사용해 결과를 고정한다.</p>
+     * <p>P형 48개가 TOUR 24·RESTAURANT 16·CAFE 8로 전달되면 최종 6곳을
+     * TOUR 3·RESTAURANT 2·CAFE 1로 선발한다.</p>
      */
     private Map<String, Integer> deriveFinalCategoryTargets(
             Map<String, Integer> candidateCategoryTargets,
@@ -330,7 +594,8 @@ public class CourseRecommendationService {
         int assigned = 0;
 
         for (String category : SUPPORTED_CATEGORIES) {
-            int candidateCount = candidateCategoryTargets.getOrDefault(category, 0);
+            int candidateCount =
+                    candidateCategoryTargets.getOrDefault(category, 0);
             double proportionalCount = (double) candidateCount
                     * targetPlaceCount
                     / candidateTargetSum;
@@ -345,8 +610,12 @@ public class CourseRecommendationService {
                     .filter(category -> finalTargets.get(category)
                             < candidateCategoryTargets.get(category))
                     .max(Comparator
-                            .comparingDouble((String category) -> remainders.get(category))
-                            .thenComparingInt(category -> -SUPPORTED_CATEGORIES.indexOf(category)))
+                            .comparingDouble(
+                                    (String category) -> remainders.get(category)
+                            )
+                            .thenComparingInt(
+                                    category -> -SUPPORTED_CATEGORIES.indexOf(category)
+                            ))
                     .orElseThrow(() -> new IllegalArgumentException(
                             "카테고리 후보 비율로 최종 장소 수를 배분할 수 없습니다."
                     ));
@@ -354,7 +623,6 @@ public class CourseRecommendationService {
                     selectedCategory,
                     finalTargets.get(selectedCategory) + 1
             );
-            // 같은 카테고리가 남은 자리까지 반복해서 독점하지 않도록 한 번 배분 후 제외한다.
             remainders.put(selectedCategory, -1.0);
             assigned++;
         }
@@ -385,307 +653,1009 @@ public class CourseRecommendationService {
         return normalized;
     }
 
-    /** 카테고리 목표를 정확히 만족하는 하루 장소 조합을 모두 만든다. */
-    private List<DailySelection> createDailySelections(
-            ValidatedDailyPlan dailyPlan,
+    /** 날짜마다 한 번만 외부 호출 없는 후보 풀 추정 행렬을 생성한다. */
+    private Map<LocalDate, DailyRouteContext> createDailyRouteContexts(
+            List<ValidatedDailyPlan> dailyPlans,
             TransportMode transportMode
     ) {
-        List<List<PlaceCandidateDto>> combinations = new ArrayList<>();
-        buildCategorySelections(
-                dailyPlan,
-                0,
-                new ArrayList<>(),
-                combinations
-        );
-        if (combinations.isEmpty()) {
-            throw new IllegalArgumentException(
-                    "카테고리 목표를 만족하는 장소 조합이 없습니다. visitDate="
-                            + dailyPlan.visitDate()
+        Map<LocalDate, DailyRouteContext> contexts = new TreeMap<>();
+        for (ValidatedDailyPlan dailyPlan : dailyPlans) {
+            RouteMatrix routeMatrix =
+                    distanceService.calculateCandidatePoolMatrix(
+                            dailyPlan.placeCandidates(),
+                            transportMode
+                    );
+            contexts.put(
+                    dailyPlan.visitDate(),
+                    new DailyRouteContext(
+                            dailyPlan,
+                            routeMatrix,
+                            createCandidateIndexes(
+                                    dailyPlan.placeCandidates()
+                            ),
+                            ScoreRange.from(dailyPlan.placeCandidates())
+                    )
             );
         }
-
-        // 후보 풀은 한 번에 평가하고, 대중교통은 ODsay 호출량을 줄이기 위해
-        // 이 1차 선별 단계에서만 전용 추정 행렬을 사용한다.
-        RouteMatrix candidatePoolMatrix = distanceService.calculateCandidatePoolMatrix(
-                dailyPlan.placeCandidates(),
-                transportMode
-        );
-        Map<Long, Integer> candidateIndexes = createCandidateIndexes(
-                dailyPlan.placeCandidates()
-        );
-
-        Map<String, DailySelection> uniqueSelections = new LinkedHashMap<>();
-        for (List<PlaceCandidateDto> combination : combinations) {
-            RouteEstimate routeEstimate = estimateRoute(
-                    combination,
-                    candidateIndexes,
-                    candidatePoolMatrix
-            );
-            double recommendationScore = combination.stream()
-                    .mapToDouble(candidate -> valueOrZero(
-                            candidate.getRecommendationScore()
-                    ))
-                    .sum();
-            String signature = createCompositionSignature(
-                    combination,
-                    transportMode
-            );
-            DailySelection selection = new DailySelection(
-                    List.copyOf(combination),
-                    recommendationScore,
-                    routeEstimate.travelTimeMinutes(),
-                    routeEstimate.distanceKm(),
-                    signature
-            );
-            uniqueSelections.putIfAbsent(signature, selection);
-        }
-        return new ArrayList<>(uniqueSelections.values());
+        return contexts;
     }
 
-    /** 기본 카테고리 순서대로 필요한 개수의 조합을 생성한다. */
-    private void buildCategorySelections(
-            ValidatedDailyPlan dailyPlan,
-            int categoryIndex,
-            List<PlaceCandidateDto> selected,
-            List<List<PlaceCandidateDto>> output
+    /** travelCode 마지막 글자를 우선하고 없으면 하루 목표 장소 수로 P/R 중복 기준을 정한다. */
+    private int resolveDailyOverlapLimit(
+            String travelCode,
+            List<ValidatedDailyPlan> dailyPlans
     ) {
-        if (output.size() >= MAX_DAILY_SELECTIONS) {
-            return;
-        }
-        if (categoryIndex == SUPPORTED_CATEGORIES.size()) {
-            if (selected.size() == dailyPlan.targetPlaceCount()) {
-                output.add(new ArrayList<>(selected));
+        if (travelCode != null && !travelCode.isBlank()) {
+            char scheduleType = Character.toUpperCase(
+                    travelCode.trim().charAt(travelCode.trim().length() - 1)
+            );
+            if (scheduleType == 'P') {
+                return PACKED_DAILY_OVERLAP_LIMIT;
             }
-            return;
-        }
-
-        String category = SUPPORTED_CATEGORIES.get(categoryIndex);
-        int required = dailyPlan.categoryTargets().getOrDefault(category, 0);
-        if (required == 0) {
-            buildCategorySelections(
-                    dailyPlan,
-                    categoryIndex + 1,
-                    selected,
-                    output
-            );
-            return;
-        }
-
-        List<PlaceCandidateDto> categoryCandidates = dailyPlan.placeCandidates()
-                .stream()
-                .filter(candidate -> category.equals(candidate.getCategory()))
-                .sorted(Comparator.comparing(PlaceCandidateDto::getPlaceId))
-                .toList();
-        List<List<PlaceCandidateDto>> categoryCombinations = new ArrayList<>();
-        chooseCandidates(
-                categoryCandidates,
-                required,
-                0,
-                new ArrayList<>(),
-                categoryCombinations
-        );
-
-        for (List<PlaceCandidateDto> categoryCombination : categoryCombinations) {
-            selected.addAll(categoryCombination);
-            buildCategorySelections(
-                    dailyPlan,
-                    categoryIndex + 1,
-                    selected,
-                    output
-            );
-            selected.subList(
-                    selected.size() - categoryCombination.size(),
-                    selected.size()
-            ).clear();
-            if (output.size() >= MAX_DAILY_SELECTIONS) {
-                return;
+            if (scheduleType == 'R') {
+                return RELAXED_DAILY_OVERLAP_LIMIT;
             }
         }
+        boolean packed = dailyPlans.stream()
+                .anyMatch(plan -> plan.targetPlaceCount() >= 6);
+        return packed
+                ? PACKED_DAILY_OVERLAP_LIMIT
+                : RELAXED_DAILY_OVERLAP_LIMIT;
     }
 
-    /** 후보 목록에서 required개를 뽑는 조합을 만든다. */
-    private void chooseCandidates(
-            List<PlaceCandidateDto> candidates,
-            int required,
-            int startIndex,
-            List<PlaceCandidateDto> current,
-            List<List<PlaceCandidateDto>> output
-    ) {
-        if (current.size() == required) {
-            output.add(new ArrayList<>(current));
-            return;
-        }
-
-        int remainingNeeded = required - current.size();
-        for (int index = startIndex;
-                index <= candidates.size() - remainingNeeded;
-                index++) {
-            current.add(candidates.get(index));
-            chooseCandidates(
-                    candidates,
-                    required,
-                    index + 1,
-                    current,
-                    output
-            );
-            current.remove(current.size() - 1);
-        }
-    }
-
-    /** 하루별 조합을 합쳐 전체 여행 코스 후보를 만든다. */
-    private List<GlobalSelection> createGlobalSelections(
-            List<List<DailySelection>> selectionsByDay
-    ) {
-        List<GlobalSelection> output = new ArrayList<>();
-        buildGlobalSelections(
-                selectionsByDay,
-                0,
-                new ArrayList<>(),
-                output
-        );
-        return output;
-    }
-
-    private void buildGlobalSelections(
-            List<List<DailySelection>> selectionsByDay,
-            int dayIndex,
-            List<DailySelection> selectedDays,
-            List<GlobalSelection> output
-    ) {
-        if (output.size() >= MAX_GLOBAL_SELECTIONS) {
-            return;
-        }
-        if (dayIndex == selectionsByDay.size()) {
-            List<PlaceCandidateDto> placeCandidates = new ArrayList<>();
-            double recommendationScore = 0.0;
-            double travelTimeMinutes = 0.0;
-            double distanceKm = 0.0;
-            StringBuilder signature = new StringBuilder();
-
-            for (DailySelection dailySelection : selectedDays) {
-                placeCandidates.addAll(dailySelection.placeCandidates());
-                recommendationScore += dailySelection.recommendationScore();
-                travelTimeMinutes += dailySelection.travelTimeMinutes();
-                distanceKm += dailySelection.distanceKm();
-                if (!signature.isEmpty()) {
-                    signature.append('|');
-                }
-                signature.append(dailySelection.signature());
-            }
-
-            output.add(new GlobalSelection(
-                    List.copyOf(placeCandidates),
-                    recommendationScore,
-                    travelTimeMinutes,
-                    distanceKm,
-                    signature.toString()
-            ));
-            return;
-        }
-
-        for (DailySelection selection : selectionsByDay.get(dayIndex)) {
-            selectedDays.add(selection);
-            buildGlobalSelections(
-                    selectionsByDay,
-                    dayIndex + 1,
-                    selectedDays,
-                    output
-            );
-            selectedDays.remove(selectedDays.size() - 1);
-            if (output.size() >= MAX_GLOBAL_SELECTIONS) {
-                return;
-            }
-        }
-    }
-
-    /** 전략별 순위를 계산하고 아직 사용하지 않은 조합을 우선 선택한다. */
-    private GlobalSelection selectGlobalOption(
-            List<GlobalSelection> selections,
+    /** 한 전략의 모든 날짜를 선발하고 다음 전략에서 사용할 장소 ID를 반환한다. */
+    private SequentialSelection createSequentialSelection(
+            Map<LocalDate, DailyRouteContext> routeContexts,
             OptionStrategy strategy,
-            Set<String> usedSignatures
+            Set<Long> previouslyRecommendedPlaceIds,
+            List<Map<LocalDate, Set<Long>>> generatedOptionPlaces,
+            int dailyOverlapLimit
     ) {
-        List<GlobalSelection> ranked = rankGlobalSelections(
-                selections,
-                strategy
-        );
-        for (GlobalSelection selection : ranked) {
-            if (!usedSignatures.contains(selection.signature())) {
-                return selection;
+        List<PlaceCandidateDto> selectedCandidates = new ArrayList<>();
+        Map<LocalDate, Long> preferredFirstPlaceIds = new TreeMap<>();
+
+        for (Map.Entry<LocalDate, DailyRouteContext> entry
+                : routeContexts.entrySet()) {
+            DailyPick dailyPick = selectDailyPlaces(
+                    entry.getValue(),
+                    strategy,
+                    previouslyRecommendedPlaceIds,
+                    generatedOptionPlaces,
+                    dailyOverlapLimit
+            );
+            Set<Long> selectedIds = dailyPick.placeCandidates().stream()
+                    .map(PlaceCandidateDto::getPlaceId)
+                    .collect(java.util.stream.Collectors.toSet());
+            Set<Long> blockedAlternativeIds =
+                    createBlockedAlternativeIds(
+                            entry.getKey(),
+                            previouslyRecommendedPlaceIds,
+                            generatedOptionPlaces
+                    );
+
+            for (PlaceCandidateDto candidate
+                    : dailyPick.placeCandidates()) {
+                selectedCandidates.add(copyCandidateForSelection(
+                        candidate,
+                        selectedIds,
+                        blockedAlternativeIds
+                ));
             }
+            preferredFirstPlaceIds.put(
+                    entry.getKey(),
+                    dailyPick.firstPlaceId()
+            );
         }
-        return ranked.get(0);
+
+        return new SequentialSelection(
+                List.copyOf(selectedCandidates),
+                Map.copyOf(preferredFirstPlaceIds)
+        );
     }
 
-    private List<GlobalSelection> rankGlobalSelections(
-            List<GlobalSelection> selections,
-            OptionStrategy strategy
+    /**
+     * 모든 조합 대신 가능한 출발 후보만 순회하고, 각 출발 후보에서 필요한 장소를 탐욕적으로
+     * 채운다. 최대 후보가 48개여도 하루 약 48개의 압축 결과만 비교한다.
+     */
+    private DailyPick selectDailyPlaces(
+            DailyRouteContext context,
+            OptionStrategy strategy,
+            Set<Long> previouslyRecommendedPlaceIds,
+            List<Map<LocalDate, Set<Long>>> generatedOptionPlaces,
+            int dailyOverlapLimit
     ) {
-        List<GlobalSelection> ranked = new ArrayList<>(selections);
-        Comparator<GlobalSelection> comparator;
+        List<PlaceCandidateDto> possibleFirstPlaces =
+                context.plan().placeCandidates().stream()
+                        .filter(candidate -> context.plan()
+                                .categoryTargets()
+                                .getOrDefault(candidate.getCategory(), 0) > 0)
+                        .toList();
+        if (possibleFirstPlaces.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "선발 가능한 장소 후보가 없습니다. visitDate="
+                            + context.plan().visitDate()
+            );
+        }
+
+        DailyPick best = null;
+        for (PlaceCandidateDto firstCandidate : possibleFirstPlaces) {
+            DailyPick candidatePick = buildGreedyDailyPick(
+                    context,
+                    strategy,
+                    firstCandidate,
+                    previouslyRecommendedPlaceIds,
+                    generatedOptionPlaces,
+                    dailyOverlapLimit
+            );
+            if (best == null
+                    || compareDailyPicks(
+                            candidatePick,
+                            best,
+                            strategy,
+                            context.scoreRange()
+                    ) < 0) {
+                best = candidatePick;
+            }
+        }
+
+        if (best == null
+                || best.placeCandidates().size()
+                != context.plan().targetPlaceCount()) {
+            throw new IllegalArgumentException(
+                    "카테고리 목표를 만족하는 순차 코스를 만들 수 없습니다. visitDate="
+                            + context.plan().visitDate()
+            );
+        }
+        return best;
+    }
+
+    /** 한 출발 후보에서 남은 카테고리 수량을 가장 좋은 다음 장소로 하나씩 채운다. */
+    private DailyPick buildGreedyDailyPick(
+            DailyRouteContext context,
+            OptionStrategy strategy,
+            PlaceCandidateDto firstCandidate,
+            Set<Long> previouslyRecommendedPlaceIds,
+            List<Map<LocalDate, Set<Long>>> generatedOptionPlaces,
+            int dailyOverlapLimit
+    ) {
+        Map<String, Integer> remainingTargets =
+                new LinkedHashMap<>(context.plan().categoryTargets());
+        List<PlaceCandidateDto> selected = new ArrayList<>();
+        Set<Long> selectedIds = new LinkedHashSet<>();
+
+        addSelectedCandidate(
+                firstCandidate,
+                selected,
+                selectedIds,
+                remainingTargets
+        );
+
+        while (selected.size() < context.plan().targetPlaceCount()) {
+            List<PlaceCandidateDto> available =
+                    context.plan().placeCandidates().stream()
+                            .filter(candidate -> !selectedIds.contains(
+                                    candidate.getPlaceId()
+                            ))
+                            .filter(candidate -> remainingTargets.getOrDefault(
+                                    candidate.getCategory(),
+                                    0
+                            ) > 0)
+                            .toList();
+            if (available.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "카테고리별 장소 후보가 부족합니다. visitDate="
+                                + context.plan().visitDate()
+                );
+            }
+
+            PlaceCandidateDto next = available.stream()
+                    .min((left, right) -> compareNextCandidates(
+                            left,
+                            right,
+                            selected,
+                            context,
+                            strategy,
+                            previouslyRecommendedPlaceIds,
+                            generatedOptionPlaces,
+                            dailyOverlapLimit
+                    ))
+                    .orElseThrow();
+            addSelectedCandidate(
+                    next,
+                    selected,
+                    selectedIds,
+                    remainingTargets
+            );
+        }
+
+        Long firstPlaceId = strategy == OptionStrategy.PREFERENCE
+                ? selected.stream()
+                        .sorted(Comparator
+                                .comparingDouble(
+                                        (PlaceCandidateDto candidate)
+                                                -> valueOrZero(
+                                                candidate.getRecommendationScore()
+                                        )
+                                )
+                                .reversed()
+                                .thenComparing(PlaceCandidateDto::getPlaceId))
+                        .map(PlaceCandidateDto::getPlaceId)
+                        .findFirst()
+                        .orElseThrow()
+                : firstCandidate.getPlaceId();
+        RouteEstimate routeEstimate = estimateRoute(
+                selected,
+                firstPlaceId,
+                context
+        );
+        PickReuseMetrics reuseMetrics = calculatePickReuseMetrics(
+                selected,
+                context.plan().visitDate(),
+                previouslyRecommendedPlaceIds,
+                generatedOptionPlaces,
+                dailyOverlapLimit
+        );
+        double recommendationScore = selected.stream()
+                .mapToDouble(candidate -> valueOrZero(
+                        candidate.getRecommendationScore()
+                ))
+                .sum();
+
+        return new DailyPick(
+                List.copyOf(selected),
+                firstPlaceId,
+                recommendationScore,
+                routeEstimate.travelTimeMinutes(),
+                routeEstimate.distanceKm(),
+                reuseMetrics.previousRecommendationCount(),
+                reuseMetrics.overlapExcess(),
+                reuseMetrics.totalOverlap(),
+                selected.stream()
+                        .map(PlaceCandidateDto::getPlaceId)
+                        .sorted()
+                        .map(String::valueOf)
+                        .reduce((left, right) -> left + "," + right)
+                        .orElse("")
+        );
+    }
+
+    private void addSelectedCandidate(
+            PlaceCandidateDto candidate,
+            List<PlaceCandidateDto> selected,
+            Set<Long> selectedIds,
+            Map<String, Integer> remainingTargets
+    ) {
+        String category = candidate.getCategory();
+        int remaining = remainingTargets.getOrDefault(category, 0);
+        if (remaining < 1 || !selectedIds.add(candidate.getPlaceId())) {
+            throw new IllegalArgumentException(
+                    "순차 코스 선발 중 중복되거나 불필요한 장소가 선택되었습니다. placeId="
+                            + candidate.getPlaceId()
+            );
+        }
+        selected.add(candidate);
+        remainingTargets.put(category, remaining - 1);
+    }
+
+    /**
+     * 재추천 장소 완전 제외와 옵션 간 중복 상한을 전략 점수보다 먼저 비교한다.
+     * 둘 중 하나를 어겨야만 카테고리 수량을 채울 수 있을 때만 다음 단계 후보를 사용한다.
+     */
+    private int compareNextCandidates(
+            PlaceCandidateDto left,
+            PlaceCandidateDto right,
+            List<PlaceCandidateDto> selected,
+            DailyRouteContext context,
+            OptionStrategy strategy,
+            Set<Long> previouslyRecommendedPlaceIds,
+            List<Map<LocalDate, Set<Long>>> generatedOptionPlaces,
+            int dailyOverlapLimit
+    ) {
+        int leftRestriction = candidateRestrictionLevel(
+                left,
+                selected,
+                context.plan().visitDate(),
+                previouslyRecommendedPlaceIds,
+                generatedOptionPlaces,
+                dailyOverlapLimit
+        );
+        int rightRestriction = candidateRestrictionLevel(
+                right,
+                selected,
+                context.plan().visitDate(),
+                previouslyRecommendedPlaceIds,
+                generatedOptionPlaces,
+                dailyOverlapLimit
+        );
+        int comparison = Integer.compare(leftRestriction, rightRestriction);
+        if (comparison != 0) {
+            return comparison;
+        }
+
+        comparison = Integer.compare(
+                priorOptionUseCount(
+                        left.getPlaceId(),
+                        context.plan().visitDate(),
+                        generatedOptionPlaces
+                ),
+                priorOptionUseCount(
+                        right.getPlaceId(),
+                        context.plan().visitDate(),
+                        generatedOptionPlaces
+                )
+        );
+        if (comparison != 0) {
+            return comparison;
+        }
 
         if (strategy == OptionStrategy.PREFERENCE) {
-            comparator = Comparator
-                    .comparingDouble(GlobalSelection::recommendationScore)
-                    .reversed()
-                    .thenComparingDouble(GlobalSelection::travelTimeMinutes)
-                    .thenComparingDouble(GlobalSelection::distanceKm)
-                    .thenComparing(GlobalSelection::signature);
-        } else if (strategy == OptionStrategy.MIN_DISTANCE) {
-            comparator = Comparator
-                    .comparingDouble(GlobalSelection::travelTimeMinutes)
-                    .thenComparingDouble(GlobalSelection::distanceKm)
-                    .thenComparing(
-                            Comparator.comparingDouble(
-                                    GlobalSelection::recommendationScore
-                            ).reversed()
-                    )
-                    .thenComparing(GlobalSelection::signature);
+            comparison = Double.compare(
+                    valueOrZero(right.getRecommendationScore()),
+                    valueOrZero(left.getRecommendationScore())
+            );
         } else {
-            MetricRange range = MetricRange.from(selections);
-            comparator = Comparator
-                    .comparingDouble(
-                            (GlobalSelection selection) -> balancedUtility(
-                                    selection,
-                                    range
+            PlaceCandidateDto current = selected.get(selected.size() - 1);
+            int currentIndex = context.candidateIndexes()
+                    .get(current.getPlaceId());
+            int leftIndex = context.candidateIndexes()
+                    .get(left.getPlaceId());
+            int rightIndex = context.candidateIndexes()
+                    .get(right.getPlaceId());
+
+            if (strategy == OptionStrategy.MIN_DISTANCE) {
+                comparison = Double.compare(
+                        context.routeMatrix().getTravelTimeMinutes(
+                                currentIndex,
+                                leftIndex
+                        ),
+                        context.routeMatrix().getTravelTimeMinutes(
+                                currentIndex,
+                                rightIndex
+                        )
+                );
+                if (comparison == 0) {
+                    comparison = Double.compare(
+                            context.routeMatrix().getDistanceKm(
+                                    currentIndex,
+                                    leftIndex
+                            ),
+                            context.routeMatrix().getDistanceKm(
+                                    currentIndex,
+                                    rightIndex
                             )
-                    )
-                    .reversed()
-                    .thenComparing(
-                            Comparator.comparingDouble(
-                                    GlobalSelection::recommendationScore
-                            ).reversed()
-                    )
-                    .thenComparingDouble(GlobalSelection::travelTimeMinutes)
-                    .thenComparing(GlobalSelection::signature);
+                    );
+                }
+            } else {
+                comparison = Double.compare(
+                        candidateBalancedUtility(
+                                right,
+                                currentIndex,
+                                rightIndex,
+                                context
+                        ),
+                        candidateBalancedUtility(
+                                left,
+                                currentIndex,
+                                leftIndex,
+                                context
+                        )
+                );
+            }
         }
 
-        ranked.sort(comparator);
-        return ranked;
+        if (comparison != 0) {
+            return comparison;
+        }
+        comparison = Double.compare(
+                valueOrZero(right.getRecommendationScore()),
+                valueOrZero(left.getRecommendationScore())
+        );
+        return comparison != 0
+                ? comparison
+                : left.getPlaceId().compareTo(right.getPlaceId());
     }
 
-    /** 추천 점수 50%, 이동시간 30%, 거리 20% 비율의 정규화 균형 점수이다. */
-    private double balancedUtility(
-            GlobalSelection selection,
-            MetricRange range
+    /**
+     * 제한 단계 0은 완전 신규·중복 상한 이내, 1은 현재 옵션 간 상한만 완화,
+     * 2는 재추천 장소만 재사용, 3은 두 제한을 모두 완화한 후보이다.
+     */
+    private int candidateRestrictionLevel(
+            PlaceCandidateDto candidate,
+            List<PlaceCandidateDto> selected,
+            LocalDate visitDate,
+            Set<Long> previouslyRecommendedPlaceIds,
+            List<Map<LocalDate, Set<Long>>> generatedOptionPlaces,
+            int dailyOverlapLimit
+    ) {
+        boolean previouslyRecommended =
+                previouslyRecommendedPlaceIds.contains(
+                        candidate.getPlaceId()
+                );
+        boolean exceedsDailyOverlap = wouldExceedDailyOverlap(
+                candidate.getPlaceId(),
+                selected,
+                visitDate,
+                generatedOptionPlaces,
+                dailyOverlapLimit
+        );
+        if (!previouslyRecommended && !exceedsDailyOverlap) {
+            return 0;
+        }
+        if (!previouslyRecommended) {
+            return 1;
+        }
+        return exceedsDailyOverlap ? 3 : 2;
+    }
+
+    private boolean wouldExceedDailyOverlap(
+            Long candidatePlaceId,
+            List<PlaceCandidateDto> selected,
+            LocalDate visitDate,
+            List<Map<LocalDate, Set<Long>>> generatedOptionPlaces,
+            int dailyOverlapLimit
+    ) {
+        Set<Long> selectedIds = selected.stream()
+                .map(PlaceCandidateDto::getPlaceId)
+                .collect(java.util.stream.Collectors.toSet());
+        for (Map<LocalDate, Set<Long>> optionPlaces
+                : generatedOptionPlaces) {
+            Set<Long> usedOnDate = optionPlaces.getOrDefault(
+                    visitDate,
+                    Set.of()
+            );
+            long overlap = selectedIds.stream()
+                    .filter(usedOnDate::contains)
+                    .count();
+            if (usedOnDate.contains(candidatePlaceId)) {
+                overlap++;
+            }
+            if (overlap > dailyOverlapLimit) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private int priorOptionUseCount(
+            Long placeId,
+            LocalDate visitDate,
+            List<Map<LocalDate, Set<Long>>> generatedOptionPlaces
+    ) {
+        return (int) generatedOptionPlaces.stream()
+                .filter(option -> option.getOrDefault(
+                        visitDate,
+                        Set.of()
+                ).contains(placeId))
+                .count();
+    }
+
+    private double candidateBalancedUtility(
+            PlaceCandidateDto candidate,
+            int currentIndex,
+            int candidateIndex,
+            DailyRouteContext context
     ) {
         double preference = normalizeHigher(
-                selection.recommendationScore(),
-                range.minRecommendationScore(),
-                range.maxRecommendationScore()
+                valueOrZero(candidate.getRecommendationScore()),
+                context.scoreRange().minimum(),
+                context.scoreRange().maximum()
         );
-        double travelEfficiency = normalizeLower(
-                selection.travelTimeMinutes(),
-                range.minTravelTimeMinutes(),
-                range.maxTravelTimeMinutes()
+        double travelEfficiency = inverseCost(
+                context.routeMatrix().getTravelTimeMinutes(
+                        currentIndex,
+                        candidateIndex
+                )
         );
-        double distanceEfficiency = normalizeLower(
-                selection.distanceKm(),
-                range.minDistanceKm(),
-                range.maxDistanceKm()
+        double distanceEfficiency = inverseCost(
+                context.routeMatrix().getDistanceKm(
+                        currentIndex,
+                        candidateIndex
+                )
         );
         return preference * 0.50
                 + travelEfficiency * 0.30
                 + distanceEfficiency * 0.20;
+    }
+
+    /** 제한 위반 수를 먼저 최소화한 뒤 해당 전략의 실제 품질을 비교한다. */
+    private int compareDailyPicks(
+            DailyPick left,
+            DailyPick right,
+            OptionStrategy strategy,
+            ScoreRange scoreRange
+    ) {
+        int comparison = Integer.compare(
+                left.previousRecommendationCount(),
+                right.previousRecommendationCount()
+        );
+        if (comparison != 0) {
+            return comparison;
+        }
+        comparison = Integer.compare(
+                left.overlapExcess(),
+                right.overlapExcess()
+        );
+        if (comparison != 0) {
+            return comparison;
+        }
+        comparison = Integer.compare(
+                left.totalOverlap(),
+                right.totalOverlap()
+        );
+        if (comparison != 0) {
+            return comparison;
+        }
+
+        if (strategy == OptionStrategy.PREFERENCE) {
+            comparison = Double.compare(
+                    right.recommendationScore(),
+                    left.recommendationScore()
+            );
+            if (comparison == 0) {
+                comparison = Double.compare(
+                        left.travelTimeMinutes(),
+                        right.travelTimeMinutes()
+                );
+            }
+        } else if (strategy == OptionStrategy.MIN_DISTANCE) {
+            comparison = Double.compare(
+                    left.travelTimeMinutes(),
+                    right.travelTimeMinutes()
+            );
+            if (comparison == 0) {
+                comparison = Double.compare(
+                        left.distanceKm(),
+                        right.distanceKm()
+                );
+            }
+        } else {
+            comparison = Double.compare(
+                    dailyBalancedUtility(right, scoreRange),
+                    dailyBalancedUtility(left, scoreRange)
+            );
+        }
+
+        if (comparison != 0) {
+            return comparison;
+        }
+        comparison = Double.compare(
+                right.recommendationScore(),
+                left.recommendationScore()
+        );
+        return comparison != 0
+                ? comparison
+                : left.signature().compareTo(right.signature());
+    }
+
+    private double dailyBalancedUtility(
+            DailyPick pick,
+            ScoreRange scoreRange
+    ) {
+        double averageScore = pick.placeCandidates().isEmpty()
+                ? 0.0
+                : pick.recommendationScore()
+                / pick.placeCandidates().size();
+        double preference = normalizeHigher(
+                averageScore,
+                scoreRange.minimum(),
+                scoreRange.maximum()
+        );
+        return preference * 0.50
+                + inverseCost(pick.travelTimeMinutes()) * 0.30
+                + inverseCost(pick.distanceKm()) * 0.20;
+    }
+
+    private PickReuseMetrics calculatePickReuseMetrics(
+            List<PlaceCandidateDto> selected,
+            LocalDate visitDate,
+            Set<Long> previouslyRecommendedPlaceIds,
+            List<Map<LocalDate, Set<Long>>> generatedOptionPlaces,
+            int dailyOverlapLimit
+    ) {
+        Set<Long> selectedIds = selected.stream()
+                .map(PlaceCandidateDto::getPlaceId)
+                .collect(java.util.stream.Collectors.toSet());
+        int previousCount = (int) selectedIds.stream()
+                .filter(previouslyRecommendedPlaceIds::contains)
+                .count();
+        int overlapExcess = 0;
+        int totalOverlap = 0;
+
+        for (Map<LocalDate, Set<Long>> optionPlaces
+                : generatedOptionPlaces) {
+            Set<Long> usedOnDate = optionPlaces.getOrDefault(
+                    visitDate,
+                    Set.of()
+            );
+            int overlap = (int) selectedIds.stream()
+                    .filter(usedOnDate::contains)
+                    .count();
+            totalOverlap += overlap;
+            overlapExcess += Math.max(0, overlap - dailyOverlapLimit);
+        }
+        return new PickReuseMetrics(
+                previousCount,
+                overlapExcess,
+                totalOverlap
+        );
+    }
+
+    /** 선택한 출발 장소를 고정하고 최근접 이웃 순서의 거리·시간을 추정한다. */
+    private RouteEstimate estimateRoute(
+            List<PlaceCandidateDto> candidates,
+            Long firstPlaceId,
+            DailyRouteContext context
+    ) {
+        if (candidates.size() < 2) {
+            return new RouteEstimate(0.0, 0.0);
+        }
+
+        List<PlaceCandidateDto> remaining = new ArrayList<>(candidates);
+        PlaceCandidateDto current = remaining.stream()
+                .filter(candidate -> candidate.getPlaceId().equals(
+                        firstPlaceId
+                ))
+                .findFirst()
+                .orElseThrow();
+        remaining.remove(current);
+
+        double totalDistanceKm = 0.0;
+        double totalTravelTimeMinutes = 0.0;
+        while (!remaining.isEmpty()) {
+            PlaceCandidateDto previous = current;
+            int previousIndex = context.candidateIndexes()
+                    .get(previous.getPlaceId());
+            current = remaining.stream()
+                    .min(Comparator
+                            .comparingDouble(
+                                    (PlaceCandidateDto candidate)
+                                            -> context.routeMatrix()
+                                            .getTravelTimeMinutes(
+                                                    previousIndex,
+                                                    context.candidateIndexes()
+                                                            .get(candidate.getPlaceId())
+                                            )
+                            )
+                            .thenComparingDouble(
+                                    candidate -> context.routeMatrix()
+                                            .getDistanceKm(
+                                                    previousIndex,
+                                                    context.candidateIndexes()
+                                                            .get(candidate.getPlaceId())
+                                            )
+                            )
+                            .thenComparing(PlaceCandidateDto::getPlaceId))
+                    .orElseThrow();
+            int currentIndex = context.candidateIndexes()
+                    .get(current.getPlaceId());
+            totalDistanceKm += context.routeMatrix().getDistanceKm(
+                    previousIndex,
+                    currentIndex
+            );
+            totalTravelTimeMinutes += context.routeMatrix()
+                    .getTravelTimeMinutes(
+                            previousIndex,
+                            currentIndex
+                    );
+            remaining.remove(current);
+        }
+        return new RouteEstimate(
+                totalDistanceKm,
+                totalTravelTimeMinutes
+        );
+    }
+
+    /** 앞 코스·재추천에 이미 나온 장소는 대체 후보에서도 다시 들어오지 않게 한다. */
+    private Set<Long> createBlockedAlternativeIds(
+            LocalDate visitDate,
+            Set<Long> previouslyRecommendedPlaceIds,
+            List<Map<LocalDate, Set<Long>>> generatedOptionPlaces
+    ) {
+        Set<Long> blocked = new LinkedHashSet<>(
+                previouslyRecommendedPlaceIds
+        );
+        for (Map<LocalDate, Set<Long>> optionPlaces
+                : generatedOptionPlaces) {
+            blocked.addAll(optionPlaces.getOrDefault(
+                    visitDate,
+                    Set.of()
+            ));
+        }
+        return blocked;
+    }
+
+    private PlaceCandidateDto copyCandidateForSelection(
+            PlaceCandidateDto source,
+            Set<Long> selectedIds,
+            Set<Long> blockedAlternativeIds
+    ) {
+        PlaceCandidateDto copied = copyCandidateWithDate(
+                source,
+                source.getVisitDate(),
+                false
+        );
+        List<PlaceCandidateDto> alternatives =
+                source.getAlternativeCandidates() == null
+                        ? List.of()
+                        : source.getAlternativeCandidates().stream()
+                        .filter(alternative -> source.getCategory().equals(
+                                alternative.getCategory()
+                        ))
+                        .filter(alternative -> !selectedIds.contains(
+                                alternative.getPlaceId()
+                        ))
+                        .filter(alternative -> !blockedAlternativeIds.contains(
+                                alternative.getPlaceId()
+                        ))
+                        .map(alternative -> copyCandidateWithDate(
+                                alternative,
+                                source.getVisitDate(),
+                                false
+                        ))
+                        .toList();
+        copied.setAlternativeCandidates(new ArrayList<>(alternatives));
+        return copied;
+    }
+
+    /** 코스별 마지막 일반 장소와 가까운 숙소를 전략에 맞춰 독립적으로 선택한다. */
+    private PlaceCandidateDto selectHotelCandidateForOption(
+            List<PlaceCandidateDto> hotelCandidates,
+            CourseOptimizeResponse optimized,
+            OptionStrategy strategy,
+            Set<Long> previouslyRecommendedPlaceIds,
+            Set<Long> usedHotelIds
+    ) {
+        if (hotelCandidates == null || hotelCandidates.isEmpty()) {
+            return null;
+        }
+
+        List<OptimizedPlaceDto> lastPlaces =
+                lastOrdinaryPlacesBeforeFinalDay(optimized);
+        List<HotelEvaluation> evaluations = hotelCandidates.stream()
+                .map(hotel -> new HotelEvaluation(
+                        hotel,
+                        averageDirectDistanceKm(lastPlaces, hotel)
+                ))
+                .toList();
+        ScoreRange hotelScoreRange = ScoreRange.from(hotelCandidates);
+        double minimumDistance = evaluations.stream()
+                .mapToDouble(HotelEvaluation::averageDistanceKm)
+                .min()
+                .orElse(0.0);
+        double maximumDistance = evaluations.stream()
+                .mapToDouble(HotelEvaluation::averageDistanceKm)
+                .max()
+                .orElse(0.0);
+
+        return evaluations.stream()
+                .sorted((left, right) -> compareHotels(
+                        left,
+                        right,
+                        strategy,
+                        previouslyRecommendedPlaceIds,
+                        usedHotelIds,
+                        hotelScoreRange,
+                        minimumDistance,
+                        maximumDistance
+                ))
+                .map(HotelEvaluation::hotel)
+                .findFirst()
+                .orElse(null);
+    }
+
+    private int compareHotels(
+            HotelEvaluation left,
+            HotelEvaluation right,
+            OptionStrategy strategy,
+            Set<Long> previouslyRecommendedPlaceIds,
+            Set<Long> usedHotelIds,
+            ScoreRange scoreRange,
+            double minimumDistance,
+            double maximumDistance
+    ) {
+        int comparison = Integer.compare(
+                hotelReuseLevel(
+                        left.hotel().getPlaceId(),
+                        previouslyRecommendedPlaceIds,
+                        usedHotelIds
+                ),
+                hotelReuseLevel(
+                        right.hotel().getPlaceId(),
+                        previouslyRecommendedPlaceIds,
+                        usedHotelIds
+                )
+        );
+        if (comparison != 0) {
+            return comparison;
+        }
+
+        if (strategy == OptionStrategy.PREFERENCE) {
+            comparison = Double.compare(
+                    valueOrZero(right.hotel().getRecommendationScore()),
+                    valueOrZero(left.hotel().getRecommendationScore())
+            );
+            if (comparison == 0) {
+                comparison = Double.compare(
+                        left.averageDistanceKm(),
+                        right.averageDistanceKm()
+                );
+            }
+        } else if (strategy == OptionStrategy.MIN_DISTANCE) {
+            comparison = Double.compare(
+                    left.averageDistanceKm(),
+                    right.averageDistanceKm()
+            );
+            if (comparison == 0) {
+                comparison = Double.compare(
+                        valueOrZero(right.hotel().getRecommendationScore()),
+                        valueOrZero(left.hotel().getRecommendationScore())
+                );
+            }
+        } else {
+            comparison = Double.compare(
+                    hotelBalancedUtility(
+                            right,
+                            scoreRange,
+                            minimumDistance,
+                            maximumDistance
+                    ),
+                    hotelBalancedUtility(
+                            left,
+                            scoreRange,
+                            minimumDistance,
+                            maximumDistance
+                    )
+            );
+        }
+        return comparison != 0
+                ? comparison
+                : left.hotel().getPlaceId()
+                .compareTo(right.hotel().getPlaceId());
+    }
+
+    private int hotelReuseLevel(
+            Long hotelId,
+            Set<Long> previouslyRecommendedPlaceIds,
+            Set<Long> usedHotelIds
+    ) {
+        boolean previous =
+                previouslyRecommendedPlaceIds.contains(hotelId);
+        boolean usedCurrent = usedHotelIds.contains(hotelId);
+        if (!previous && !usedCurrent) {
+            return 0;
+        }
+        if (!previous) {
+            return 1;
+        }
+        return usedCurrent ? 3 : 2;
+    }
+
+    private double hotelBalancedUtility(
+            HotelEvaluation evaluation,
+            ScoreRange scoreRange,
+            double minimumDistance,
+            double maximumDistance
+    ) {
+        double preference = normalizeHigher(
+                valueOrZero(
+                        evaluation.hotel().getRecommendationScore()
+                ),
+                scoreRange.minimum(),
+                scoreRange.maximum()
+        );
+        double distanceEfficiency = normalizeLower(
+                evaluation.averageDistanceKm(),
+                minimumDistance,
+                maximumDistance
+        );
+        return preference * 0.50 + distanceEfficiency * 0.50;
+    }
+
+    private List<OptimizedPlaceDto> lastOrdinaryPlacesBeforeFinalDay(
+            CourseOptimizeResponse optimized
+    ) {
+        if (optimized == null
+                || optimized.getOptimizedPlaces() == null
+                || optimized.getOptimizedPlaces().isEmpty()) {
+            return List.of();
+        }
+        LocalDate finalDate = optimized.getOptimizedPlaces().stream()
+                .map(OptimizedPlaceDto::getVisitDate)
+                .max(Comparator.naturalOrder())
+                .orElseThrow();
+        Map<LocalDate, OptimizedPlaceDto> lastByDate = new TreeMap<>();
+        for (OptimizedPlaceDto place : optimized.getOptimizedPlaces()) {
+            if (place.getVisitDate().equals(finalDate)
+                    || "HOTEL".equalsIgnoreCase(place.getCategory())) {
+                continue;
+            }
+            OptimizedPlaceDto current = lastByDate.get(
+                    place.getVisitDate()
+            );
+            if (current == null
+                    || valueOrZero(place.getVisitOrder())
+                    > valueOrZero(current.getVisitOrder())) {
+                lastByDate.put(place.getVisitDate(), place);
+            }
+        }
+        return List.copyOf(lastByDate.values());
+    }
+
+    private double averageDirectDistanceKm(
+            List<OptimizedPlaceDto> lastPlaces,
+            PlaceCandidateDto hotel
+    ) {
+        if (lastPlaces.isEmpty()) {
+            return 0.0;
+        }
+        return lastPlaces.stream()
+                .mapToDouble(place -> distanceService.calculateDistanceKm(
+                        place.getLatitude(),
+                        place.getLongitude(),
+                        hotel.getLatitude(),
+                        hotel.getLongitude()
+                ))
+                .average()
+                .orElse(0.0);
+    }
+
+    /** 날짜별 일반 장소 ID만 모아 숙소 반복을 코스 중복 계산에서 제외한다. */
+    private Map<LocalDate, Set<Long>> ordinaryPlaceIdsByDate(
+            CourseOptimizeResponse optimized
+    ) {
+        Map<LocalDate, Set<Long>> output = new TreeMap<>();
+        for (OptimizedPlaceDto place : optimized.getOptimizedPlaces()) {
+            if ("HOTEL".equalsIgnoreCase(place.getCategory())) {
+                continue;
+            }
+            output.computeIfAbsent(
+                    place.getVisitDate(),
+                    ignored -> new LinkedHashSet<>()
+            ).add(place.getPlaceId());
+        }
+        return output;
+    }
+
+    private void logOverlapResult(
+            Long resultId,
+            OptionStrategy strategy,
+            Map<LocalDate, Set<Long>> current,
+            List<Map<LocalDate, Set<Long>>> previousOptions,
+            int dailyOverlapLimit
+    ) {
+        int maximumOverlap = 0;
+        for (Map<LocalDate, Set<Long>> previous : previousOptions) {
+            for (Map.Entry<LocalDate, Set<Long>> entry
+                    : current.entrySet()) {
+                int overlap = (int) entry.getValue().stream()
+                        .filter(previous.getOrDefault(
+                                entry.getKey(),
+                                Set.of()
+                        )::contains)
+                        .count();
+                maximumOverlap = Math.max(maximumOverlap, overlap);
+            }
+        }
+
+        if (maximumOverlap > dailyOverlapLimit) {
+            log.warn(
+                    "카테고리 후보 부족으로 코스 중복 상한을 완화했습니다: "
+                            + "resultId={}, strategy={}, maximumDailyOverlap={}, limit={}",
+                    resultId,
+                    strategy,
+                    maximumOverlap,
+                    dailyOverlapLimit
+            );
+        } else {
+            log.info(
+                    "코스 중복 검사 완료: resultId={}, strategy={}, "
+                            + "maximumDailyOverlap={}, limit={}",
+                    resultId,
+                    strategy,
+                    maximumOverlap,
+                    dailyOverlapLimit
+            );
+        }
     }
 
     /** 후보 풀 행렬에서 장소 ID를 빠르게 찾기 위한 인덱스를 만든다. */
@@ -699,74 +1669,37 @@ public class CourseRecommendationService {
         return indexes;
     }
 
-    /** 선택한 이동수단의 이동시간 → 거리 순으로 후보 조합의 빠른 경로 비용을 추정한다. */
-    private RouteEstimate estimateRoute(
-            List<PlaceCandidateDto> candidates,
-            Map<Long, Integer> candidateIndexes,
-            RouteMatrix routeMatrix
-    ) {
-        if (candidates.size() < 2) {
-            return new RouteEstimate(0.0, 0.0);
+    /** recommendationKey의 날짜:장소ID 항목에서 장소 ID만 복원한다. */
+    private Set<Long> extractPlaceIds(String recommendationKey) {
+        Set<Long> placeIds = new LinkedHashSet<>();
+        for (String token : recommendationKey.split("[|,]")) {
+            int separatorIndex = token.lastIndexOf(':');
+            if (separatorIndex < 0
+                    || separatorIndex == token.length() - 1) {
+                continue;
+            }
+            try {
+                placeIds.add(Long.parseLong(
+                        token.substring(separatorIndex + 1)
+                ));
+            } catch (NumberFormatException ignored) {
+                // 구버전 또는 손상된 키는 장소 ID 제외 계산에서 건너뛴다.
+            }
         }
-
-        List<PlaceCandidateDto> remaining = new ArrayList<>(candidates);
-        PlaceCandidateDto current = remaining.stream()
-                .max(Comparator
-                        .comparingDouble(
-                                (PlaceCandidateDto candidate) -> valueOrZero(
-                                        candidate.getRecommendationScore()
-                                )
-                        )
-                        .thenComparing(
-                                candidate -> candidate.getPlaceId() == null
-                                        ? Long.MAX_VALUE
-                                        : -candidate.getPlaceId()
-                        ))
-                .orElseThrow();
-        remaining.remove(current);
-
-        double totalDistanceKm = 0.0;
-        double totalTravelTimeMinutes = 0.0;
-        while (!remaining.isEmpty()) {
-            PlaceCandidateDto previous = current;
-            int previousIndex = candidateIndexes.get(previous.getPlaceId());
-            current = remaining.stream()
-                    .min(Comparator
-                            .comparingDouble((PlaceCandidateDto candidate) ->
-                                    routeMatrix.getTravelTimeMinutes(
-                                            previousIndex,
-                                            candidateIndexes.get(candidate.getPlaceId())
-                                    ))
-                            .thenComparingDouble(candidate -> routeMatrix.getDistanceKm(
-                                    previousIndex,
-                                    candidateIndexes.get(candidate.getPlaceId())
-                            ))
-                            .thenComparing(PlaceCandidateDto::getPlaceId))
-                    .orElseThrow();
-            int currentIndex = candidateIndexes.get(current.getPlaceId());
-            totalDistanceKm += routeMatrix.getDistanceKm(
-                    previousIndex,
-                    currentIndex
-            );
-            totalTravelTimeMinutes += routeMatrix.getTravelTimeMinutes(
-                    previousIndex,
-                    currentIndex
-            );
-            remaining.remove(current);
-        }
-
-        return new RouteEstimate(totalDistanceKm, totalTravelTimeMinutes);
+        return placeIds;
     }
 
-    /** 조합의 장소 ID를 정렬해 방문 순서와 무관한 고유 서명을 만든다. */
-    private String createCompositionSignature(
-            List<PlaceCandidateDto> candidates,
+    /** 대체 후보 교체와 숙소 삽입까지 끝난 실제 표시 장소로 재추천 제외 키를 만든다. */
+    private String createOptimizedCompositionSignature(
+            List<OptimizedPlaceDto> places,
             TransportMode transportMode
     ) {
-        String composition = candidates.stream()
-                .sorted(Comparator.comparing(PlaceCandidateDto::getPlaceId))
-                .map(candidate -> candidate.getVisitDate()
-                        + ":" + candidate.getPlaceId())
+        String composition = places.stream()
+                .sorted(Comparator
+                        .comparing(OptimizedPlaceDto::getVisitDate)
+                        .thenComparing(OptimizedPlaceDto::getPlaceId))
+                .map(place -> place.getVisitDate()
+                        + ":" + place.getPlaceId())
                 .reduce((left, right) -> left + "," + right)
                 .orElse("");
         return transportMode.name() + ":" + composition;
@@ -788,27 +1721,40 @@ public class CourseRecommendationService {
                 .optionNo(optionNo)
                 .optionType(strategy.name())
                 .optionName(strategy.optionName())
-                .title(buildOptionTitle(strategy, optimized.getOptimizedPlaces()))
-                .description(buildOptionDescription(strategy, optimized, days.size()))
+                .title(buildOptionTitle(
+                        strategy,
+                        optimized.getOptimizedPlaces()
+                ))
+                .description(buildOptionDescription(
+                        strategy,
+                        optimized,
+                        days.size()
+                ))
                 .recommendationKey(recommendationKey)
                 .placeCount(optimized.getOptimizedPlaces().size())
                 .dayCount(days.size())
-                .totalDistanceKm(round(optimized.getTotalDistanceKm(), 3))
+                .totalDistanceKm(round(
+                        optimized.getTotalDistanceKm(),
+                        3
+                ))
                 .totalTravelTimeMinutes(round(
                         optimized.getTotalTravelTimeMinutes(),
                         2
                 ))
-                .totalVisitTimeMinutes(optimized.getTotalVisitTimeMinutes())
+                .totalVisitTimeMinutes(
+                        optimized.getTotalVisitTimeMinutes()
+                )
                 .totalCourseTimeMinutes(round(
                         optimized.getTotalCourseTimeMinutes(),
                         2
                 ))
-                .estimatedTravelTimes(optimized.getEstimatedTravelTimes())
+                .estimatedTravelTimes(
+                        optimized.getEstimatedTravelTimes()
+                )
                 .days(days)
                 .build();
     }
 
-    /** 실제로 선택된 장소의 대표 테마와 추천 전략을 조합해 화면용 코스 제목을 만든다. */
     private String buildOptionTitle(
             OptionStrategy strategy,
             List<OptimizedPlaceDto> places
@@ -816,7 +1762,6 @@ public class CourseRecommendationService {
         return resolveCourseTheme(places) + " " + strategy.optionName();
     }
 
-    /** 선택 전략의 차이가 카드 설명에서도 드러나도록 계산 결과를 포함한 문구를 만든다. */
     private String buildOptionDescription(
             OptionStrategy strategy,
             CourseOptimizeResponse optimized,
@@ -858,7 +1803,9 @@ public class CourseRecommendationService {
             counts[2] += isYes(place.getThemeDateYn()) ? 1 : 0;
             counts[3] += isYes(place.getThemeFoodTourYn()) ? 1 : 0;
             counts[4] += isYes(place.getThemeCafeTourYn()) ? 1 : 0;
-            counts[5] += isYes(place.getThemeShoppingHotplaceYn()) ? 1 : 0;
+            counts[5] += isYes(
+                    place.getThemeShoppingHotplaceYn()
+            ) ? 1 : 0;
             counts[6] += isYes(place.getThemeNightViewYn()) ? 1 : 0;
             counts[7] += isYes(place.getThemeHotelStayYn()) ? 1 : 0;
         }
@@ -898,13 +1845,18 @@ public class CourseRecommendationService {
         }
 
         List<PlaceCandidateDto> alternatives = new ArrayList<>();
-        if (includeAlternatives && source.getAlternativeCandidates() != null) {
-            for (PlaceCandidateDto alternative : source.getAlternativeCandidates()) {
-                alternatives.add(copyCandidateWithDate(
-                        alternative,
-                        visitDate,
-                        false
-                ));
+        if (includeAlternatives
+                && source.getAlternativeCandidates() != null) {
+            for (PlaceCandidateDto alternative
+                    : source.getAlternativeCandidates()) {
+                PlaceCandidateDto copiedAlternative =
+                        copyCandidateWithDate(
+                                alternative,
+                                visitDate,
+                                false
+                        );
+                validateCandidateForRecommendation(copiedAlternative);
+                alternatives.add(copiedAlternative);
             }
         }
 
@@ -919,14 +1871,38 @@ public class CourseRecommendationService {
                 .latitude(source.getLatitude())
                 .longitude(source.getLongitude())
                 .visitDate(visitDate)
-                .themePalaceCultureYn(normalizeYn(source.getThemePalaceCultureYn(), "themePalaceCultureYn"))
-                .themeNatureHangangYn(normalizeYn(source.getThemeNatureHangangYn(), "themeNatureHangangYn"))
-                .themeDateYn(normalizeYn(source.getThemeDateYn(), "themeDateYn"))
-                .themeFoodTourYn(normalizeYn(source.getThemeFoodTourYn(), "themeFoodTourYn"))
-                .themeCafeTourYn(normalizeYn(source.getThemeCafeTourYn(), "themeCafeTourYn"))
-                .themeShoppingHotplaceYn(normalizeYn(source.getThemeShoppingHotplaceYn(), "themeShoppingHotplaceYn"))
-                .themeNightViewYn(normalizeYn(source.getThemeNightViewYn(), "themeNightViewYn"))
-                .themeHotelStayYn(normalizeYn(source.getThemeHotelStayYn(), "themeHotelStayYn"))
+                .themePalaceCultureYn(normalizeYn(
+                        source.getThemePalaceCultureYn(),
+                        "themePalaceCultureYn"
+                ))
+                .themeNatureHangangYn(normalizeYn(
+                        source.getThemeNatureHangangYn(),
+                        "themeNatureHangangYn"
+                ))
+                .themeDateYn(normalizeYn(
+                        source.getThemeDateYn(),
+                        "themeDateYn"
+                ))
+                .themeFoodTourYn(normalizeYn(
+                        source.getThemeFoodTourYn(),
+                        "themeFoodTourYn"
+                ))
+                .themeCafeTourYn(normalizeYn(
+                        source.getThemeCafeTourYn(),
+                        "themeCafeTourYn"
+                ))
+                .themeShoppingHotplaceYn(normalizeYn(
+                        source.getThemeShoppingHotplaceYn(),
+                        "themeShoppingHotplaceYn"
+                ))
+                .themeNightViewYn(normalizeYn(
+                        source.getThemeNightViewYn(),
+                        "themeNightViewYn"
+                ))
+                .themeHotelStayYn(normalizeYn(
+                        source.getThemeHotelStayYn(),
+                        "themeHotelStayYn"
+                ))
                 .alternativeCandidates(alternatives)
                 .build();
     }
@@ -950,20 +1926,25 @@ public class CourseRecommendationService {
             List<OptimizedPlaceDto> optimizedPlaces,
             LocalTime dailyStartTime
     ) {
-        Map<LocalDate, List<OptimizedPlaceDto>> placesByDate = new TreeMap<>();
+        Map<LocalDate, List<OptimizedPlaceDto>> placesByDate =
+                new TreeMap<>();
         for (OptimizedPlaceDto place : optimizedPlaces) {
-            placesByDate
-                    .computeIfAbsent(place.getVisitDate(), ignored -> new ArrayList<>())
-                    .add(place);
+            placesByDate.computeIfAbsent(
+                    place.getVisitDate(),
+                    ignored -> new ArrayList<>()
+            ).add(place);
         }
 
         List<CourseDayResponse> days = new ArrayList<>();
         int dayNo = 1;
         for (Map.Entry<LocalDate, List<OptimizedPlaceDto>> entry
                 : placesByDate.entrySet()) {
-            List<OptimizedPlaceDto> dailyOptimizedPlaces = entry.getValue().stream()
-                    .sorted(Comparator.comparing(OptimizedPlaceDto::getVisitOrder))
-                    .toList();
+            List<OptimizedPlaceDto> dailyOptimizedPlaces =
+                    entry.getValue().stream()
+                            .sorted(Comparator.comparing(
+                                    OptimizedPlaceDto::getVisitOrder
+                            ))
+                            .toList();
             List<CoursePlaceResponse> places = toPlaceResponses(
                     dailyOptimizedPlaces,
                     dailyStartTime
@@ -974,11 +1955,12 @@ public class CourseRecommendationService {
                             place.getDistanceFromPreviousKm()
                     ))
                     .sum();
-            double dailyTravelTimeMinutes = dailyOptimizedPlaces.stream()
-                    .mapToDouble(place -> valueOrZero(
-                            place.getTravelTimeFromPreviousMinutes()
-                    ))
-                    .sum();
+            double dailyTravelTimeMinutes =
+                    dailyOptimizedPlaces.stream()
+                            .mapToDouble(place -> valueOrZero(
+                                    place.getTravelTimeFromPreviousMinutes()
+                            ))
+                            .sum();
             int dailyVisitTimeMinutes = dailyOptimizedPlaces.stream()
                     .mapToInt(place -> valueOrZero(
                             place.getExpectedVisitMinutes()
@@ -995,7 +1977,8 @@ public class CourseRecommendationService {
                     ))
                     .dailyVisitTimeMinutes(dailyVisitTimeMinutes)
                     .dailyCourseTimeMinutes(round(
-                            dailyVisitTimeMinutes + dailyTravelTimeMinutes,
+                            dailyVisitTimeMinutes
+                                    + dailyTravelTimeMinutes,
                             2
                     ))
                     .places(places)
@@ -1013,12 +1996,16 @@ public class CourseRecommendationService {
         LocalTime currentTime = dailyStartTime;
 
         for (OptimizedPlaceDto place : places) {
-            currentTime = currentTime.plusMinutes(Math.round(valueOrZero(
-                    place.getTravelTimeFromPreviousMinutes()
-            )));
+            currentTime = currentTime.plusMinutes(Math.round(
+                    valueOrZero(
+                            place.getTravelTimeFromPreviousMinutes()
+                    )
+            ));
             responses.add(toPlaceResponse(
                     place,
-                    currentTime.format(DateTimeFormatter.ofPattern("HH:mm"))
+                    currentTime.format(
+                            DateTimeFormatter.ofPattern("HH:mm")
+                    )
             ));
             currentTime = currentTime.plusMinutes(valueOrZero(
                     place.getExpectedVisitMinutes()
@@ -1027,7 +2014,6 @@ public class CourseRecommendationService {
         return responses;
     }
 
-    /** 추천 직후 화면에 필요한 표시값과 최적화 계산값을 응답 DTO로 변환한다. */
     private CoursePlaceResponse toPlaceResponse(
             OptimizedPlaceDto place,
             String visitTime
@@ -1042,26 +2028,36 @@ public class CourseRecommendationService {
                 .latitude(place.getLatitude())
                 .longitude(place.getLongitude())
                 .recommendationScore(place.getRecommendationScore())
-                .themePalaceCultureYn(place.getThemePalaceCultureYn())
-                .themeNatureHangangYn(place.getThemeNatureHangangYn())
+                .themePalaceCultureYn(
+                        place.getThemePalaceCultureYn()
+                )
+                .themeNatureHangangYn(
+                        place.getThemeNatureHangangYn()
+                )
                 .themeDateYn(place.getThemeDateYn())
                 .themeFoodTourYn(place.getThemeFoodTourYn())
                 .themeCafeTourYn(place.getThemeCafeTourYn())
-                .themeShoppingHotplaceYn(place.getThemeShoppingHotplaceYn())
+                .themeShoppingHotplaceYn(
+                        place.getThemeShoppingHotplaceYn()
+                )
                 .themeNightViewYn(place.getThemeNightViewYn())
                 .themeHotelStayYn(place.getThemeHotelStayYn())
                 .visitOrder(place.getVisitOrder())
                 .visitTime(visitTime)
-                .expectedVisitMinutes(place.getExpectedVisitMinutes())
-                .distanceFromPreviousKm(place.getDistanceFromPreviousKm())
+                .expectedVisitMinutes(
+                        place.getExpectedVisitMinutes()
+                )
+                .distanceFromPreviousKm(
+                        place.getDistanceFromPreviousKm()
+                )
                 .travelTimeFromPreviousMinutes(
                         place.getTravelTimeFromPreviousMinutes()
                 )
                 .transitPathType(place.getTransitPathType())
+                .routeEstimated(place.getRouteEstimated())
                 .build();
     }
 
-    /** 테마 여부는 누락 시 N으로 두고 Y/N 외의 값은 요청 오류로 처리한다. */
     private String normalizeYn(String value, String fieldName) {
         if (value == null || value.isBlank()) {
             return "N";
@@ -1075,15 +2071,27 @@ public class CourseRecommendationService {
         return normalized;
     }
 
-    private double normalizeHigher(double value, double min, double max) {
-        if (Math.abs(max - min) < 0.000000001) {
+    private double normalizeHigher(
+            double value,
+            double minimum,
+            double maximum
+    ) {
+        if (Math.abs(maximum - minimum) < EPSILON) {
             return 1.0;
         }
-        return (value - min) / (max - min);
+        return (value - minimum) / (maximum - minimum);
     }
 
-    private double normalizeLower(double value, double min, double max) {
-        return 1.0 - normalizeHigher(value, min, max);
+    private double normalizeLower(
+            double value,
+            double minimum,
+            double maximum
+    ) {
+        return 1.0 - normalizeHigher(value, minimum, maximum);
+    }
+
+    private double inverseCost(double value) {
+        return 1.0 / (1.0 + Math.max(0.0, value));
     }
 
     private double valueOrZero(Double value) {
@@ -1119,7 +2127,9 @@ public class CourseRecommendationService {
     private record ValidatedRecommendation(
             List<ValidatedDailyPlan> dailyPlans,
             Set<String> excludedRecommendationKeys,
-            TransportMode transportMode
+            TransportMode transportMode,
+            Set<Long> previouslyRecommendedPlaceIds,
+            List<PlaceCandidateDto> hotelCandidates
     ) {
     }
 
@@ -1131,21 +2141,37 @@ public class CourseRecommendationService {
     ) {
     }
 
-    private record DailySelection(
+    private record DailyRouteContext(
+            ValidatedDailyPlan plan,
+            RouteMatrix routeMatrix,
+            Map<Long, Integer> candidateIndexes,
+            ScoreRange scoreRange
+    ) {
+    }
+
+    private record SequentialSelection(
             List<PlaceCandidateDto> placeCandidates,
+            Map<LocalDate, Long> preferredFirstPlaceIdsByDate
+    ) {
+    }
+
+    private record DailyPick(
+            List<PlaceCandidateDto> placeCandidates,
+            Long firstPlaceId,
             double recommendationScore,
             double travelTimeMinutes,
             double distanceKm,
+            int previousRecommendationCount,
+            int overlapExcess,
+            int totalOverlap,
             String signature
     ) {
     }
 
-    private record GlobalSelection(
-            List<PlaceCandidateDto> placeCandidates,
-            double recommendationScore,
-            double travelTimeMinutes,
-            double distanceKm,
-            String signature
+    private record PickReuseMetrics(
+            int previousRecommendationCount,
+            int overlapExcess,
+            int totalOverlap
     ) {
     }
 
@@ -1155,38 +2181,30 @@ public class CourseRecommendationService {
     ) {
     }
 
-    private record MetricRange(
-            double minRecommendationScore,
-            double maxRecommendationScore,
-            double minTravelTimeMinutes,
-            double maxTravelTimeMinutes,
-            double minDistanceKm,
-            double maxDistanceKm
+    private record HotelEvaluation(
+            PlaceCandidateDto hotel,
+            double averageDistanceKm
     ) {
-        static MetricRange from(List<GlobalSelection> selections) {
-            return new MetricRange(
-                    selections.stream()
-                            .mapToDouble(GlobalSelection::recommendationScore)
+    }
+
+    private record ScoreRange(
+            double minimum,
+            double maximum
+    ) {
+        static ScoreRange from(List<PlaceCandidateDto> candidates) {
+            return new ScoreRange(
+                    candidates.stream()
+                            .mapToDouble(candidate -> candidate
+                                    .getRecommendationScore() == null
+                                    ? 0.0
+                                    : candidate.getRecommendationScore())
                             .min()
                             .orElse(0.0),
-                    selections.stream()
-                            .mapToDouble(GlobalSelection::recommendationScore)
-                            .max()
-                            .orElse(0.0),
-                    selections.stream()
-                            .mapToDouble(GlobalSelection::travelTimeMinutes)
-                            .min()
-                            .orElse(0.0),
-                    selections.stream()
-                            .mapToDouble(GlobalSelection::travelTimeMinutes)
-                            .max()
-                            .orElse(0.0),
-                    selections.stream()
-                            .mapToDouble(GlobalSelection::distanceKm)
-                            .min()
-                            .orElse(0.0),
-                    selections.stream()
-                            .mapToDouble(GlobalSelection::distanceKm)
+                    candidates.stream()
+                            .mapToDouble(candidate -> candidate
+                                    .getRecommendationScore() == null
+                                    ? 0.0
+                                    : candidate.getRecommendationScore())
                             .max()
                             .orElse(0.0)
             );

@@ -19,10 +19,7 @@ public class CoursePlaceResponse {
     private Long detailId;
     private Long placeId;
 
-    /*
-     * 현재 COURSE_DETAILS에는 아래 표시값을 저장하지 않으므로 상세 조회에서 null이다.
-     * PlaceRepository 구현 후 placeId로 PLACES를 일괄 조회해 채운다.
-     */
+    // COURSE_DETAILS에는 중복 저장하지 않고, 상세 조회 시 placeId로 PLACES를 일괄 조회해 채운다.
     private String placeName;
     private String category;
     private String address;
@@ -32,7 +29,7 @@ public class CoursePlaceResponse {
     private Double longitude;
     private Double recommendationScore;
 
-    // PLACES 조회 연결 후 장소별 8개 테마 여부를 채울 필드이다.
+    // PLACES에 저장된 장소별 8개 테마 여부이다.
     private String themePalaceCultureYn;
     private String themeNatureHangangYn;
     private String themeDateYn;
@@ -52,4 +49,5 @@ public class CoursePlaceResponse {
     private Double distanceFromPreviousKm;
     private Double travelTimeFromPreviousMinutes;
     private TransitPathType transitPathType;
+    private Boolean routeEstimated;
 }

@@ -24,10 +24,7 @@ import CoursePlaceList from '../../components/course/CoursePlaceList';
 import KakaoCourseMap from '../../components/course/KakaoCourseMap';
 import CourseTransportIcon from '../../components/course/CourseTransportIcon';
 import { getCourseDetail } from '../../api/courseApi';
-import {
-    findCachedRecommendedCourse,
-    getCurrentMemberId,
-} from '../../utils/courseHistory';
+import { getCurrentMemberId } from '../../utils/courseHistory';
 import {
     getTransportMeta,
     normalizeTransitPathType,
@@ -167,6 +164,7 @@ function normalizeDays(rawDays) {
                     place.travelTimeFromPreviousMinutes,
                 ),
                 transitPathType: normalizeTransitPathType(place.transitPathType),
+                routeEstimated: Boolean(place.routeEstimated),
                 displayVisitTime,
                 fallbackImageUrl,
                 displayImageUrl: place.imageUrl
@@ -229,7 +227,9 @@ function normalizeCourseDetail(rawCourse) {
             ? rawCourse.travelCode
             : null,
         transportMode: normalizeTransportMode(rawCourse?.transportMode),
-        estimatedTravelTimes: Boolean(rawCourse?.estimatedTravelTimes),
+        estimatedTravelTimes: rawCourse?.estimatedTravelTimes == null
+            ? places.some((place) => place.routeEstimated)
+            : Boolean(rawCourse.estimatedTravelTimes),
         courseType: rawCourse?.courseType || 'SURVEY',
         placeCount: toFiniteNumber(rawCourse?.placeCount, places.length),
         dayCount: toFiniteNumber(rawCourse?.dayCount, days.length),
@@ -252,9 +252,7 @@ function normalizeCourseDetail(rawCourse) {
 
 /** 목록 카드에서만 유지되는 이미지·태그는 상세 API의 null 값을 덮지 않는 범위에서 보존합니다. */
 function normalizeApiCourseDetail(response, courseId) {
-    const summary = readCourseDetailEntry(courseId)?.summary
-        || findCachedRecommendedCourse(courseId)
-        || {};
+    const summary = readCourseDetailEntry(courseId)?.summary || {};
     const responseTags = Array.isArray(response?.tags) ? response.tags.filter(Boolean) : [];
     const summaryTags = Array.isArray(summary?.tags) ? summary.tags.filter(Boolean) : [];
     const summaryRegions = Array.isArray(summary?.regions)
@@ -284,9 +282,7 @@ function normalizeApiCourseDetail(response, courseId) {
 
 /** 상세 API를 사용할 수 없을 때 사용자가 선택해서 확인할 수 있는 UI 미리보기를 만듭니다. */
 function buildPreviewCourse(courseId) {
-    const entrySummary = readCourseDetailEntry(courseId)?.summary
-        || findCachedRecommendedCourse(courseId)
-        || null;
+    const entrySummary = readCourseDetailEntry(courseId)?.summary || null;
     const mockSummary = mockThemeCourseListResponse.data.find(
         (candidate) => candidate.courseId === courseId,
     );

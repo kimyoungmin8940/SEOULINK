@@ -122,17 +122,25 @@ public class CourseDraftService {
                         survey.getRegion(),
                         null,
                         limitPerCategory,
-                        ALTERNATIVE_LIMIT
+                        ALTERNATIVE_LIMIT,
+                        survey.getCompanionType()
                 );
 
         /*
          * 후보를 카테고리별로 나누어 보관합니다.
-         * HOTEL은 현재 여행 코스의 방문 장소에 포함하지 않습니다.
+         * HOTEL은 일반 방문 후보에서는 제외하고 2일 이상 일정의 숙소 후보로 별도 전달합니다.
          */
         Map<String, Deque<PlaceRecommendationResponse>> candidatePools =
                 createCandidatePools(
                         recommendation.getRecommendedPlaces()
                 );
+        List<PlaceRecommendationResponse> hotelCandidates =
+                travelDays >= 2
+                        ? List.copyOf(candidatePools.getOrDefault(
+                                HOTEL,
+                                new ArrayDeque<>()
+                        ))
+                        : List.of();
 
         // 4. 추천 후보를 날짜별로 중복 없이 배분
         List<DailyCourseDraftResponse> dailyPlans =
@@ -155,6 +163,7 @@ public class CourseDraftService {
                 survey.getEndDate(),
                 travelDays,
                 dailyStartTime,
+                hotelCandidates,
                 dailyPlans
         );
     }
@@ -302,7 +311,7 @@ public class CourseDraftService {
     }
 
     /**
-     * 전체 추천 장소를 TOUR, RESTAURANT, CAFE 후보 보관함으로 나눔
+     * 전체 추천 장소를 TOUR, RESTAURANT, CAFE, HOTEL 후보 보관함으로 나눔
      */
     private Map<String, Deque<PlaceRecommendationResponse>>
     createCandidatePools(
@@ -314,6 +323,7 @@ public class CourseDraftService {
         pools.put(TOUR, new ArrayDeque<>());
         pools.put(RESTAURANT, new ArrayDeque<>());
         pools.put(CAFE, new ArrayDeque<>());
+        pools.put(HOTEL, new ArrayDeque<>());
 
         if (recommendedPlaces == null) {
             return pools;
@@ -427,13 +437,37 @@ public class CourseDraftService {
                     new DailyCourseDraftResponse(
                             visitDate,
                             targetPlaceCount,
-                            new LinkedHashMap<>(categoryTargets),
+                            // 장소가 부족해 다른 카테고리로 보충된 경우에도 실제 후보 구성과
+                            // 다음 추천 단계의 카테고리 비율이 일치하도록 실개수를 전달한다.
+                            countCandidatesByCategory(candidatesByDay.get(dayIndex)),
                             candidatesByDay.get(dayIndex)
                     )
             );
         }
 
         return dailyPlans;
+    }
+
+    /** 날짜별로 실제 배정된 후보 수를 TOUR/RESTAURANT/CAFE/HOTEL 순서로 집계한다. */
+    private Map<String, Integer> countCandidatesByCategory(
+            List<PlaceRecommendationResponse> candidates
+    ) {
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        counts.put(TOUR, 0);
+        counts.put(RESTAURANT, 0);
+        counts.put(CAFE, 0);
+        counts.put(HOTEL, 0);
+
+        for (PlaceRecommendationResponse candidate : candidates) {
+            if (candidate.getCategory() == null) {
+                continue;
+            }
+            String category = candidate.getCategory().trim().toUpperCase();
+            if (counts.containsKey(category)) {
+                counts.put(category, counts.get(category) + 1);
+            }
+        }
+        return counts;
     }
 
     /**

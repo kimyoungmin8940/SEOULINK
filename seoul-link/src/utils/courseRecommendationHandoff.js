@@ -4,7 +4,9 @@ export const COURSE_RECOMMEND_REQUEST_KEY = 'seoulinkCourseRecommendRequest';
 export const COURSE_RECOMMEND_RESPONSE_KEY = 'seoulinkCourseRecommendResponse';
 
 const SUPPORTED_CATEGORIES = ['TOUR', 'RESTAURANT', 'CAFE', 'HOTEL'];
+const SUPPORTED_COMPANION_TYPES = ['SOLO', 'COUPLE', 'FRIENDS', 'FAMILY'];
 const MAX_EXCLUDED_RECOMMENDATIONS = 60;
+const MAX_PREVIOUSLY_RECOMMENDED_PLACES = 500;
 
 function requestError(message) {
     throw new TypeError(`추천 코스 입력 오류: ${message}`);
@@ -146,13 +148,62 @@ function normalizeExcludedRecommendationKeys(value) {
     }))];
 }
 
+/** 재추천 점수 감점에 사용할 이전 장소 ID를 중복 없이 정규화합니다. */
+function normalizePreviouslyRecommendedPlaceIds(value) {
+    if (value == null) {
+        return [];
+    }
+    if (!Array.isArray(value)) {
+        requestError('previouslyRecommendedPlaceIds는 배열이어야 합니다.');
+    }
+    if (value.length > MAX_PREVIOUSLY_RECOMMENDED_PLACES) {
+        requestError(
+            `previouslyRecommendedPlaceIds는 최대 ${MAX_PREVIOUSLY_RECOMMENDED_PLACES}개까지 보낼 수 있습니다.`,
+        );
+    }
+
+    return [...new Set(value.map((placeId, index) => {
+        const normalized = Number(placeId);
+        if (!Number.isInteger(normalized) || normalized < 1) {
+            requestError(`previouslyRecommendedPlaceIds[${index}]는 1 이상의 정수여야 합니다.`);
+        }
+        return normalized;
+    }))];
+}
+
+/** 숙소는 일반 후보와 분리하되 장소 DTO 자체는 같은 규칙으로 검증합니다. */
+function normalizeHotelCandidates(value) {
+    if (value == null) {
+        return [];
+    }
+    if (!Array.isArray(value)) {
+        requestError('hotelCandidates는 배열이어야 합니다.');
+    }
+
+    const hotelCandidates = value.map((candidate, index) => normalizeCandidate(
+        candidate,
+        `hotelCandidates[${index}]`,
+    ));
+    const hotelIds = new Set();
+    hotelCandidates.forEach((candidate, index) => {
+        if (candidate.category !== 'HOTEL') {
+            requestError(`hotelCandidates[${index}].category는 HOTEL이어야 합니다.`);
+        }
+        if (hotelIds.has(candidate.placeId)) {
+            requestError(`hotelCandidates[${index}].placeId가 중복되었습니다.`);
+        }
+        hotelIds.add(candidate.placeId);
+    });
+    return hotelCandidates;
+}
+
 /** 서버 키가 없는 구버전 응답도 장소 구성만으로 같은 코스를 식별합니다. */
-function deriveRecommendationKey(option) {
+function deriveRecommendationKey(option, transportMode) {
     if (typeof option?.recommendationKey === 'string' && option.recommendationKey.trim()) {
         return option.recommendationKey.trim();
     }
 
-    return [...(option?.days ?? [])]
+    const composition = [...(option?.days ?? [])]
         .sort((left, right) => String(left?.visitDate).localeCompare(String(right?.visitDate)))
         .map((day) => [...(day?.places ?? [])]
             .filter((place) => Number.isInteger(Number(place?.placeId)))
@@ -160,7 +211,9 @@ function deriveRecommendationKey(option) {
             .map((place) => `${day.visitDate}:${Number(place.placeId)}`)
             .join(','))
         .filter(Boolean)
-        .join('|');
+        .join(',');
+
+    return composition ? `${transportMode}:${composition}` : '';
 }
 
 /** 다른 담당 화면에서 받은 값을 코스 추천 API의 최종 요청 계약으로 정규화합니다. */
@@ -195,16 +248,29 @@ export function normalizeCourseRecommendRequest(data) {
             `transportMode는 ${Object.values(TRANSPORT_MODES).join(', ')} 중 하나여야 합니다.`,
         );
     }
+    const companionType = typeof data.companionType === 'string'
+        ? data.companionType.trim().toUpperCase()
+        : '';
+    if (companionType && !SUPPORTED_COMPANION_TYPES.includes(companionType)) {
+        requestError(
+            `companionType은 ${SUPPORTED_COMPANION_TYPES.join(', ')} 중 하나여야 합니다.`,
+        );
+    }
 
     return {
         ...data,
         resultId,
         travelCode: travelCode || null,
+        companionType: companionType || null,
         transportMode,
         dailyStartTime,
         excludedRecommendationKeys: normalizeExcludedRecommendationKeys(
             data.excludedRecommendationKeys,
         ),
+        previouslyRecommendedPlaceIds: normalizePreviouslyRecommendedPlaceIds(
+            data.previouslyRecommendedPlaceIds,
+        ),
+        hotelCandidates: normalizeHotelCandidates(data.hotelCandidates),
         dailyPlans: data.dailyPlans.map(normalizeDailyPlan),
     };
 }
@@ -212,9 +278,15 @@ export function normalizeCourseRecommendRequest(data) {
 /** 같은 설문·여행 정보는 유지하고 현재 화면의 코스 조합만 제외한 재추천 요청을 만든다. */
 export function buildCourseRecommendAgainRequest(data, courseOptions) {
     const request = normalizeCourseRecommendRequest(data);
-    const displayedKeys = (Array.isArray(courseOptions) ? courseOptions : [])
-        .map(deriveRecommendationKey)
+    const displayedOptions = Array.isArray(courseOptions) ? courseOptions : [];
+    const displayedKeys = displayedOptions
+        .map((option) => deriveRecommendationKey(option, request.transportMode))
         .filter(Boolean);
+    const displayedPlaceIds = displayedOptions
+        .flatMap((option) => option?.days ?? [])
+        .flatMap((day) => day?.places ?? [])
+        .map((place) => Number(place?.placeId))
+        .filter((placeId) => Number.isInteger(placeId) && placeId > 0);
 
     if (displayedKeys.length === 0) {
         requestError('현재 추천 코스의 제외 키를 만들 수 없습니다.');
@@ -229,6 +301,14 @@ export function buildCourseRecommendAgainRequest(data, courseOptions) {
                 ...displayedKeys,
             ]),
         ].slice(-MAX_EXCLUDED_RECOMMENDATIONS),
+        // 서버는 현재 화면에서 본 장소를 우선 완전 제외하고,
+        // 카테고리 후보가 부족할 때만 감점된 점수로 최소 재사용합니다.
+        previouslyRecommendedPlaceIds: [
+            ...new Set([
+                ...request.previouslyRecommendedPlaceIds,
+                ...displayedPlaceIds,
+            ]),
+        ].slice(-MAX_PREVIOUSLY_RECOMMENDED_PLACES),
     };
 }
 

@@ -3,7 +3,7 @@
  */
 
 /**
- * @typedef {'SUBWAY'|'BUS'|'BUS_SUBWAY'} TransitPathType
+ * @typedef {'WALKING'|'SUBWAY'|'BUS'|'BUS_SUBWAY'} TransitPathType
  */
 
 /**
@@ -56,6 +56,7 @@
  * @property {number} distanceFromPreviousKm
  * @property {number} travelTimeFromPreviousMinutes
  * @property {?TransitPathType} transitPathType ODsay 최적 경로 종류, 추정 구간은 null
+ * @property {boolean=} routeEstimated 외부 경로 대신 추정값을 사용한 구간인지 여부
  */
 
 /**
@@ -66,6 +67,8 @@
  * @property {number=} dailyTravelTimeMinutes
  * @property {number=} dailyVisitTimeMinutes
  * @property {number=} dailyCourseTimeMinutes
+ * @property {boolean=} routeDetailsAttempted 실제 교통편 상세 조회를 이미 시도했는지 여부
+ * @property {?string=} routeDetailsError 상세 조회 자체가 실패한 경우의 화면 메시지
  * @property {CoursePlace[]} places
  */
 
@@ -82,12 +85,15 @@
  * @property {number=} surveyId
  * @property {number} resultId
  * @property {string=} travelCode 영문 대문자 5자리
+ * @property {'SOLO'|'COUPLE'|'FRIENDS'|'FAMILY'=} companionType 동행 유형 가중치 기준
  * @property {TransportMode} transportMode 전체 추천 옵션에 동일하게 적용할 이동수단
  * @property {string=} startDate YYYY-MM-DD
  * @property {string=} endDate YYYY-MM-DD
  * @property {number=} travelDays
  * @property {string=} dailyStartTime HH:mm, 프론트 기본 10:00
  * @property {string[]=} excludedRecommendationKeys 다시 추천할 때 제외할 이전 코스 조합 키
+ * @property {number[]=} previouslyRecommendedPlaceIds 이전 장소 감점용 장소 ID
+ * @property {PlaceCandidate[]=} hotelCandidates 2일 이상 일정에서 옵션별 숙소를 고를 후보 풀
  * @property {DailyCoursePlan[]} dailyPlans
  */
 
@@ -97,7 +103,8 @@
  *   visitOrder: number,
  *   distanceFromPreviousKm: number,
  *   travelTimeFromPreviousMinutes: number,
- *   transitPathType: ?TransitPathType
+ *   transitPathType: ?TransitPathType,
+ *   routeEstimated: boolean
  * }} OptimizedPlace
  */
 
@@ -159,7 +166,7 @@
  * @property {?string} coverImageUrl
  * @property {?string} travelCode
  * @property {?TransportMode} transportMode
- * @property {boolean=} estimatedTravelTimes 로컬 추천 요약에서 보존한 추정 구간 여부
+ * @property {boolean=} estimatedTravelTimes 추천 직후 미리보기에서만 사용하는 추정 구간 여부
  * @property {'CUSTOM'|'SURVEY'|'CHATBOT'} courseType
  * @property {?string} region
  * @property {boolean} publicCourse
@@ -200,6 +207,7 @@
 /**
  * @typedef {Object} CourseSavePlace
  * @property {number} placeId
+ * @property {string=} category 같은 숙소의 날짜별 반복 저장을 판별할 장소 카테고리
  * @property {string} visitDate
  * @property {number} visitOrder
  * @property {?string} visitTime HH:mm
@@ -207,17 +215,18 @@
  * @property {number} distanceFromPreviousKm
  * @property {number} travelTimeFromPreviousMinutes
  * @property {?TransitPathType} transitPathType
+ * @property {boolean=} routeEstimated
  */
 
 /**
  * @typedef {Object} CourseSaveRequest
  * @property {number} memberId
- * @property {number=} resultId
+ * @property {number=} resultId SURVEY 코스는 필수
  * @property {number=} paymentId
  * @property {string} title
  * @property {string=} description
  * @property {string=} travelCode
- * @property {TransportMode} transportMode 추천 때 사용한 이동수단
+ * @property {TransportMode} transportMode 추천 계산·저장 검증에 사용하며 SURVEY 조회는 연결된 설문값을 사용
  * @property {'CUSTOM'|'SURVEY'|'CHATBOT'=} courseType
  * @property {string=} region
  * @property {boolean=} publicCourse

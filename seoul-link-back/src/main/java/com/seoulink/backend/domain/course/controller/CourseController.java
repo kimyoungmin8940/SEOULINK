@@ -82,6 +82,17 @@ public class CourseController {
         return courseOptimizationService.optimize(request);
     }
 
+    /**
+     * 추천 카드에 현재 표시되는 DAY의 고정된 방문 순서만 실제 경로로 보완한다.
+     * 대중교통에서는 인접한 장소 쌍만 ODsay로 조회한다.
+     */
+    @PostMapping("/route-details")
+    public CourseOptimizeResponse resolveRouteDetails(
+            @RequestBody CourseOptimizeRequest request
+    ) {
+        return courseOptimizationService.resolveFixedRouteDetails(request);
+    }
+
     /** 날짜별 후보 풀에서 서로 다른 추천 코스 3개를 생성해 반환한다. */
     @PostMapping("/recommend")
     public CourseRecommendResponse recommendCourse(

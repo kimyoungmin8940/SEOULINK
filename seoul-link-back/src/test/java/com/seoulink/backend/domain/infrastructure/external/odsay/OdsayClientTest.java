@@ -15,6 +15,7 @@ import org.springframework.web.client.RestClient;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
@@ -115,6 +116,98 @@ class OdsayClientTest {
         );
 
         assertEquals("-98", exception.getErrorCode());
+        mockServer.verify();
+    }
+
+    @Test
+    @DisplayName("ODsay 단일 오류 객체의 msg 필드도 오류 코드와 메시지로 변환한다")
+    void calculateRouteParsesSingleErrorObjectWithMsg() {
+        RestClient.Builder builder = RestClient.builder()
+                .baseUrl("https://api.odsay.com/v1/api");
+        MockRestServiceServer mockServer =
+                MockRestServiceServer.bindTo(builder).build();
+        OdsayClient client = new OdsayClient(builder.build(), "test-key");
+
+        mockServer.expect(requestTo(
+                        "https://api.odsay.com/v1/api/searchPubTransPathT"
+                                + "?SX=126.978&SY=37.5665"
+                                + "&EX=126.977&EY=37.5796"
+                                + "&OPT=0&SearchType=0&SearchPathType=0&apiKey=test-key"
+                ))
+                .andRespond(withSuccess(
+                        """
+                        {
+                          "error": {
+                            "code": "-98",
+                            "msg": "출, 도착지가 700m이내입니다."
+                          }
+                        }
+                        """,
+                        MediaType.APPLICATION_JSON
+                ));
+
+        OdsayApiException exception = assertThrows(
+                OdsayApiException.class,
+                () -> client.calculateRoute(
+                        new RouteCoordinate(126.9780, 37.5665),
+                        new RouteCoordinate(126.9770, 37.5796)
+                )
+        );
+
+        assertEquals("-98", exception.getErrorCode());
+        assertTrue(exception.getMessage().contains("700m"));
+        mockServer.verify();
+    }
+
+    @Test
+    @DisplayName("서버 일일 예산에 도달하면 다음 ODsay 요청을 보내지 않는다")
+    void calculateRouteStopsBeforeExceedingLocalDailyBudget() {
+        RestClient.Builder builder = RestClient.builder()
+                .baseUrl("https://api.odsay.com/v1/api");
+        MockRestServiceServer mockServer =
+                MockRestServiceServer.bindTo(builder).build();
+        OdsayClient client = new OdsayClient(
+                builder.build(),
+                "test-key",
+                1
+        );
+
+        mockServer.expect(requestTo(
+                        "https://api.odsay.com/v1/api/searchPubTransPathT"
+                                + "?SX=126.978&SY=37.5665"
+                                + "&EX=126.977&EY=37.5796"
+                                + "&OPT=0&SearchType=0&SearchPathType=0&apiKey=test-key"
+                ))
+                .andRespond(withSuccess(
+                        """
+                        {
+                          "result": {
+                            "path": [{
+                              "pathType": 1,
+                              "info": {
+                                "totalTime": 12,
+                                "totalDistance": 1200
+                              }
+                            }]
+                          }
+                        }
+                        """,
+                        MediaType.APPLICATION_JSON
+                ));
+
+        client.calculateRoute(
+                new RouteCoordinate(126.9780, 37.5665),
+                new RouteCoordinate(126.9770, 37.5796)
+        );
+        OdsayApiException exception = assertThrows(
+                OdsayApiException.class,
+                () -> client.calculateRoute(
+                        new RouteCoordinate(126.9770, 37.5796),
+                        new RouteCoordinate(126.9997, 37.5700)
+                )
+        );
+
+        assertEquals("LOCAL_DAILY_LIMIT", exception.getErrorCode());
         mockServer.verify();
     }
 

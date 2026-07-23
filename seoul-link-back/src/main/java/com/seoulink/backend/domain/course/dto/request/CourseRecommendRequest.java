@@ -31,6 +31,7 @@ public class CourseRecommendRequest {
     private Long surveyId;
     private Long resultId;
     private String travelCode;
+    private String companionType;
 
     // 한 요청에서 생성하는 세 추천 옵션 모두에 동일하게 적용할 이동수단이다.
     private TransportMode transportMode;
@@ -47,6 +48,14 @@ public class CourseRecommendRequest {
     // 다시 추천할 때 직전 화면에 표시된 코스 조합을 제외하기 위한 서버 발급 키 목록이다.
     @Builder.Default
     private List<String> excludedRecommendationKeys = new ArrayList<>();
+
+    // 다시 추천할 때 직전 코스에 등장한 장소를 감점하기 위한 장소 ID 목록이다.
+    @Builder.Default
+    private List<Long> previouslyRecommendedPlaceIds = new ArrayList<>();
+
+    // 2일 이상 일정에서 각 코스가 자기 숙소 한 곳을 고를 때 사용할 후보 풀이다.
+    @Builder.Default
+    private List<PlaceCandidateDto> hotelCandidates = new ArrayList<>();
 
     // 날짜별 방문 후보와 장소별 대체 후보를 담은 목록이다.
     @Builder.Default

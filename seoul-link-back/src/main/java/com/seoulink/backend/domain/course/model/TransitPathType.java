@@ -3,6 +3,7 @@ package com.seoulink.backend.domain.course.model;
 /** ODsay가 반환하는 도시 내 대중교통 최적 경로의 대표 수단이다. */
 public enum TransitPathType {
 
+    WALKING(0),
     SUBWAY(1),
     BUS(2),
     BUS_SUBWAY(3);

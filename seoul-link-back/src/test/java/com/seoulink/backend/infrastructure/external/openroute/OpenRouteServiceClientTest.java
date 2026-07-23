@@ -15,6 +15,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
@@ -102,6 +103,45 @@ class OpenRouteServiceClientTest {
     }
 
     @Test
+    @DisplayName("Matrix 일부 null 셀은 전체 응답을 버리지 않고 해당 셀만 실패로 표시한다")
+    void calculateMatrixKeepsValidCellsWhenOneCellIsNull() {
+        RestClient.Builder builder = RestClient.builder()
+                .baseUrl("https://api.openrouteservice.org");
+        MockRestServiceServer mockServer =
+                MockRestServiceServer.bindTo(builder).build();
+        OpenRouteServiceClient client = new OpenRouteServiceClient(
+                builder.build(),
+                "test-api-key"
+        );
+
+        mockServer.expect(requestTo(
+                        "https://api.openrouteservice.org/v2/matrix/foot-walking"
+                ))
+                .andRespond(withSuccess(
+                        """
+                        {
+                          "distances": [[0.0, null], [1.2, 0.0]],
+                          "durations": [[0.0, null], [900.0, 0.0]]
+                        }
+                        """,
+                        MediaType.APPLICATION_JSON
+                ));
+
+        RouteMatrixResult result = client.calculateMatrix(
+                "foot-walking",
+                List.of(
+                        new RouteCoordinate(126.9780, 37.5665),
+                        new RouteCoordinate(126.9770, 37.5796)
+                )
+        );
+
+        assertTrue(Double.isNaN(result.getDistanceKm(0, 1)));
+        assertEquals(1.2, result.getDistanceKm(1, 0), 0.000001);
+        assertEquals(15.0, result.getTravelTimeMinutes(1, 0), 0.000001);
+        mockServer.verify();
+    }
+
+    @Test
     @DisplayName("API 키가 없으면 외부 요청 전에 예외가 발생한다")
     void calculateMatrixRejectsMissingApiKey() {
         OpenRouteServiceClient client = new OpenRouteServiceClient(
@@ -120,5 +160,28 @@ class OpenRouteServiceClientTest {
                         )
                 )
         );
+    }
+
+    @Test
+    @DisplayName("서버 일일 호출 예산이 0이면 Matrix 요청을 보내기 전에 차단한다")
+    void calculateMatrixStopsBeforeRequestWhenLocalBudgetIsZero() {
+        OpenRouteServiceClient client = new OpenRouteServiceClient(
+                RestClient.create("https://api.openrouteservice.org"),
+                "test-api-key",
+                0
+        );
+
+        IllegalStateException exception = assertThrows(
+                IllegalStateException.class,
+                () -> client.calculateMatrix(
+                        "driving-car",
+                        List.of(
+                                new RouteCoordinate(126.9780, 37.5665),
+                                new RouteCoordinate(126.9770, 37.5796)
+                        )
+                )
+        );
+
+        assertTrue(exception.getMessage().contains("일일 호출 예산"));
     }
 }

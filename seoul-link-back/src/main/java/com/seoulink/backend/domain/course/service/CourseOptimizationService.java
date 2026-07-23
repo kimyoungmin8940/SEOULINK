@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -58,6 +59,220 @@ public class CourseOptimizationService {
      * @return 방문 순서, 이동거리, 이동시간이 포함된 최적화 결과
      */
     public CourseOptimizeResponse optimize(CourseOptimizeRequest request) {
+        return optimize(request, Map.of(), true, false);
+    }
+
+    /**
+     * 추천 옵션별로 날짜마다 다른 출발 장소를 우선 적용해 코스를 최적화한다.
+     * 지정한 장소가 해당 날짜 후보에 없으면 기존의 추천 점수 우선 규칙으로 돌아간다.
+     */
+    CourseOptimizeResponse optimize(
+            CourseOptimizeRequest request,
+            Map<LocalDate, Long> preferredFirstPlaceIdsByDate
+    ) {
+        return optimize(
+                request,
+                preferredFirstPlaceIdsByDate,
+                true,
+                false
+        );
+    }
+
+    /**
+     * 추천 코스 세 가지를 만드는 동안에는 외부 경로 API를 호출하지 않는다.
+     * 카드에 표시되는 DAY의 실제 인접 구간은 별도 요청으로 조회한다.
+     */
+    CourseOptimizeResponse optimizeForRecommendation(
+            CourseOptimizeRequest request,
+            Map<LocalDate, Long> preferredFirstPlaceIdsByDate
+    ) {
+        return optimize(
+                request,
+                preferredFirstPlaceIdsByDate,
+                false,
+                true
+        );
+    }
+
+    /**
+     * 일반 장소의 순서 최적화가 끝난 뒤 마지막 여행일을 제외한 날짜 끝에
+     * 같은 숙소를 고정 삽입한다.
+     *
+     * <p>추천 생성 중 외부 경로 API를 호출하지 않는 정책을 유지하기 위해 마지막 장소에서
+     * 숙소까지의 구간은 추정 행렬로만 계산한다. 카드에 표시된 DAY를 조회할 때 기존
+     * {@code /route-details} 흐름이 이 구간까지 실제 경로로 보정한다.</p>
+     */
+    CourseOptimizeResponse appendFixedHotelBeforeFinalDayForRecommendation(
+            CourseOptimizeResponse optimized,
+            PlaceCandidateDto hotelCandidate
+    ) {
+        if (optimized == null
+                || hotelCandidate == null
+                || optimized.getOptimizedPlaces() == null
+                || optimized.getOptimizedPlaces().isEmpty()) {
+            return optimized;
+        }
+
+        TransportMode transportMode = optimized.getTransportMode();
+        if (transportMode == null) {
+            throw new IllegalArgumentException("이동수단은 필수입니다.");
+        }
+
+        Map<LocalDate, List<OptimizedPlaceDto>> placesByDate = new TreeMap<>();
+        for (OptimizedPlaceDto place : optimized.getOptimizedPlaces()) {
+            placesByDate
+                    .computeIfAbsent(
+                            place.getVisitDate(),
+                            ignored -> new ArrayList<>()
+                    )
+                    .add(place);
+        }
+
+        List<OptimizedPlaceDto> withHotels =
+                new ArrayList<>(optimized.getOptimizedPlaces());
+        boolean appended = false;
+        LocalDate finalVisitDate = placesByDate.keySet().stream()
+                .max(Comparator.naturalOrder())
+                .orElseThrow();
+
+        for (Map.Entry<LocalDate, List<OptimizedPlaceDto>> entry
+                : placesByDate.entrySet()) {
+            // 마지막 날은 여행 종료일이므로 숙박 장소를 추가하지 않는다.
+            if (entry.getKey().equals(finalVisitDate)) {
+                continue;
+            }
+            List<OptimizedPlaceDto> dailyPlaces = entry.getValue();
+            boolean alreadyContainsHotel = dailyPlaces.stream()
+                    .anyMatch(place -> hotelCandidate.getPlaceId().equals(
+                            place.getPlaceId()
+                    ));
+            if (alreadyContainsHotel) {
+                continue;
+            }
+
+            OptimizedPlaceDto lastPlace = dailyPlaces.stream()
+                    .max(Comparator.comparing(OptimizedPlaceDto::getVisitOrder))
+                    .orElseThrow();
+            PlaceCandidateDto datedHotel = copyCandidateForDate(
+                    hotelCandidate,
+                    entry.getKey()
+            );
+            List<PlaceCandidateDto> legCandidates = List.of(
+                    toCandidate(lastPlace),
+                    datedHotel
+            );
+            RouteMatrix routeMatrix =
+                    distanceService.calculateCandidatePoolMatrix(
+                            legCandidates,
+                            transportMode
+                    );
+
+            withHotels.add(toOptimizedPlace(
+                    datedHotel,
+                    lastPlace.getVisitOrder() + 1,
+                    routeMatrix.getDistanceKm(0, 1),
+                    routeMatrix.getTravelTimeMinutes(0, 1),
+                    routeMatrix.getTransitPathType(0, 1),
+                    routeMatrix.isEstimated(0, 1)
+            ));
+            appended = true;
+        }
+
+        if (!appended) {
+            return optimized;
+        }
+
+        withHotels.sort(Comparator
+                .comparing(OptimizedPlaceDto::getVisitDate)
+                .thenComparing(OptimizedPlaceDto::getVisitOrder));
+        double totalDistanceKm = withHotels.stream()
+                .mapToDouble(place -> place.getDistanceFromPreviousKm() == null
+                        ? 0.0
+                        : place.getDistanceFromPreviousKm())
+                .sum();
+        double totalTravelTimeMinutes = withHotels.stream()
+                .mapToDouble(place -> place.getTravelTimeFromPreviousMinutes() == null
+                        ? 0.0
+                        : place.getTravelTimeFromPreviousMinutes())
+                .sum();
+        int totalVisitTimeMinutes = withHotels.stream()
+                .mapToInt(place -> place.getExpectedVisitMinutes() == null
+                        ? 0
+                        : place.getExpectedVisitMinutes())
+                .sum();
+        boolean estimatedTravelTimes = withHotels.stream()
+                .anyMatch(place -> Boolean.TRUE.equals(place.getRouteEstimated()));
+
+        return CourseOptimizeResponse.builder()
+                .transportMode(transportMode)
+                .estimatedTravelTimes(estimatedTravelTimes)
+                .optimizedPlaces(withHotels)
+                .totalDistanceKm(totalDistanceKm)
+                .totalTravelTimeMinutes(totalTravelTimeMinutes)
+                .totalVisitTimeMinutes(totalVisitTimeMinutes)
+                .totalCourseTimeMinutes(
+                        totalVisitTimeMinutes + totalTravelTimeMinutes
+                )
+                .build();
+    }
+
+    private PlaceCandidateDto copyCandidateForDate(
+            PlaceCandidateDto source,
+            LocalDate visitDate
+    ) {
+        return PlaceCandidateDto.builder()
+                .placeId(source.getPlaceId())
+                .placeName(source.getPlaceName())
+                .category(source.getCategory())
+                .address(source.getAddress())
+                .roadAddress(source.getRoadAddress())
+                .imageUrl(source.getImageUrl())
+                .recommendationScore(source.getRecommendationScore())
+                .latitude(source.getLatitude())
+                .longitude(source.getLongitude())
+                .visitDate(visitDate)
+                .themePalaceCultureYn(source.getThemePalaceCultureYn())
+                .themeNatureHangangYn(source.getThemeNatureHangangYn())
+                .themeDateYn(source.getThemeDateYn())
+                .themeFoodTourYn(source.getThemeFoodTourYn())
+                .themeCafeTourYn(source.getThemeCafeTourYn())
+                .themeShoppingHotplaceYn(source.getThemeShoppingHotplaceYn())
+                .themeNightViewYn(source.getThemeNightViewYn())
+                .themeHotelStayYn(source.getThemeHotelStayYn())
+                .alternativeCandidates(List.of())
+                .build();
+    }
+
+    private PlaceCandidateDto toCandidate(OptimizedPlaceDto source) {
+        return PlaceCandidateDto.builder()
+                .placeId(source.getPlaceId())
+                .placeName(source.getPlaceName())
+                .category(source.getCategory())
+                .address(source.getAddress())
+                .roadAddress(source.getRoadAddress())
+                .imageUrl(source.getImageUrl())
+                .recommendationScore(source.getRecommendationScore())
+                .latitude(source.getLatitude())
+                .longitude(source.getLongitude())
+                .visitDate(source.getVisitDate())
+                .themePalaceCultureYn(source.getThemePalaceCultureYn())
+                .themeNatureHangangYn(source.getThemeNatureHangangYn())
+                .themeDateYn(source.getThemeDateYn())
+                .themeFoodTourYn(source.getThemeFoodTourYn())
+                .themeCafeTourYn(source.getThemeCafeTourYn())
+                .themeShoppingHotplaceYn(source.getThemeShoppingHotplaceYn())
+                .themeNightViewYn(source.getThemeNightViewYn())
+                .themeHotelStayYn(source.getThemeHotelStayYn())
+                .alternativeCandidates(List.of())
+                .build();
+    }
+
+    private CourseOptimizeResponse optimize(
+            CourseOptimizeRequest request,
+            Map<LocalDate, Long> preferredFirstPlaceIdsByDate,
+            boolean resolveActualRouteLegs,
+            boolean estimateCandidatePool
+    ) {
         if (request == null) {
             throw new IllegalArgumentException("코스 최적화 요청은 null일 수 없습니다.");
         }
@@ -93,7 +308,13 @@ public class CourseOptimizationService {
                 .sum() + legacyAlternatives.size();
 
         if (alternativeCount == 0) {
-            return optimizeCandidates(currentCandidates, transportMode);
+            return optimizeCandidates(
+                    currentCandidates,
+                    transportMode,
+                    preferredFirstPlaceIdsByDate,
+                    resolveActualRouteLegs,
+                    estimateCandidatePool
+            );
         }
 
         // 원래 코스 장소와 이미 소비한 대체 후보가 다시 들어가지 않도록 ID를 추적한다.
@@ -109,7 +330,10 @@ public class CourseOptimizationService {
         for (int attempt = 0; attempt < alternativeCount; attempt++) {
             CourseOptimizeResponse optimized = optimizeCandidates(
                     currentCandidates,
-                    transportMode
+                    transportMode,
+                    preferredFirstPlaceIdsByDate,
+                    false,
+                    estimateCandidatePool
             );
             Replacement replacement = findReplacement(
                     optimized,
@@ -119,11 +343,18 @@ public class CourseOptimizationService {
                     originalPlaceIds,
                     currentCoursePlaceIds,
                     consumedAlternativeIds,
-                    transportMode
+                    transportMode,
+                    estimateCandidatePool
             );
 
             if (replacement == null) {
-                return optimized;
+                return optimizeCandidates(
+                        currentCandidates,
+                        transportMode,
+                        preferredFirstPlaceIdsByDate,
+                        resolveActualRouteLegs,
+                        estimateCandidatePool
+                );
             }
 
             Long distantPlaceId = replacement.distantPlace().getPlaceId();
@@ -146,13 +377,137 @@ public class CourseOptimizationService {
             consumedAlternativeIds.add(alternativePlaceId);
         }
 
-        return optimizeCandidates(currentCandidates, transportMode);
+        return optimizeCandidates(
+                currentCandidates,
+                transportMode,
+                preferredFirstPlaceIdsByDate,
+                resolveActualRouteLegs,
+                estimateCandidatePool
+        );
+    }
+
+    /**
+     * 프런트가 전달한 방문 순서를 바꾸지 않고 화면에 필요한 실제 인접 구간만 조회한다.
+     *
+     * <p>추천 카드에 한 DAY를 표시할 때 사용한다. 후보 재선정·최근접 경로
+     * 계산을 다시 하지 않으므로 ODsay 호출 수는 정확히 {@code 장소 수 - 1} 이하이다.</p>
+     */
+    public CourseOptimizeResponse resolveFixedRouteDetails(
+            CourseOptimizeRequest request
+    ) {
+        if (request == null) {
+            throw new IllegalArgumentException("경로 상세 요청은 null일 수 없습니다.");
+        }
+        TransportMode transportMode = request.getTransportMode();
+        if (transportMode == null) {
+            throw new IllegalArgumentException("이동수단은 필수입니다.");
+        }
+
+        List<PlaceCandidateDto> requestedCandidates =
+                request.getPlaceCandidates();
+        if (requestedCandidates == null || requestedCandidates.isEmpty()) {
+            return CourseOptimizeResponse.builder()
+                    .transportMode(transportMode)
+                    .estimatedTravelTimes(false)
+                    .optimizedPlaces(new ArrayList<>())
+                    .totalDistanceKm(0.0)
+                    .totalTravelTimeMinutes(0.0)
+                    .totalVisitTimeMinutes(0)
+                    .totalCourseTimeMinutes(0.0)
+                    .build();
+        }
+
+        List<PlaceCandidateDto> candidates =
+                validateAndRemoveDuplicates(requestedCandidates);
+        Map<LocalDate, List<PlaceCandidateDto>> candidatesByDate =
+                new LinkedHashMap<>();
+        for (PlaceCandidateDto candidate : candidates) {
+            candidatesByDate
+                    .computeIfAbsent(
+                            candidate.getVisitDate(),
+                            ignored -> new ArrayList<>()
+                    )
+                    .add(candidate);
+        }
+
+        List<OptimizedPlaceDto> optimizedPlaces = new ArrayList<>();
+        double totalDistanceKm = 0.0;
+        double totalTravelTimeMinutes = 0.0;
+        boolean estimatedTravelTimes = false;
+
+        for (List<PlaceCandidateDto> dailyCandidates
+                : candidatesByDate.values()) {
+            List<Integer> routeIndexes = createIndexes(
+                    dailyCandidates.size()
+            );
+            RouteMatrix routeMatrix =
+                    distanceService.calculateRouteLegMatrix(
+                            dailyCandidates,
+                            transportMode,
+                            routeIndexes
+                    );
+
+            for (int index = 0; index < dailyCandidates.size(); index++) {
+                double distanceFromPreviousKm = 0.0;
+                double travelTimeFromPreviousMinutes = 0.0;
+                TransitPathType transitPathType = null;
+                boolean routeEstimated = false;
+
+                if (index > 0) {
+                    distanceFromPreviousKm =
+                            routeMatrix.getDistanceKm(index - 1, index);
+                    travelTimeFromPreviousMinutes =
+                            routeMatrix.getTravelTimeMinutes(
+                                    index - 1,
+                                    index
+                            );
+                    transitPathType = routeMatrix.getTransitPathType(
+                            index - 1,
+                            index
+                    );
+                    routeEstimated = routeMatrix.isEstimated(
+                            index - 1,
+                            index
+                    );
+                    estimatedTravelTimes |= routeEstimated;
+                }
+
+                totalDistanceKm += distanceFromPreviousKm;
+                totalTravelTimeMinutes += travelTimeFromPreviousMinutes;
+                optimizedPlaces.add(toOptimizedPlace(
+                        dailyCandidates.get(index),
+                        index + 1,
+                        distanceFromPreviousKm,
+                        travelTimeFromPreviousMinutes,
+                        transitPathType,
+                        routeEstimated
+                ));
+            }
+        }
+
+        int totalVisitTimeMinutes = optimizedPlaces.stream()
+                .mapToInt(OptimizedPlaceDto::getExpectedVisitMinutes)
+                .sum();
+        return CourseOptimizeResponse.builder()
+                .transportMode(transportMode)
+                .estimatedTravelTimes(estimatedTravelTimes)
+                .optimizedPlaces(optimizedPlaces)
+                .totalDistanceKm(totalDistanceKm)
+                .totalTravelTimeMinutes(totalTravelTimeMinutes)
+                .totalVisitTimeMinutes(totalVisitTimeMinutes)
+                .totalCourseTimeMinutes(
+                        totalVisitTimeMinutes + totalTravelTimeMinutes
+                )
+                .build();
     }
 
     /** 교체가 반영된 후보 목록을 날짜별 방문 순서로 정렬하고 합계를 다시 계산한다. */
     private CourseOptimizeResponse optimizeCandidates(
             List<PlaceCandidateDto> candidates,
-            TransportMode transportMode
+            TransportMode transportMode,
+            Map<LocalDate, Long> preferredFirstPlaceIdsByDate,
+            boolean resolveActualRouteLegs,
+            boolean estimateCandidatePool
     ) {
 
         // 중복을 먼저 제거한 뒤 TreeMap으로 날짜가 빠른 일정부터 처리한다.
@@ -169,16 +524,41 @@ public class CourseOptimizationService {
         boolean estimatedTravelTimes = false;
 
         // 하루마다 이동 행렬을 한 번 계산하고 최근접 이웃 + 2-opt로 경로를 만든다.
-        for (List<PlaceCandidateDto> dailyCandidates : candidatesByDate.values()) {
-            RouteMatrix routeMatrix = distanceService.calculateRouteMatrix(
-                    dailyCandidates,
-                    transportMode
-            );
+        for (Map.Entry<LocalDate, List<PlaceCandidateDto>> entry
+                : candidatesByDate.entrySet()) {
+            List<PlaceCandidateDto> dailyCandidates = entry.getValue();
+            // 추천 생성과 대중교통은 후보 전체 쌍의 외부 호출을 피하기 위해
+            // 추정 행렬로 방문 순서와 대체 여부를 먼저 결정한다.
+            boolean useEstimatedCandidateMatrix =
+                    estimateCandidatePool
+                            || transportMode == TransportMode.PUBLIC_TRANSIT;
+            RouteMatrix routeMatrix =
+                    useEstimatedCandidateMatrix
+                            ? distanceService.calculateCandidatePoolMatrix(
+                                    dailyCandidates,
+                                    transportMode
+                            )
+                            : distanceService.calculateRouteMatrix(
+                                    dailyCandidates,
+                                    transportMode
+                            );
             List<Integer> routeIndexes = createNearestNeighborRoute(
                     dailyCandidates,
-                    routeMatrix
+                    routeMatrix,
+                    preferredFirstPlaceIdsByDate == null
+                            ? null
+                            : preferredFirstPlaceIdsByDate.get(entry.getKey())
             );
             routeIndexes = improveRouteWithTwoOpt(routeIndexes, routeMatrix);
+            RouteMatrix resultRouteMatrix =
+                    resolveActualRouteLegs
+                            && useEstimatedCandidateMatrix
+                    ? distanceService.calculateRouteLegMatrix(
+                            dailyCandidates,
+                            transportMode,
+                            routeIndexes
+                    )
+                    : routeMatrix;
 
             // 2-opt가 끝난 최종 순서를 기준으로 장소별 이동값과 전체 합계를 계산한다.
             for (int routePosition = 0; routePosition < routeIndexes.size(); routePosition++) {
@@ -186,21 +566,29 @@ public class CourseOptimizationService {
                 double distanceFromPreviousKm = 0.0;
                 double travelTimeFromPreviousMinutes = 0.0;
                 TransitPathType transitPathType = null;
+                boolean routeEstimated = false;
                 if (routePosition > 0) {
                     int previousIndex = routeIndexes.get(routePosition - 1);
                     distanceFromPreviousKm =
-                            routeMatrix.getDistanceKm(previousIndex, currentIndex);
+                            resultRouteMatrix.getDistanceKm(
+                                    previousIndex,
+                                    currentIndex
+                            );
                     travelTimeFromPreviousMinutes =
-                            routeMatrix.getTravelTimeMinutes(previousIndex, currentIndex);
+                            resultRouteMatrix.getTravelTimeMinutes(
+                                    previousIndex,
+                                    currentIndex
+                            );
                     // 이전→현재 방향의 ODsay 경로 종류를 현재 장소의 이동 정보로 귀속한다.
-                    transitPathType = routeMatrix.getTransitPathType(
+                    transitPathType = resultRouteMatrix.getTransitPathType(
                             previousIndex,
                             currentIndex
                     );
-                    estimatedTravelTimes |= routeMatrix.isEstimated(
+                    routeEstimated = resultRouteMatrix.isEstimated(
                             previousIndex,
                             currentIndex
                     );
+                    estimatedTravelTimes |= routeEstimated;
                 }
 
                 totalDistanceKm += distanceFromPreviousKm;
@@ -210,7 +598,8 @@ public class CourseOptimizationService {
                         routePosition + 1,
                         distanceFromPreviousKm,
                         travelTimeFromPreviousMinutes,
-                        transitPathType
+                        transitPathType,
+                        routeEstimated
                 ));
             }
         }
@@ -236,11 +625,15 @@ public class CourseOptimizationService {
     /** 추천 점수가 가장 높은 첫 장소에서 시작하는 최근접 이웃 초기 경로를 만든다. */
     private List<Integer> createNearestNeighborRoute(
             List<PlaceCandidateDto> candidates,
-            RouteMatrix routeMatrix
+            RouteMatrix routeMatrix,
+            Long preferredFirstPlaceId
     ) {
         List<Integer> remainingIndexes = createIndexes(candidates.size());
         List<Integer> routeIndexes = new ArrayList<>(candidates.size());
-        int currentIndex = selectFirstPlaceIndex(candidates);
+        int currentIndex = selectFirstPlaceIndex(
+                candidates,
+                preferredFirstPlaceId
+        );
         routeIndexes.add(currentIndex);
         remainingIndexes.remove(Integer.valueOf(currentIndex));
 
@@ -362,7 +755,8 @@ public class CourseOptimizationService {
             Set<Long> originalPlaceIds,
             Set<Long> currentCoursePlaceIds,
             Set<Long> consumedAlternativeIds,
-            TransportMode transportMode
+            TransportMode transportMode,
+            boolean estimateCandidatePool
     ) {
         List<OptimizedPlaceDto> optimizedPlaces = optimized.getOptimizedPlaces();
 
@@ -399,7 +793,8 @@ public class CourseOptimizationService {
                     originalPlaceIds,
                     currentCoursePlaceIds,
                     consumedAlternativeIds,
-                    transportMode
+                    transportMode,
+                    estimateCandidatePool
             );
 
             if (alternative != null) {
@@ -456,7 +851,8 @@ public class CourseOptimizationService {
             Set<Long> originalPlaceIds,
             Set<Long> currentCoursePlaceIds,
             Set<Long> consumedAlternativeIds,
-            TransportMode transportMode
+            TransportMode transportMode,
+            boolean estimateCandidatePool
     ) {
         List<PlaceCandidateDto> eligibleAlternatives = alternatives.stream()
                 .filter(alternative -> alternative.getVisitDate().equals(
@@ -478,10 +874,19 @@ public class CourseOptimizationService {
         List<PlaceCandidateDto> matrixCandidates = new ArrayList<>();
         matrixCandidates.add(previousPlace);
         matrixCandidates.addAll(eligibleAlternatives);
-        RouteMatrix routeMatrix = distanceService.calculateRouteMatrix(
-                matrixCandidates,
-                transportMode
-        );
+        boolean useEstimatedCandidateMatrix =
+                estimateCandidatePool
+                        || transportMode == TransportMode.PUBLIC_TRANSIT;
+        RouteMatrix routeMatrix =
+                useEstimatedCandidateMatrix
+                        ? distanceService.calculateCandidatePoolMatrix(
+                                matrixCandidates,
+                                transportMode
+                        )
+                        : distanceService.calculateRouteMatrix(
+                                matrixCandidates,
+                                transportMode
+                        );
 
         int selectedMatrixIndex = -1;
         double shortestTravelTimeMinutes = Double.MAX_VALUE;
@@ -695,7 +1100,18 @@ public class CourseOptimizationService {
     }
 
     /** 하루의 출발 장소를 추천 점수 우선, 장소 ID 보조 기준으로 결정한다. */
-    private int selectFirstPlaceIndex(List<PlaceCandidateDto> candidates) {
+    private int selectFirstPlaceIndex(
+            List<PlaceCandidateDto> candidates,
+            Long preferredFirstPlaceId
+    ) {
+        if (preferredFirstPlaceId != null) {
+            for (int index = 0; index < candidates.size(); index++) {
+                if (preferredFirstPlaceId.equals(candidates.get(index).getPlaceId())) {
+                    return index;
+                }
+            }
+        }
+
         int firstIndex = 0;
 
         for (int index = 1; index < candidates.size(); index++) {
@@ -768,7 +1184,8 @@ public class CourseOptimizationService {
             int visitOrder,
             double distanceFromPreviousKm,
             double travelTimeFromPreviousMinutes,
-            TransitPathType transitPathType
+            TransitPathType transitPathType,
+            boolean routeEstimated
     ) {
         return OptimizedPlaceDto.builder()
                 .placeId(candidate.getPlaceId())
@@ -798,6 +1215,7 @@ public class CourseOptimizationService {
                 .distanceFromPreviousKm(distanceFromPreviousKm)
                 .travelTimeFromPreviousMinutes(travelTimeFromPreviousMinutes)
                 .transitPathType(transitPathType)
+                .routeEstimated(routeEstimated)
                 .build();
     }
 

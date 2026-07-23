@@ -19,6 +19,7 @@ public class CourseSavePlaceDto {
 
     // 장소 식별자와 날짜별 방문 순서이다.
     private Long placeId;
+    private String category;
     private LocalDate visitDate;
     private Integer visitOrder;
     private String visitTime;
@@ -29,4 +30,5 @@ public class CourseSavePlaceDto {
     private Double distanceFromPreviousKm;
     private Double travelTimeFromPreviousMinutes;
     private TransitPathType transitPathType;
+    private Boolean routeEstimated;
 }

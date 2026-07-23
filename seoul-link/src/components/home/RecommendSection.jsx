@@ -10,8 +10,6 @@ import {
     getCourseId,
     getCurrentMemberId,
     normalizeRecommendedCourseList,
-    readRecommendedCourseCache,
-    writeRecommendedCourseCache,
 } from '../../utils/courseHistory';
 
 import { mockThemeCourseListResponse } from '../../mocks/homeMockData';
@@ -26,11 +24,7 @@ const fallbackImages = [hanokImage, sunsetImage, rainyCafeImage, walkingImage];
 function RecommendSection() {
     const isLoggedIn = checkIsLoggedIn();
     const memberId = useMemo(() => getCurrentMemberId(), []);
-    const [myRecommendedCourses, setMyRecommendedCourses] = useState(() => (
-        normalizeRecommendedCourseList(readRecommendedCourseCache(), {
-            fallbackImages,
-        })
-    ));
+    const [myRecommendedCourses, setMyRecommendedCourses] = useState([]);
 
     // 백엔드의 설문 기반 저장 코스 이력을 최신순으로 받아 메인에는 앞의 4개만 표시합니다.
     useEffect(() => {
@@ -41,16 +35,15 @@ function RecommendSection() {
         getRecommendedCourses(memberId, { signal: controller.signal })
             .then((response) => {
                 const courses = normalizeRecommendedCourseList(response, {
-                    cachedCourses: readRecommendedCourseCache(),
                     fallbackImages,
                 });
 
                 setMyRecommendedCourses(courses);
-                writeRecommendedCourseCache(courses);
             })
             .catch((error) => {
                 if (error?.name === 'AbortError') return;
-                // 메인 화면 전체를 막지 않고 직전에 확인한 추천 카드 또는 테마 카드를 유지합니다.
+                // 메인 화면 전체를 막지 않고 기본 인기 테마 카드를 유지합니다.
+                setMyRecommendedCourses([]);
             });
 
         return () => controller.abort();

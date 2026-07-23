@@ -38,6 +38,10 @@ public class PlaceRecommendationService {
     // 여행 코드 한 글자와 장소의 성향 태그가 일치할 때 얻는 점수
     // 5개 성향이 모두 일치하면 18점 * 5개 = 90점이다.
     private static final double CODE_MATCH_SCORE = 18.0;
+    private static final double MAX_COMPANION_BONUS = 10.0;
+    private static final double DISPLAY_SCORE_MIN = 70.0;
+    private static final double DISPLAY_SCORE_MAX = 95.0;
+    private static final double EQUAL_SCORE_DISPLAY_VALUE = 85.0;
 
     // 역할 1이 카테고리별 목표 개수를 정할 수 있도록 대표 후보에 기본 장소 종류를 고르게 포함한다.
     private static final List<String> SUPPORTED_CATEGORIES = List.of(
@@ -63,7 +67,7 @@ public class PlaceRecommendationService {
      * 5. 대표 장소마다 겹치지 않는 대체 후보를 붙인다.
      */
     public PlaceRecommendationListResponse recommend(String travelCode, Integer limit, Integer alternativeLimit) {
-        return recommend(travelCode, null, limit, null, alternativeLimit);
+        return recommend(travelCode, null, limit, null, alternativeLimit, null);
     }
 
     /**
@@ -78,9 +82,32 @@ public class PlaceRecommendationService {
             Integer limitPerCategory,
             Integer alternativeLimit
     ) {
+        return recommend(
+                travelCode,
+                region,
+                limit,
+                limitPerCategory,
+                alternativeLimit,
+                null
+        );
+    }
+
+    /**
+     * 여행 코드와 동행 유형을 함께 반영하는 코스 후보용 추천 진입점이다.
+     * 동행 유형은 장소 순위에만 영향을 주며 최종 화면 점수는 70~95 범위로 보정한다.
+     */
+    public PlaceRecommendationListResponse recommend(
+            String travelCode,
+            String region,
+            Integer limit,
+            Integer limitPerCategory,
+            Integer alternativeLimit,
+            String companionType
+    ) {
         // 예: " atbsp " -> "ATBSP"
         String normalizedTravelCode = normalizeTravelCode(travelCode);
         String normalizedRegion = normalizeRegion(region);
+        String normalizedCompanionType = normalizeCompanionType(companionType);
 
         // limit 값이 없거나 0 이하이면 기본값을 사용하고, 최대 50개까지만 허용한다.
         int resolvedLimit = resolveLimit(limit, DEFAULT_LIMIT);
@@ -88,17 +115,25 @@ public class PlaceRecommendationService {
         int resolvedAlternativeLimit = resolveLimit(alternativeLimit, DEFAULT_ALTERNATIVE_LIMIT);
 
         // 추천 대상으로 사용하도록 설정된 활성 장소만 가져온다.
-        List<ScoredPlace> scoredPlaces = findActivePlaces(normalizedRegion)
+        List<ScoredPlace> rawScoredPlaces = findActivePlaces(normalizedRegion)
                 .stream()
 
                 // Place와 계산된 점수를 한 쌍으로 묶는다.
                 // DB의 PLACES 테이블에 사용자별 점수를 저장하지 않고 요청할 때마다 계산한다.
-                .map(place -> scorePlace(place, normalizedTravelCode))
+                .map(place -> scorePlace(
+                        place,
+                        normalizedTravelCode,
+                        normalizedCompanionType
+                ))
 
                 // 평점이 높더라도 여행 코드 태그가 하나도 맞지 않으면 추천 대상에서 제외한다.
                 .filter(scoredPlace -> scoredPlace.preferenceScore() > 0)
 
-                // 추천 점수 -> 평점 -> 리뷰 수 -> placeId 순서로 정렬한다.
+                .toList();
+
+        // 순위 계산값은 유지하면서 화면에 보이는 점수만 70~95 범위로 정규화한다.
+        List<ScoredPlace> scoredPlaces = normalizeDisplayScores(rawScoredPlaces)
+                .stream()
                 .sorted(scoreComparator())
                 .toList();
 
@@ -170,25 +205,126 @@ public class PlaceRecommendationService {
      * - 여행 코드 일치 점수: 최대 90점 (18점 * 5글자)
      * - 평점 보너스: 최대 6점
      * - 리뷰 보너스: 최대 4점
-     * - 최종 점수: 최대 100점
+     * - 동행 유형 보너스: 최대 10점
+     * - 정렬용 원점수: 최대 110점
      *
-     * 예: 코드 4개 일치 72점 + 평점 보너스 5.64점 + 리뷰 보너스 3.54점
-     *     = 81.18점 -> 소수점 첫째 자리로 반올림하여 81.2점
+     * <p>정렬용 원점수는 그대로 순위 결정에 사용하고, API로 반환할 때만
+     * 후보 풀의 최저·최고 점수를 기준으로 70~95 범위에 선형 변환한다.</p>
      */
-    private ScoredPlace scorePlace(Place place, String travelCode) {
+    private ScoredPlace scorePlace(
+            Place place,
+            String travelCode,
+            String companionType
+    ) {
         double preferenceScore = calculatePreferenceScore(place, travelCode);
         double score = preferenceScore;
 
         // 취향 코드 점수 외에 장소 자체의 신뢰도 지표를 보너스로 더한다.
         score += calculateRatingBonus(place);
         score += calculateReviewBonus(place);
+        score += calculateCompanionBonus(place, companionType);
 
-        // 100점을 넘으면 100점으로 제한하고 소수점 첫째 자리로 반올림한다.
+        // 이 값은 정렬용 원점수이며 화면 반환 직전에 70~95 범위로 보정한다.
         return new ScoredPlace(
                 place,
-                roundOneDecimal(Math.min(score, 100.0)),
+                score,
                 preferenceScore
         );
+    }
+
+    /**
+     * 후보 풀의 최소·최대 원점수를 70~95에 선형 대응한다.
+     * 단조 증가 변환이므로 기존 취향·동행 가중치로 정한 순서는 바뀌지 않는다.
+     */
+    private List<ScoredPlace> normalizeDisplayScores(
+            List<ScoredPlace> rawScoredPlaces
+    ) {
+        if (rawScoredPlaces.isEmpty()) {
+            return List.of();
+        }
+
+        double minimum = rawScoredPlaces.stream()
+                .mapToDouble(ScoredPlace::score)
+                .min()
+                .orElse(0.0);
+        double maximum = rawScoredPlaces.stream()
+                .mapToDouble(ScoredPlace::score)
+                .max()
+                .orElse(0.0);
+
+        return rawScoredPlaces.stream()
+                .map(scoredPlace -> new ScoredPlace(
+                        scoredPlace.place(),
+                        normalizeDisplayScore(
+                                scoredPlace.score(),
+                                minimum,
+                                maximum
+                        ),
+                        scoredPlace.preferenceScore()
+                ))
+                .toList();
+    }
+
+    private double normalizeDisplayScore(
+            double rawScore,
+            double minimum,
+            double maximum
+    ) {
+        if (Math.abs(maximum - minimum) < 0.000000001) {
+            return EQUAL_SCORE_DISPLAY_VALUE;
+        }
+        double normalized = DISPLAY_SCORE_MIN
+                + (rawScore - minimum)
+                / (maximum - minimum)
+                * (DISPLAY_SCORE_MAX - DISPLAY_SCORE_MIN);
+        return roundOneDecimal(Math.max(
+                DISPLAY_SCORE_MIN,
+                Math.min(DISPLAY_SCORE_MAX, normalized)
+        ));
+    }
+
+    /**
+     * 동행 유형별로 실제 서비스 테마와 장소 성향 태그를 가중한다.
+     * 여러 조건이 겹쳐도 취향 코드보다 영향이 커지지 않도록 최대 10점으로 제한한다.
+     */
+    private double calculateCompanionBonus(
+            Place place,
+            String companionType
+    ) {
+        if (companionType == null) {
+            return 0.0;
+        }
+
+        double bonus = switch (companionType) {
+            case "SOLO" ->
+                    yesBonus(place.getTagStable(), 3.0)
+                            + yesBonus(place.getTagRelax(), 3.0)
+                            + yesBonus(place.getThemeNatureHangangYn(), 2.0)
+                            + yesBonus(place.getThemeCafeTourYn(), 1.0)
+                            + yesBonus(place.getThemePalaceCultureYn(), 1.0);
+            case "COUPLE" ->
+                    yesBonus(place.getThemeDateYn(), 7.0)
+                            + yesBonus(place.getThemeCafeTourYn(), 1.5)
+                            + yesBonus(place.getThemeNightViewYn(), 1.5)
+                            + yesBonus(place.getThemeNatureHangangYn(), 1.0);
+            case "FRIENDS" ->
+                    yesBonus(place.getThemeShoppingHotplaceYn(), 4.0)
+                            + yesBonus(place.getThemeFoodTourYn(), 3.0)
+                            + yesBonus(place.getThemeNightViewYn(), 2.0)
+                            + yesBonus(place.getTagDopamine(), 2.0);
+            case "FAMILY" ->
+                    yesBonus(place.getTagStable(), 4.0)
+                            + yesBonus(place.getThemePalaceCultureYn(), 3.0)
+                            + yesBonus(place.getThemeNatureHangangYn(), 2.0)
+                            + yesBonus(place.getTagRelax(), 1.0);
+            default -> 0.0;
+        };
+
+        return Math.min(MAX_COMPANION_BONUS, bonus);
+    }
+
+    private double yesBonus(String value, double bonus) {
+        return isYes(value) ? bonus : 0.0;
     }
 
     /**
@@ -397,6 +533,24 @@ public class PlaceRecommendationService {
         }
 
         return normalized;
+    }
+
+    /** 설문·화면에서 사용하는 동행 유형 영문값과 한글 별칭을 네 가지 표준값으로 맞춘다. */
+    private String normalizeCompanionType(String companionType) {
+        if (companionType == null || companionType.isBlank()) {
+            return null;
+        }
+
+        String normalized = companionType.trim().toUpperCase(Locale.ROOT);
+        return switch (normalized) {
+            case "SOLO", "ALONE", "혼자" -> "SOLO";
+            case "COUPLE", "연인", "커플" -> "COUPLE";
+            case "FRIENDS", "FRIEND", "친구" -> "FRIENDS";
+            case "FAMILY", "가족" -> "FAMILY";
+            default -> throw new IllegalArgumentException(
+                    "동행 유형은 SOLO, COUPLE, FRIENDS, FAMILY 중 하나여야 합니다."
+            );
+        };
     }
 
     // 요청 개수가 비어 있거나 0 이하이면 기본값, 50보다 크면 50을 반환한다.

@@ -101,7 +101,7 @@ function getThemeTags(option, places) {
         .slice(0, 4);
 }
 
-/** 접히기 전 카드에 표시하는 하루 동선의 간단한 장소 한 칸입니다. */
+/** 카드에 항상 표시하는 하루 동선의 장소명과 실제 경로 기준 도착 시각입니다. */
 function RouteStop({ place, fallbackImage, isLast }) {
     const meta = categoryMeta[place.category] || categoryMeta.TOUR;
     const Icon = meta.Icon;
@@ -144,16 +144,46 @@ function RouteStop({ place, fallbackImage, isLast }) {
     );
 }
 
-/** 상세보기 버튼을 눌렀을 때 모든 일차의 이동·체류 정보를 펼쳐 보여줍니다. */
-function ExpandedSchedule({ days, transportMode }) {
+/** 상세보기 버튼을 눌렀을 때 현재 일차의 이동·체류 정보를 펼쳐 보여줍니다. */
+function ExpandedSchedule({ days, transportMode, isRouteDetailsLoading }) {
+    const transport = getTransportMeta(transportMode);
+
     return (
         <div className="course-result-expanded">
-            {days.map((day) => (
-                <section className="course-result-expanded-day" key={`${day.dayNo}-${day.visitDate}`}>
+            {days.map((day) => {
+                const hasEstimatedLeg = (day.places || []).some(
+                    (place, index) => index > 0 && place.routeEstimated,
+                );
+                const routeDetailsUnavailable = day.routeDetailsAttempted
+                    && Boolean(day.routeDetailsError);
+
+                return (
+                    <section className="course-result-expanded-day" key={`${day.dayNo}-${day.visitDate}`}>
                     <div className="course-result-expanded-heading">
                         <span>DAY {day.dayNo}</span>
                         <strong>{day.visitDate || '날짜 미정'}</strong>
                     </div>
+
+                    {isRouteDetailsLoading && (
+                        <p className="course-route-detail-state loading" role="status">
+                            실제 {transport?.label || '이동'} 경로를 확인하고 있어요.
+                        </p>
+                    )}
+                    {!isRouteDetailsLoading && routeDetailsUnavailable && (
+                        <p className="course-route-detail-state unavailable" role="status">
+                            {transport?.label || '이동'} 경로를 일시적으로 확인할 수 없습니다.
+                            현재는 예상 거리와 시간으로 표시합니다.
+                        </p>
+                    )}
+                    {!isRouteDetailsLoading
+                        && !routeDetailsUnavailable
+                        && day.routeDetailsAttempted
+                        && hasEstimatedLeg
+                        && (
+                        <p className="course-route-detail-state unavailable" role="status">
+                            실제 경로를 받지 못한 일부 구간만 예상값으로 표시합니다.
+                        </p>
+                    )}
 
                     <ol>
                         {(day.places || []).map((place, index) => {
@@ -187,6 +217,11 @@ function ExpandedSchedule({ days, transportMode }) {
                                                 <span className="course-result-expanded-move-badge">
                                                     {legTransport?.label || '이동'}
                                                 </span>
+                                                {place.routeEstimated && (
+                                                    <span className="course-route-estimated-badge">
+                                                        예상
+                                                    </span>
+                                                )}
                                             </span>
                                         </span>
                                     )}
@@ -206,7 +241,8 @@ function ExpandedSchedule({ days, transportMode }) {
                         })}
                     </ol>
                 </section>
-            ))}
+                );
+            })}
         </div>
     );
 }
@@ -216,21 +252,24 @@ function CourseRecommendationCard({
     option,
     transportMode,
     fallbackImage,
+    activeDayNo,
     isEstimatedTravelTime,
     isCompared,
     isSelectedForSave,
     isSelectionDisabled,
     isSaving,
     isSaved,
+    isRouteDetailsLoading,
     onToggleCompare,
     onToggleSaveSelection,
     onFocusOption,
+    onActiveDayChange,
+    onRequestRouteDetails,
 }) {
     const days = useMemo(
         () => (Array.isArray(option.days) ? option.days : []),
         [option.days],
     );
-    const [activeDayNo, setActiveDayNo] = useState(days[0]?.dayNo ?? 1);
     // 북마크 API는 회원 기능 담당 범위이므로 연동 전까지 카드 안에서만 임시 토글합니다.
     const [isBookmarked, setIsBookmarked] = useState(false);
     const [isExpanded, setIsExpanded] = useState(false);
@@ -252,6 +291,19 @@ function CourseRecommendationCard({
         ?? days.reduce((sum, day) => sum + Number(day.dailyDistanceKm || 0), 0));
     const totalTravelTime = option.totalTravelTimeMinutes
         ?? days.reduce((sum, day) => sum + Number(day.dailyTravelTimeMinutes || 0), 0);
+    // 여러 날짜 코스는 현재 선택한 DAY의 값만 카드·지도·비교 패널에서 함께 사용합니다.
+    const displayCourseTime = days.length > 1
+        ? Number(activeDay.dailyCourseTimeMinutes || 0)
+        : totalCourseTime;
+    const displayDistance = days.length > 1
+        ? Number(activeDay.dailyDistanceKm || 0)
+        : totalDistance;
+    const displayTravelTime = days.length > 1
+        ? Number(activeDay.dailyTravelTimeMinutes || 0)
+        : totalTravelTime;
+    const displayPlaceCount = days.length > 1
+        ? (activeDay.places || []).length
+        : allPlaces.length;
 
     return (
         <article
@@ -306,15 +358,15 @@ function CourseRecommendationCard({
                     </p>
 
                     <div className="course-result-meta">
-                        <span><Clock3 size={15} aria-hidden="true" />{formatMinutes(totalCourseTime)}</span>
+                        <span><Clock3 size={15} aria-hidden="true" />{formatMinutes(displayCourseTime)}</span>
                         <span>
                             <CourseTransportIcon transportMode={transportMode} size={15} aria-hidden="true" />
-                            {transport ? `${transport.label} ${formatMinutes(totalTravelTime)}` : `이동 ${formatMinutes(totalTravelTime)}`}
+                            {transport ? `${transport.label} ${formatMinutes(displayTravelTime)}` : `이동 ${formatMinutes(displayTravelTime)}`}
                         </span>
-                        <span><MapPinned size={15} aria-hidden="true" />{totalDistance.toFixed(1)}km</span>
-                        <span><Route size={15} aria-hidden="true" />{allPlaces.length}곳 방문</span>
+                        <span><MapPinned size={15} aria-hidden="true" />{displayDistance.toFixed(1)}km</span>
+                        <span><Route size={15} aria-hidden="true" />{displayPlaceCount}곳 방문</span>
                         {days.length > 1 && (
-                            <span><CalendarDays size={15} aria-hidden="true" />{days.length}일 코스</span>
+                            <span><CalendarDays size={15} aria-hidden="true" />DAY {activeDay.dayNo} 기준</span>
                         )}
                     </div>
 
@@ -340,7 +392,16 @@ function CourseRecommendationCard({
                                     className={day.dayNo === activeDay.dayNo ? 'active' : ''}
                                     type="button"
                                     key={`${day.dayNo}-${day.visitDate}`}
-                                    onClick={() => setActiveDayNo(day.dayNo)}
+                                    onClick={() => {
+                                        onFocusOption(option);
+                                        onActiveDayChange(day.dayNo);
+                                        if (isExpanded) {
+                                            onRequestRouteDetails?.(
+                                                option,
+                                                day.dayNo,
+                                            );
+                                        }
+                                    }}
                                 >
                                     DAY {day.dayNo}
                                 </button>
@@ -365,9 +426,24 @@ function CourseRecommendationCard({
                         className="course-result-detail-btn"
                         type="button"
                         aria-expanded={isExpanded}
-                        onClick={() => setIsExpanded((previous) => !previous)}
+                        aria-busy={isRouteDetailsLoading}
+                        onClick={() => {
+                            const nextExpanded = !isExpanded;
+                            setIsExpanded(nextExpanded);
+                            onFocusOption(option);
+                            if (nextExpanded) {
+                                onRequestRouteDetails?.(
+                                    option,
+                                    activeDay.dayNo,
+                                );
+                            }
+                        }}
                     >
-                        {isExpanded ? '일정 접기' : '코스 상세보기'}
+                        {isRouteDetailsLoading
+                            ? '교통편 확인 중'
+                            : isExpanded
+                                ? '일정 접기'
+                                : '코스 상세보기'}
                         {isExpanded
                             ? <ChevronUp size={16} aria-hidden="true" />
                             : <ChevronDown size={16} aria-hidden="true" />}
@@ -416,7 +492,13 @@ function CourseRecommendationCard({
                 </div>
             </div>
 
-            {isExpanded && <ExpandedSchedule days={days} transportMode={transportMode} />}
+            {isExpanded && (
+                <ExpandedSchedule
+                    days={[activeDay]}
+                    transportMode={transportMode}
+                    isRouteDetailsLoading={isRouteDetailsLoading}
+                />
+            )}
         </article>
     );
 }

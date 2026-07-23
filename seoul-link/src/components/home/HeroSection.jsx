@@ -50,7 +50,7 @@ function HeroSection() {
 
                     <a
                         className="secondary-btn"
-                        href="/courses"
+                        href="/courses/recommendations"
                         onClick={(event) => handleProtectedLinkClick(event)}
                     >
                         <Map className="btn-icon secondary-icon" size={23} strokeWidth={2} />

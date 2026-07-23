@@ -18,8 +18,6 @@ import { getMyCourses } from '../../api/courseApi';
 import {
     getCurrentMemberId,
     normalizeMyCourseList,
-    readMyCourseCache,
-    writeMyCourseCache,
 } from '../../utils/courseHistory';
 import hanokImage from '../../assets/images/moods/mood-hanok-photo.png';
 import sunsetImage from '../../assets/images/moods/mood-sunset-seoul.png';
@@ -37,15 +35,11 @@ function getInitialPage() {
 
 function getInitialState() {
     const memberId = getCurrentMemberId();
-    const cachedCourses = memberId ? readMyCourseCache(memberId) : [];
-    const courses = normalizeMyCourseList(cachedCourses, { fallbackImages });
 
     return {
         memberId,
-        courses,
-        status: memberId
-            ? courses.length > 0 ? 'success' : 'loading'
-            : 'member-error',
+        courses: [],
+        status: memberId ? 'loading' : 'member-error',
     };
 }
 
@@ -178,24 +172,15 @@ function MyCoursesPage() {
         getMyCourses(initialState.memberId, { signal: controller.signal })
             .then((response) => {
                 const normalizedCourses = normalizeMyCourseList(response, {
-                    cachedCourses: readMyCourseCache(initialState.memberId),
                     fallbackImages,
                 });
 
                 setCourses(normalizedCourses);
                 setStatus(normalizedCourses.length > 0 ? 'success' : 'empty');
                 setErrorMessage('');
-                writeMyCourseCache(normalizedCourses, initialState.memberId);
             })
             .catch((error) => {
                 if (error?.name === 'AbortError') return;
-
-                if (initialState.courses.length > 0) {
-                    setCourses(initialState.courses);
-                    setStatus('success');
-                    setErrorMessage('서버 연결을 확인하면 최신 저장 목록으로 다시 갱신됩니다.');
-                    return;
-                }
 
                 setErrorMessage(error?.message || '내 코스 목록을 불러오지 못했습니다.');
                 setStatus('error');
@@ -249,12 +234,6 @@ function MyCoursesPage() {
                     </div>
                     {status === 'success' && <strong>총 {courses.length}개</strong>}
                 </section>
-
-                {errorMessage && status === 'success' && (
-                    <p className="my-courses-cache-notice" role="status">
-                        <Info size={15} aria-hidden="true" /> {errorMessage}
-                    </p>
-                )}
 
                 {status === 'loading' && (
                     <div className="my-courses-loading" aria-label="내 코스 목록을 불러오는 중">

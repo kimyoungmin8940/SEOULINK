@@ -77,7 +77,6 @@ class CourseSaveServiceTest {
                 .thenAnswer(invocation -> {
                     TravelCourse course = invocation.getArgument(0);
                     return TravelCourse.builder()
-                            .transportMode(TransportMode.WALKING)
                             .courseId(10L)
                             .title(course.getTitle())
                             .build();
@@ -92,7 +91,6 @@ class CourseSaveServiceTest {
 
         assertEquals(1L, course.getMemberId());
         assertEquals("ATLSR", course.getTravelCode());
-        assertEquals(TransportMode.WALKING, course.getTransportMode());
         assertEquals("SURVEY", course.getCourseType());
         assertEquals(0.267, course.getTotalDistanceKm(), 0.000001);
         assertEquals(3.56, course.getTotalTravelTimeMinutes(), 0.000001);
@@ -160,7 +158,6 @@ class CourseSaveServiceTest {
                 .thenReturn(TravelCourse.builder()
                         .courseId(30L)
                         .title("대중교통 서울 코스")
-                        .transportMode(TransportMode.PUBLIC_TRANSIT)
                         .build());
 
         courseSaveService.saveOptimizedCourse(request);
@@ -203,7 +200,6 @@ class CourseSaveServiceTest {
                 .thenAnswer(invocation -> {
                     TravelCourse course = invocation.getArgument(0);
                     return TravelCourse.builder()
-                            .transportMode(TransportMode.WALKING)
                             .courseId(sequence.getAndIncrement())
                             .title(course.getTitle())
                             .build();
@@ -315,6 +311,34 @@ class CourseSaveServiceTest {
     }
 
     @Test
+    @DisplayName("설문 추천 코스에 결과 ID가 없으면 저장하지 않는다")
+    void rejectSurveyCourseWithoutResultId() {
+        CourseSaveRequest request = CourseSaveRequest.builder()
+                .transportMode(TransportMode.WALKING)
+                .memberId(1L)
+                .title("설문 결과 없는 추천 코스")
+                .courseType("SURVEY")
+                .places(List.of(place(
+                        1L,
+                        LocalDate.of(2026, 7, 20),
+                        1,
+                        90,
+                        0.0,
+                        0.0
+                )))
+                .build();
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> courseSaveService.saveOptimizedCourse(request)
+        );
+
+        assertTrue(exception.getMessage().contains("설문 결과 ID"));
+        verify(travelCourseRepository, never()).save(any());
+        verify(courseDetailRepository, never()).saveAll(any());
+    }
+
+    @Test
     @DisplayName("복수 코스 저장 메서드도 하나의 트랜잭션으로 처리한다")
     void batchSaveMethodIsTransactional() throws NoSuchMethodException {
         boolean transactional = CourseSaveService.class
@@ -379,6 +403,71 @@ class CourseSaveServiceTest {
     }
 
     @Test
+    @DisplayName("같은 숙소는 서로 다른 날짜 마지막에 반복 저장할 수 있다")
+    void allowSameHotelOnDifferentDates() {
+        LocalDate firstDay = LocalDate.of(2026, 7, 20);
+        LocalDate secondDay = LocalDate.of(2026, 7, 21);
+        CourseSavePlaceDto firstHotel =
+                place(100L, firstDay, 2, 30, 1.0, 10.0);
+        firstHotel.setCategory("HOTEL");
+        CourseSavePlaceDto secondHotel =
+                place(100L, secondDay, 2, 30, 1.2, 12.0);
+        secondHotel.setCategory("HOTEL");
+        CourseSaveRequest request = CourseSaveRequest.builder()
+                .transportMode(TransportMode.WALKING)
+                .memberId(1L)
+                .title("같은 숙소를 쓰는 2일 코스")
+                .places(List.of(
+                        place(1L, firstDay, 1, 90, 0.0, 0.0),
+                        firstHotel,
+                        place(2L, secondDay, 1, 90, 0.0, 0.0),
+                        secondHotel
+                ))
+                .build();
+        when(travelCourseRepository.save(any(TravelCourse.class)))
+                .thenReturn(TravelCourse.builder()
+                        .courseId(40L)
+                        .title("같은 숙소를 쓰는 2일 코스")
+                        .build());
+
+        CourseSaveResponse response =
+                courseSaveService.saveOptimizedCourse(request);
+
+        assertEquals(4, response.getPlaceCount());
+        assertEquals(2, response.getDayCount());
+        verify(courseDetailRepository).saveAll(any());
+    }
+
+    @Test
+    @DisplayName("같은 숙소라도 같은 날짜에 두 번 저장할 수 없다")
+    void rejectSameHotelTwiceOnSameDate() {
+        LocalDate visitDate = LocalDate.of(2026, 7, 20);
+        CourseSavePlaceDto firstHotel =
+                place(100L, visitDate, 2, 30, 1.0, 10.0);
+        firstHotel.setCategory("HOTEL");
+        CourseSavePlaceDto duplicateHotel =
+                place(100L, visitDate, 3, 30, 0.0, 0.0);
+        duplicateHotel.setCategory("HOTEL");
+        CourseSaveRequest request = CourseSaveRequest.builder()
+                .transportMode(TransportMode.WALKING)
+                .memberId(1L)
+                .title("같은 날 숙소 중복 코스")
+                .places(List.of(
+                        place(1L, visitDate, 1, 90, 0.0, 0.0),
+                        firstHotel,
+                        duplicateHotel
+                ))
+                .build();
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> courseSaveService.saveOptimizedCourse(request)
+        );
+        verify(travelCourseRepository, never()).save(any());
+        verify(courseDetailRepository, never()).saveAll(any());
+    }
+
+    @Test
     @DisplayName("상세 장소 저장 중 오류가 발생하면 예외를 전파해 트랜잭션 롤백되게 한다")
     void propagateDetailSaveFailureForRollback() {
         LocalDate visitDate = LocalDate.of(2026, 7, 20);
@@ -397,7 +486,6 @@ class CourseSaveServiceTest {
                 .build();
         when(travelCourseRepository.save(any(TravelCourse.class)))
                 .thenReturn(TravelCourse.builder()
-                        .transportMode(TransportMode.WALKING)
                         .courseId(10L)
                         .title("저장 실패 테스트 코스")
                         .build());

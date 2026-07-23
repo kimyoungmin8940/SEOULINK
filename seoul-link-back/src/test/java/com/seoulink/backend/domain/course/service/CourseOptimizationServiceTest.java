@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -21,6 +22,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /** 날짜 분리, 중복 제거, 2-opt 경로 개선, 선택 우선순위와 입력값 검증을 확인한다. */
@@ -177,9 +180,19 @@ class CourseOptimizationServiceTest {
                 {null, TransitPathType.BUS_SUBWAY, null}
         };
         DistanceService mockedDistanceService = mock(DistanceService.class);
-        when(mockedDistanceService.calculateRouteMatrix(
+        when(mockedDistanceService.calculateCandidatePoolMatrix(
                 anyList(),
                 eq(TransportMode.PUBLIC_TRANSIT)
+        )).thenReturn(new DistanceService.RouteMatrix(
+                distances,
+                travelTimes,
+                estimatedPairs,
+                transitPathTypes
+        ));
+        when(mockedDistanceService.calculateRouteLegMatrix(
+                anyList(),
+                eq(TransportMode.PUBLIC_TRANSIT),
+                anyList()
         )).thenReturn(new DistanceService.RouteMatrix(
                 distances,
                 travelTimes,
@@ -814,6 +827,184 @@ class CourseOptimizationServiceTest {
                         .map(OptimizedPlaceDto::getPlaceId)
                         .toList()
         );
+    }
+
+    @Test
+    @DisplayName("추천 옵션 생성 중에는 ODsay 최종 구간 조회를 호출하지 않는다")
+    void recommendationOptimizationUsesOnlyEstimatedTransitMatrix() {
+        DistanceService mockedDistanceService = mock(DistanceService.class);
+        double[][] distances = {
+                {0.0, 1.0, 2.0},
+                {1.0, 0.0, 1.0},
+                {2.0, 1.0, 0.0}
+        };
+        double[][] travelTimes = {
+                {0.0, 10.0, 20.0},
+                {10.0, 0.0, 10.0},
+                {20.0, 10.0, 0.0}
+        };
+        when(mockedDistanceService.calculateCandidatePoolMatrix(
+                anyList(),
+                eq(TransportMode.PUBLIC_TRANSIT)
+        )).thenReturn(new DistanceService.RouteMatrix(
+                distances,
+                travelTimes,
+                true
+        ));
+        CourseOptimizationService service = new CourseOptimizationService(
+                mockedDistanceService,
+                new VisitDurationService()
+        );
+        LocalDate visitDate = LocalDate.of(2026, 7, 20);
+        CourseOptimizeRequest request = CourseOptimizeRequest.builder()
+                .transportMode(TransportMode.PUBLIC_TRANSIT)
+                .placeCandidates(List.of(
+                        place(1L, "서울시청", "TOUR", 100.0,
+                                37.5665, 126.9780, visitDate),
+                        place(2L, "덕수궁", "TOUR", 90.0,
+                                37.5658, 126.9751, visitDate),
+                        place(3L, "경복궁", "TOUR", 80.0,
+                                37.5796, 126.9770, visitDate)
+                ))
+                .build();
+
+        CourseOptimizeResponse response =
+                service.optimizeForRecommendation(request, Map.of());
+
+        assertTrue(response.getEstimatedTravelTimes());
+        verify(mockedDistanceService, never()).calculateRouteLegMatrix(
+                anyList(),
+                eq(TransportMode.PUBLIC_TRANSIT),
+                anyList()
+        );
+    }
+
+    @Test
+    @DisplayName("도보 추천의 대체 후보 판단도 외부 경로 행렬을 호출하지 않는다")
+    void recommendationAlternativeSelectionUsesEstimatedWalkingMatrix() {
+        DistanceService mockedDistanceService = mock(DistanceService.class);
+        double[][] distances = {
+                {0.0, 3.0},
+                {3.0, 0.0}
+        };
+        double[][] travelTimes = {
+                {0.0, 40.0},
+                {40.0, 0.0}
+        };
+        when(mockedDistanceService.calculateCandidatePoolMatrix(
+                anyList(),
+                eq(TransportMode.WALKING)
+        )).thenReturn(new DistanceService.RouteMatrix(
+                distances,
+                travelTimes,
+                true
+        ));
+        CourseOptimizationService service = new CourseOptimizationService(
+                mockedDistanceService,
+                new VisitDurationService()
+        );
+        LocalDate visitDate = LocalDate.of(2026, 7, 20);
+        PlaceCandidateDto distant = place(
+                2L,
+                "먼 관광지",
+                "TOUR",
+                90.0,
+                37.58,
+                127.05,
+                visitDate
+        );
+        distant.setAlternativeCandidates(List.of(place(
+                3L,
+                "대체 관광지",
+                "TOUR",
+                85.0,
+                37.57,
+                127.01,
+                visitDate
+        )));
+        CourseOptimizeRequest request = CourseOptimizeRequest.builder()
+                .transportMode(TransportMode.WALKING)
+                .placeCandidates(List.of(
+                        place(1L, "출발지", "TOUR", 100.0,
+                                37.56, 127.00, visitDate),
+                        distant
+                ))
+                .build();
+
+        CourseOptimizeResponse response =
+                service.optimizeForRecommendation(request, Map.of());
+
+        assertTrue(response.getEstimatedTravelTimes());
+        verify(mockedDistanceService, never()).calculateRouteMatrix(
+                anyList(),
+                eq(TransportMode.WALKING)
+        );
+    }
+
+    @Test
+    @DisplayName("상세 경로 조회는 프런트 방문 순서를 유지한다")
+    void resolveFixedRouteDetailsPreservesRequestedOrder() {
+        DistanceService mockedDistanceService = mock(DistanceService.class);
+        double[][] distances = {
+                {0.0, 1.2, 0.0},
+                {0.0, 0.0, 2.3},
+                {0.0, 0.0, 0.0}
+        };
+        double[][] travelTimes = {
+                {0.0, 12.0, 0.0},
+                {0.0, 0.0, 23.0},
+                {0.0, 0.0, 0.0}
+        };
+        boolean[][] estimated = new boolean[3][3];
+        TransitPathType[][] pathTypes = new TransitPathType[3][3];
+        pathTypes[0][1] = TransitPathType.BUS;
+        pathTypes[1][2] = TransitPathType.SUBWAY;
+        when(mockedDistanceService.calculateRouteLegMatrix(
+                anyList(),
+                eq(TransportMode.PUBLIC_TRANSIT),
+                eq(List.of(0, 1, 2))
+        )).thenReturn(new DistanceService.RouteMatrix(
+                distances,
+                travelTimes,
+                estimated,
+                pathTypes
+        ));
+        CourseOptimizationService service = new CourseOptimizationService(
+                mockedDistanceService,
+                new VisitDurationService()
+        );
+        LocalDate visitDate = LocalDate.of(2026, 7, 20);
+        CourseOptimizeRequest request = CourseOptimizeRequest.builder()
+                .transportMode(TransportMode.PUBLIC_TRANSIT)
+                .placeCandidates(List.of(
+                        place(3L, "경복궁", "TOUR", 80.0,
+                                37.5796, 126.9770, visitDate),
+                        place(1L, "서울시청", "TOUR", 100.0,
+                                37.5665, 126.9780, visitDate),
+                        place(2L, "덕수궁", "TOUR", 90.0,
+                                37.5658, 126.9751, visitDate)
+                ))
+                .build();
+
+        CourseOptimizeResponse response =
+                service.resolveFixedRouteDetails(request);
+
+        assertEquals(
+                List.of(3L, 1L, 2L),
+                response.getOptimizedPlaces().stream()
+                        .map(OptimizedPlaceDto::getPlaceId)
+                        .toList()
+        );
+        assertEquals(
+                TransitPathType.BUS,
+                response.getOptimizedPlaces().get(1).getTransitPathType()
+        );
+        assertEquals(
+                TransitPathType.SUBWAY,
+                response.getOptimizedPlaces().get(2).getTransitPathType()
+        );
+        assertEquals(3.5, response.getTotalDistanceKm(), 0.000001);
+        assertFalse(response.getEstimatedTravelTimes());
     }
 
     @Test

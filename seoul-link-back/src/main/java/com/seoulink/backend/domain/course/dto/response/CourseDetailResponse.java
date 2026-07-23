@@ -38,6 +38,7 @@ public class CourseDetailResponse {
     private Double totalTravelTimeMinutes;
     private Integer totalVisitTimeMinutes;
     private Double totalCourseTimeMinutes;
+    private Boolean estimatedTravelTimes;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 

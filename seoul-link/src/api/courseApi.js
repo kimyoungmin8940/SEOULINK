@@ -34,6 +34,18 @@ export const optimizeCourse = (data, options = {}) => apiClient.post(
 );
 
 /**
+ * 추천 카드에 현재 표시 중인 DAY의 방문 순서를 유지한 채 실제 인접 구간만 조회합니다.
+ * @param {import('../types/course').CourseOptimizeRequest} data
+ * @param {RequestInit} [options]
+ * @returns {Promise<import('../types/course').CourseOptimizeResponse>}
+ */
+export const resolveCourseRouteDetails = (data, options = {}) => apiClient.post(
+    '/courses/route-details',
+    withAlternativeCandidates(data),
+    options,
+);
+
+/**
  * 추천 후보를 최적화해 PREFERENCE/MIN_DISTANCE/BALANCED 3개 옵션을 받습니다.
  * 이 단계에서는 저장하지 않고, 결과 화면에서 고른 개수에 따라 saveCourse/saveCourses로 저장합니다.
  * @param {import('../types/course').CourseRecommendRequest} data

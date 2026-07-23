@@ -5,7 +5,6 @@ import { getRecommendedPlaces } from '../../api/placeApi';
 import { getSurveyResult } from '../../api/surveyApi';
 import SurveyFlowLayout from '../../components/survey/SurveyFlowLayout';
 import { storeCourseRecommendRequest } from '../../utils/courseRecommendationHandoff';
-import { isLoggedIn } from '../../utils/authGuard';
 import PreferenceResultPage from '../PreferenceResultPage';
 
 const SURVEY_ID_STORAGE_KEY = 'seoulinkSurveyId';
@@ -109,14 +108,9 @@ function SurveyResultPage() {
                 excludedRecommendationKeys: [],
             });
 
-            if (isLoggedIn()) {
-                window.location.assign('/courses');
-                return;
-            }
-
-            // 회원가입·로그인 후 방금 만든 추천 입력으로 코스 화면을 계속 엽니다.
-            localStorage.setItem('loginReturnUrl', '/courses');
-            window.location.assign('/signup');
+            // 추천 조회 자체는 비회원도 실행하고, 회원 ID가 필요한 저장 시점에만
+            // 로그인 여부를 확인해 인증 기능이 합쳐지기 전에도 전체 추천 흐름을 검증합니다.
+            window.location.assign('/courses');
         } catch (error) {
             console.error('추천 코스 초안 생성 실패:', error);
             setCourseErrorMessage(

@@ -118,6 +118,31 @@ class DistanceServiceTest {
         );
     }
 
+    @Test
+    @DisplayName("외부 API 실패로 만든 추정 경로는 장기 캐시에 저장하지 않는다")
+    void calculateRouteMatrixDoesNotCacheEstimatedPairs() {
+        OpenRouteServiceClient apiClient = mock(OpenRouteServiceClient.class);
+        RoutePairCache cache = new RoutePairCache(100, Duration.ofHours(1));
+        DistanceService service = new DistanceService(apiClient, cache);
+        List<PlaceCandidateDto> candidates = List.of(
+                place(1L, "서울시청", 37.5665, 126.9780),
+                place(2L, "경복궁", 37.5796, 126.9770)
+        );
+
+        when(apiClient.isConfigured()).thenReturn(true);
+        when(apiClient.calculateMatrix(eq("foot-walking"), anyList()))
+                .thenThrow(new IllegalStateException("외부 API 일시 장애"));
+
+        service.calculateRouteMatrix(candidates, TransportMode.WALKING);
+        service.calculateRouteMatrix(candidates, TransportMode.WALKING);
+
+        assertEquals(0, cache.size());
+        verify(apiClient, times(2)).calculateMatrix(
+                eq("foot-walking"),
+                anyList()
+        );
+    }
+
 
     @Test
     @DisplayName("동일 장소 쌍은 코스 옵션이 달라도 외부 API 결과를 캐시해 재사용한다")
@@ -321,6 +346,130 @@ class DistanceServiceTest {
     }
 
     @Test
+    @DisplayName("도보와 자동차 후보 풀도 ORS 호출 없이 전용 추정행렬을 사용한다")
+    void walkingAndDrivingCandidatePoolsDoNotCallOpenRouteService() {
+        OpenRouteServiceClient apiClient = mock(OpenRouteServiceClient.class);
+        DistanceService service = new DistanceService(
+                apiClient,
+                new RoutePairCache(100, Duration.ofHours(1))
+        );
+        List<PlaceCandidateDto> candidates = List.of(
+                place(1L, "서울시청", 37.5665, 126.9780),
+                place(2L, "경복궁", 37.5796, 126.9770)
+        );
+
+        when(apiClient.isConfigured()).thenReturn(true);
+
+        DistanceService.RouteMatrix walking =
+                service.calculateCandidatePoolMatrix(
+                        candidates,
+                        TransportMode.WALKING
+                );
+        DistanceService.RouteMatrix driving =
+                service.calculateCandidatePoolMatrix(
+                        candidates,
+                        TransportMode.DRIVING
+                );
+
+        assertTrue(walking.estimatedTravelTimes());
+        assertTrue(driving.estimatedTravelTimes());
+        verify(apiClient, times(0)).calculateMatrix(
+                anyString(),
+                anyList()
+        );
+    }
+
+    @Test
+    @DisplayName("카드의 도보 DAY는 여러 인접 구간을 ORS Matrix 한 번으로 조회한다")
+    void walkingVisibleDayUsesOneOpenRouteMatrixRequest() {
+        OpenRouteServiceClient apiClient = mock(OpenRouteServiceClient.class);
+        DistanceService service = new DistanceService(
+                apiClient,
+                new RoutePairCache(100, Duration.ofHours(1))
+        );
+        List<PlaceCandidateDto> candidates = List.of(
+                place(1L, "서울시청", 37.5665, 126.9780),
+                place(2L, "경복궁", 37.5796, 126.9770),
+                place(3L, "광장시장", 37.5700, 126.9997)
+        );
+        double[][] distances = {
+                {0.0, 1.2, 2.0},
+                {1.3, 0.0, 1.1},
+                {2.1, 1.0, 0.0}
+        };
+        double[][] minutes = {
+                {0.0, 16.0, 27.0},
+                {17.0, 0.0, 15.0},
+                {28.0, 14.0, 0.0}
+        };
+
+        when(apiClient.isConfigured()).thenReturn(true);
+        when(apiClient.calculateMatrix(eq("foot-walking"), anyList()))
+                .thenReturn(new OpenRouteServiceClient.RouteMatrixResult(
+                        distances,
+                        minutes
+                ));
+
+        DistanceService.RouteMatrix matrix =
+                service.calculateRouteLegMatrix(
+                        candidates,
+                        TransportMode.WALKING,
+                        List.of(0, 1, 2)
+                );
+
+        assertFalse(matrix.isEstimated(0, 1));
+        assertFalse(matrix.isEstimated(1, 2));
+        assertEquals(16.0, matrix.getTravelTimeMinutes(0, 1), 0.000001);
+        assertEquals(15.0, matrix.getTravelTimeMinutes(1, 2), 0.000001);
+        verify(apiClient, times(1)).calculateMatrix(
+                eq("foot-walking"),
+                anyList()
+        );
+    }
+
+    @Test
+    @DisplayName("최종 대중교통 경로는 방문 순서의 인접 구간만 ODsay로 조회한다")
+    void publicTransitFinalRouteRequestsOnlyAdjacentLegs() {
+        OdsayClient odsayClient = mock(OdsayClient.class);
+        DistanceService serviceWithOdsay = new DistanceService(
+                null,
+                odsayClient,
+                new RoutePairCache(100, Duration.ofHours(1))
+        );
+        List<PlaceCandidateDto> candidates = List.of(
+                place(1L, "서울시청", 37.5665, 126.9780),
+                place(2L, "경복궁", 37.5796, 126.9770),
+                place(3L, "광장시장", 37.5700, 126.9997)
+        );
+
+        when(odsayClient.isConfigured()).thenReturn(true);
+        when(odsayClient.calculateRoute(
+                any(RouteCoordinate.class),
+                any(RouteCoordinate.class)
+        )).thenReturn(new TransitRouteResult(
+                1.2,
+                12.0,
+                TransitPathType.BUS
+        ));
+
+        DistanceService.RouteMatrix matrix =
+                serviceWithOdsay.calculateRouteLegMatrix(
+                        candidates,
+                        TransportMode.PUBLIC_TRANSIT,
+                        List.of(0, 2, 1)
+                );
+
+        assertFalse(matrix.isEstimated(0, 2));
+        assertFalse(matrix.isEstimated(2, 1));
+        assertEquals(TransitPathType.BUS, matrix.getTransitPathType(0, 2));
+        assertEquals(TransitPathType.BUS, matrix.getTransitPathType(2, 1));
+        verify(odsayClient, times(2)).calculateRoute(
+                any(RouteCoordinate.class),
+                any(RouteCoordinate.class)
+        );
+    }
+
+    @Test
     @DisplayName("대중교통 후보가 추가되어도 캐시에 있는 장소 쌍은 ODsay를 재호출하지 않는다")
     void publicTransitRequestsOnlyPairsMissingFromCache() {
         OdsayClient odsayClient = mock(OdsayClient.class);
@@ -409,6 +558,10 @@ class DistanceServiceTest {
                 matrix.getDistanceKm(0, 1) / 4.5 * 60.0,
                 matrix.getTravelTimeMinutes(0, 1),
                 0.000001
+        );
+        assertEquals(
+                TransitPathType.WALKING,
+                matrix.getTransitPathType(0, 1)
         );
         verify(odsayClient, times(2)).calculateRoute(
                 any(RouteCoordinate.class),

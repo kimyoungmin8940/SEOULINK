@@ -17,8 +17,6 @@ import { getRecommendedCourses } from '../../api/courseApi';
 import {
     getCurrentMemberId,
     normalizeRecommendedCourseList,
-    readRecommendedCourseCache,
-    writeRecommendedCourseCache,
 } from '../../utils/courseHistory';
 import rainyCafeImage from '../../assets/images/moods/mood-rainy-cafe.png';
 import sunsetImage from '../../assets/images/moods/mood-sunset-seoul.png';
@@ -68,17 +66,14 @@ const themeInfo = {
     },
 };
 
-/** 서버 조회 전에도 이전에 저장한 코스 요약이 있으면 즉시 표시할 초기 상태를 만듭니다. */
+/** 로그인 회원 ID가 있으면 서버의 추천 코스 목록을 바로 조회할 초기 상태를 만듭니다. */
 function getInitialHistoryState() {
     const memberId = getCurrentMemberId();
-    const courses = normalizeRecommendedCourseList(readRecommendedCourseCache(), {
-        fallbackImages,
-    });
 
     return {
         memberId,
-        courses,
-        status: memberId ? 'loading' : courses.length > 0 ? 'success' : 'empty',
+        courses: [],
+        status: memberId ? 'loading' : 'member-error',
     };
 }
 
@@ -96,27 +91,18 @@ function RecommendedCourseHistoryPage() {
 
         const controller = new AbortController();
 
-        // 서버 데이터를 기준으로 삼되, 아직 서버에 없는 이미지·태그만 로컬 캐시로 보완합니다.
+        // 추천받아 저장한 SURVEY 코스를 DB 기준으로 조회합니다.
         getRecommendedCourses(initialState.memberId, { signal: controller.signal })
             .then((response) => {
                 const normalizedCourses = normalizeRecommendedCourseList(response, {
-                    cachedCourses: readRecommendedCourseCache(),
                     fallbackImages,
                 });
                 setCourses(normalizedCourses);
                 setStatus(normalizedCourses.length > 0 ? 'success' : 'empty');
                 setErrorMessage('');
-                writeRecommendedCourseCache(normalizedCourses);
             })
             .catch((error) => {
                 if (error?.name === 'AbortError') return;
-
-                // 네트워크 오류여도 이미 본 코스가 있으면 빈 화면 대신 캐시 목록을 유지합니다.
-                if (initialState.courses.length > 0) {
-                    setCourses(initialState.courses);
-                    setStatus('success');
-                    return;
-                }
 
                 setErrorMessage(error?.message || '추천받은 코스 목록을 불러오지 못했습니다.');
                 setStatus('error');
@@ -179,6 +165,15 @@ function RecommendedCourseHistoryPage() {
                     <div className="recommended-history-loading" aria-label="추천 코스 목록을 불러오는 중">
                         {[1, 2, 3, 4].map((item) => <span key={item} />)}
                     </div>
+                )}
+
+                {status === 'member-error' && (
+                    <section className="recommended-history-state" role="alert">
+                        <Info size={28} aria-hidden="true" />
+                        <h2>회원 정보를 확인할 수 없어요</h2>
+                        <p>다시 로그인한 뒤 추천받은 코스를 확인해주세요.</p>
+                        <a href="/login">로그인하기</a>
+                    </section>
                 )}
 
                 {status === 'error' && (

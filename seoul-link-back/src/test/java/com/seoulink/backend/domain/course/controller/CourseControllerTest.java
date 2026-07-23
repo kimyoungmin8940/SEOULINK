@@ -127,6 +127,58 @@ class CourseControllerTest {
     }
 
     @Test
+    @DisplayName("경로 상세 API는 전달된 장소 순서를 바꾸지 않는다")
+    void resolveFixedRouteDetails() throws Exception {
+        mockMvc.perform(post("/api/courses/route-details")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "transportMode": "PUBLIC_TRANSIT",
+                                  "placeCandidates": [
+                                    {
+                                      "placeId": 3,
+                                      "placeName": "경복궁",
+                                      "category": "관광지",
+                                      "recommendationScore": 80.0,
+                                      "latitude": 37.5796,
+                                      "longitude": 126.9770,
+                                      "visitDate": "2026-07-20"
+                                    },
+                                    {
+                                      "placeId": 1,
+                                      "placeName": "서울시청",
+                                      "category": "관광지",
+                                      "recommendationScore": 100.0,
+                                      "latitude": 37.5665,
+                                      "longitude": 126.9780,
+                                      "visitDate": "2026-07-20"
+                                    },
+                                    {
+                                      "placeId": 2,
+                                      "placeName": "덕수궁",
+                                      "category": "관광지",
+                                      "recommendationScore": 90.0,
+                                      "latitude": 37.5658,
+                                      "longitude": 126.9751,
+                                      "visitDate": "2026-07-20"
+                                    }
+                                  ]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.transportMode")
+                        .value("PUBLIC_TRANSIT"))
+                .andExpect(jsonPath("$.optimizedPlaces[0].placeId")
+                        .value(3))
+                .andExpect(jsonPath("$.optimizedPlaces[1].placeId")
+                        .value(1))
+                .andExpect(jsonPath("$.optimizedPlaces[2].placeId")
+                        .value(2))
+                .andExpect(jsonPath("$.optimizedPlaces[1].routeEstimated")
+                        .value(true));
+    }
+
+    @Test
     @DisplayName("HTTP 요청의 대체 후보로 먼 장소를 교체한 결과를 반환한다")
     void optimizeCourseWithAlternativeCandidates() throws Exception {
         mockMvc.perform(post("/api/courses/optimize")

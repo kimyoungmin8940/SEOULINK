@@ -1,17 +1,26 @@
 package com.seoulink.backend.infrastructure.external.odsay;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonFormat;
 import com.seoulink.backend.domain.course.model.TransitPathType;
 import com.seoulink.backend.infrastructure.external.openroute.OpenRouteServiceClient.RouteCoordinate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.util.UriBuilder;
 
 import java.net.URI;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -24,27 +33,52 @@ import java.util.Map;
 @Component
 public class OdsayClient {
 
+    private static final Logger log = LoggerFactory.getLogger(
+            OdsayClient.class
+    );
     public static final String WITHIN_WALKING_DISTANCE_CODE = "-98";
 
     private static final String ROUTE_SEARCH_PATH = "/searchPubTransPathT";
     private static final int RECOMMENDED_ROUTE_ORDER = 0;
     private static final int INTRA_CITY_SEARCH = 0;
     private static final int ALL_TRANSIT_PATHS = 0;
+    private static final ZoneId ODSAY_RESET_ZONE =
+            ZoneId.of("Asia/Seoul");
 
     private final RestClient restClient;
     private final String apiKey;
+    private final int dailyCallBudget;
 
+    private LocalDate usageDate;
+    private int reservedCalls;
+    private LocalDate blockedDate;
+
+    @Autowired
     public OdsayClient(
             @Qualifier("odsayRestClient") RestClient restClient,
-            @Value("${external.odsay.api-key:}") String apiKey
+            @Value("${external.odsay.api-key:}") String apiKey,
+            @Value("${external.odsay.daily-call-budget:900}")
+            int dailyCallBudget
     ) {
+        if (dailyCallBudget < 0) {
+            throw new IllegalArgumentException(
+                    "ODsay 일일 호출 예산은 0 이상이어야 합니다."
+            );
+        }
         this.restClient = restClient;
-        this.apiKey = apiKey;
+        this.apiKey = apiKey == null ? "" : apiKey.trim();
+        this.dailyCallBudget = dailyCallBudget;
+        this.usageDate = currentUsageDate();
+    }
+
+    /** 기존 단위 테스트와 수동 생성 코드에서 사용하는 호환 생성자이다. */
+    public OdsayClient(RestClient restClient, String apiKey) {
+        this(restClient, apiKey, 900);
     }
 
     /** 실제 ODsay 요청을 보낼 수 있도록 API 키가 설정되었는지 확인한다. */
     public boolean isConfigured() {
-        return apiKey != null && !apiKey.isBlank();
+        return !apiKey.isBlank();
     }
 
     /**
@@ -62,6 +96,7 @@ public class OdsayClient {
         if (sameCoordinate(from, to)) {
             return new TransitRouteResult(0.0, 0.0, null);
         }
+        reserveDailyCall();
 
         try {
             OdsayResponse response = restClient.get()
@@ -70,12 +105,103 @@ public class OdsayClient {
                     .body(OdsayResponse.class);
             return convertResponse(response);
         } catch (OdsayApiException exception) {
+            blockForTodayIfQuotaOrAuthenticationFailure(exception);
             throw exception;
+        } catch (RestClientResponseException exception) {
+            if (exception.getStatusCode().value() == 429
+                    || exception.getStatusCode().value() == 401
+                    || exception.getStatusCode().value() == 403) {
+                OdsayApiException apiException = new OdsayApiException(
+                        "HTTP_" + exception.getStatusCode().value(),
+                        "ODsay 요청 한도 또는 인증 상태를 확인해주세요."
+                );
+                blockForToday();
+                throw apiException;
+            }
+            throw new IllegalStateException(
+                    "ODsay 대중교통 경로 요청에 실패했습니다. HTTP "
+                            + exception.getStatusCode().value(),
+                    exception
+            );
         } catch (RestClientException exception) {
             throw new IllegalStateException(
                     "ODsay 대중교통 경로 요청에 실패했습니다.",
                     exception
             );
+        }
+    }
+
+    /**
+     * ODsay Basic 1,000건을 전부 쓰기 전에 서버 자체 예산에서 호출을 차단한다.
+     * 날짜가 바뀌면 카운터와 외부 오류 차단 상태를 함께 초기화한다.
+     */
+    private synchronized void reserveDailyCall() {
+        LocalDate today = currentUsageDate();
+        resetDailyStateIfNeeded(today);
+
+        if (today.equals(blockedDate)
+                || reservedCalls >= dailyCallBudget) {
+            blockedDate = today;
+            throw new OdsayApiException(
+                    "LOCAL_DAILY_LIMIT",
+                    "서버에서 정한 ODsay 일일 호출 예산에 도달했습니다."
+            );
+        }
+        reservedCalls++;
+        log.info(
+                "외부 경로 API 호출: provider=ODsay, dailyCalls={}/{}, date={}",
+                reservedCalls,
+                dailyCallBudget,
+                today
+        );
+    }
+
+    private synchronized void blockForToday() {
+        LocalDate today = currentUsageDate();
+        resetDailyStateIfNeeded(today);
+        blockedDate = today;
+    }
+
+    private synchronized void resetDailyStateIfNeeded(LocalDate today) {
+        if (!today.equals(usageDate)) {
+            usageDate = today;
+            reservedCalls = 0;
+            blockedDate = null;
+        }
+    }
+
+    private LocalDate currentUsageDate() {
+        return LocalDate.now(ODSAY_RESET_ZONE);
+    }
+
+    /**
+     * 쿼터 초과·앱 정지·키 인증 오류는 다른 장소 쌍에서도 반복되므로 당일 재호출하지 않는다.
+     * 단순 ODsay 서버 내부 오류는 일시적일 수 있어 현재 요청에서만 중단한다.
+     */
+    private void blockForTodayIfQuotaOrAuthenticationFailure(
+            OdsayApiException exception
+    ) {
+        if (exception.isPairSpecific()) {
+            return;
+        }
+
+        String message = exception.getApiMessage()
+                .toLowerCase(Locale.ROOT);
+        if ("LOCAL_DAILY_LIMIT".equals(exception.getErrorCode())
+                || message.contains("quota")
+                || message.contains("limit")
+                || message.contains("exceed")
+                || message.contains("suspend")
+                || message.contains("blocked")
+                || message.contains("authentication")
+                || message.contains("api key")
+                || message.contains("apikey")
+                || message.contains("호출 한도")
+                || message.contains("사용량")
+                || message.contains("초과")
+                || message.contains("제한")
+                || message.contains("정지")) {
+            blockForToday();
         }
     }
 
@@ -204,6 +330,7 @@ public class OdsayClient {
     /** ODsay 성공·오류 응답에서 필요한 최상위 필드만 매핑한다. */
     public record OdsayResponse(
             OdsayResult result,
+            @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
             List<OdsayError> error
     ) {
     }
@@ -225,7 +352,7 @@ public class OdsayClient {
 
     public record OdsayError(
             String code,
-            String message
+            @JsonAlias("msg") String message
     ) {
     }
 
@@ -233,15 +360,21 @@ public class OdsayClient {
     public static class OdsayApiException extends IllegalStateException {
 
         private final String errorCode;
+        private final String apiMessage;
 
         public OdsayApiException(String errorCode, String apiMessage) {
             super("ODsay 오류(code=" + safeValue(errorCode)
                     + "): " + safeValue(apiMessage));
             this.errorCode = errorCode;
+            this.apiMessage = safeValue(apiMessage);
         }
 
         public String getErrorCode() {
             return errorCode;
+        }
+
+        public String getApiMessage() {
+            return apiMessage;
         }
 
         /** 정류장·서비스지역·검색결과 문제는 다른 장소 쌍에서 재시도할 수 있다. */

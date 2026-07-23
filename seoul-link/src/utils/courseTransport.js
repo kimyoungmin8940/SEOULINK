@@ -5,6 +5,7 @@ export const TRANSPORT_MODES = Object.freeze({
 });
 
 export const TRANSIT_PATH_TYPES = Object.freeze({
+    WALKING: 'WALKING',
     SUBWAY: 'SUBWAY',
     BUS: 'BUS',
     BUS_SUBWAY: 'BUS_SUBWAY',
@@ -32,6 +33,10 @@ const transportMeta = Object.freeze({
 });
 
 const transitPathMeta = Object.freeze({
+    [TRANSIT_PATH_TYPES.WALKING]: Object.freeze({
+        label: '도보',
+        icon: 'walking',
+    }),
     [TRANSIT_PATH_TYPES.SUBWAY]: Object.freeze({
         label: '지하철',
         icon: 'subway',
@@ -54,7 +59,7 @@ export function normalizeTransportMode(value) {
     return transportMeta[normalized] ? normalized : null;
 }
 
-/** ODsay pathType을 변환한 세 가지 대중교통 구간 값만 허용합니다. */
+/** ODsay 경로 종류와 대중교통 검색 실패 시 실제 도보 전환 값을 허용합니다. */
 export function normalizeTransitPathType(value) {
     if (typeof value !== 'string') return null;
 
