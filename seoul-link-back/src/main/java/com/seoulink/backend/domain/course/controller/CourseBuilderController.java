@@ -4,7 +4,7 @@ import com.seoulink.backend.domain.course.service.CourseBuilderService;
 import com.seoulink.backend.domain.course.dto.response.CourseBuilderPlaceResponse;
 import com.seoulink.backend.domain.course.dto.request.CourseRouteRequest;
 import com.seoulink.backend.domain.course.dto.response.CourseRouteResponse;
-import com.seoulink.backend.domain.course.dto.request.CourseSaveRequest;
+import com.seoulink.backend.domain.course.dto.request.CourseBuilderSaveRequest;
 import com.seoulink.backend.domain.course.dto.response.CourseSaveResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -48,7 +48,7 @@ public class CourseBuilderController {
 
     @PostMapping("/courses")
     public ResponseEntity<CourseSaveResponse> saveCourse(
-            @RequestBody CourseSaveRequest request
+            @RequestBody CourseBuilderSaveRequest request
     ) {
         return ResponseEntity.ok(courseBuilderService.saveCourse(request));
     }

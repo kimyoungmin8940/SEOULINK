@@ -3,7 +3,7 @@ package com.seoulink.backend.domain.course.service;
 import com.seoulink.backend.domain.course.dto.response.CourseBuilderPlaceResponse;
 import com.seoulink.backend.domain.course.dto.request.CourseRouteRequest;
 import com.seoulink.backend.domain.course.dto.response.CourseRouteResponse;
-import com.seoulink.backend.domain.course.dto.request.CourseSaveRequest;
+import com.seoulink.backend.domain.course.dto.request.CourseBuilderSaveRequest;
 import com.seoulink.backend.domain.course.dto.response.CourseSaveResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
@@ -581,14 +581,14 @@ public class CourseBuilderService {
     }
 
     @Transactional
-    public CourseSaveResponse saveCourse(CourseSaveRequest request) {
+    public CourseSaveResponse saveCourse(CourseBuilderSaveRequest request) {
         validateRequest(request);
 
         Long courseId = insertTravelCourse(request);
 
         for (int i = 0; i < request.places().size(); i++) {
-            CourseSaveRequest.PlaceRequest place = request.places().get(i);
-            CourseSaveRequest.PlaceRequest previousPlace = i == 0 ? null : request.places().get(i - 1);
+            CourseBuilderSaveRequest.PlaceRequest place = request.places().get(i);
+            CourseBuilderSaveRequest.PlaceRequest previousPlace = i == 0 ? null : request.places().get(i - 1);
 
             Long placeId = findOrInsertPlace(request.memberId(), place);
 
@@ -612,10 +612,10 @@ public class CourseBuilderService {
         }
 
         updateCourseTotals(courseId);
-        return new CourseSaveResponse(courseId, "코스가 저장되었습니다.");
+        return getSavedCourseResponse(courseId);
     }
 
-    private void validateRequest(CourseSaveRequest request) {
+    private void validateRequest(CourseBuilderSaveRequest request) {
         if (request.memberId() == null) {
             throw new IllegalArgumentException("회원 ID가 없습니다.");
         }
@@ -645,7 +645,7 @@ public class CourseBuilderService {
         }
     }
 
-    private Long insertTravelCourse(CourseSaveRequest request) {
+    private Long insertTravelCourse(CourseBuilderSaveRequest request) {
         String sql = """
                 INSERT INTO TRAVEL_COURSES (
                     MEMBER_ID,
@@ -695,7 +695,7 @@ public class CourseBuilderService {
         return key.longValue();
     }
 
-    private Long findOrInsertPlace(Long memberId, CourseSaveRequest.PlaceRequest place) {
+    private Long findOrInsertPlace(Long memberId, CourseBuilderSaveRequest.PlaceRequest place) {
         if (place.placeId() != null) {
             return place.placeId();
         }
@@ -740,7 +740,7 @@ public class CourseBuilderService {
         return result.get(0);
     }
 
-    private Long insertPlace(Long memberId, String apiProvider, CourseSaveRequest.PlaceRequest place) {
+    private Long insertPlace(Long memberId, String apiProvider, CourseBuilderSaveRequest.PlaceRequest place) {
         String sql = """
                 INSERT INTO PLACES (
                     API_PROVIDER,
@@ -831,7 +831,7 @@ public class CourseBuilderService {
     private void insertCourseDetail(
             Long courseId,
             Long placeId,
-            CourseSaveRequest.PlaceRequest place,
+            CourseBuilderSaveRequest.PlaceRequest place,
             int defaultOrder,
             Integer incomingDistanceM,
             Integer incomingDurationMin
@@ -912,6 +912,43 @@ public class CourseBuilderService {
         jdbcTemplate.update(
                 sql,
                 new MapSqlParameterSource().addValue("courseId", courseId)
+        );
+    }
+
+    /**
+     * 지도 코스 저장 후 현재 프로젝트의 CourseSaveResponse 형식에 맞는 집계값을 반환한다.
+     */
+    private CourseSaveResponse getSavedCourseResponse(Long courseId) {
+        String sql = """
+                SELECT TC.COURSE_ID,
+                       TC.TITLE,
+                       TC.TOTAL_DISTANCE_KM,
+                       TC.TOTAL_TRAVEL_MINUTES,
+                       TC.TOTAL_VISIT_MINUTES,
+                       TC.TOTAL_COURSE_MINUTES,
+                       (SELECT COUNT(*)
+                          FROM COURSE_DETAILS CD
+                         WHERE CD.COURSE_ID = TC.COURSE_ID) AS PLACE_COUNT,
+                       (SELECT COUNT(DISTINCT CD.DAY_NO)
+                          FROM COURSE_DETAILS CD
+                         WHERE CD.COURSE_ID = TC.COURSE_ID) AS DAY_COUNT
+                  FROM TRAVEL_COURSES TC
+                 WHERE TC.COURSE_ID = :courseId
+                """;
+
+        return jdbcTemplate.queryForObject(
+                sql,
+                new MapSqlParameterSource().addValue("courseId", courseId),
+                (rs, rowNum) -> CourseSaveResponse.builder()
+                        .courseId(rs.getLong("COURSE_ID"))
+                        .title(rs.getString("TITLE"))
+                        .placeCount(rs.getInt("PLACE_COUNT"))
+                        .dayCount(rs.getInt("DAY_COUNT"))
+                        .totalDistanceKm(rs.getDouble("TOTAL_DISTANCE_KM"))
+                        .totalTravelTimeMinutes(rs.getDouble("TOTAL_TRAVEL_MINUTES"))
+                        .totalVisitTimeMinutes(rs.getInt("TOTAL_VISIT_MINUTES"))
+                        .totalCourseTimeMinutes(rs.getDouble("TOTAL_COURSE_MINUTES"))
+                        .build()
         );
     }
 
