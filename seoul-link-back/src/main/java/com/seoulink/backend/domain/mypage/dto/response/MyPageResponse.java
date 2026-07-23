@@ -1,10 +1,11 @@
 package com.seoulink.backend.domain.mypage.dto.response;
 
-import com.seoulink.backend.domain.member.dto.response.MemberLoginResponse;
-import com.seoulink.backend.domain.review.dto.response.ReviewResponse;
 import lombok.Getter;
 
 import java.util.List;
+
+import com.seoulink.backend.domain.member.dto.response.MemberLoginResponse;
+import com.seoulink.backend.domain.review.dto.response.ReviewResponse;
 
 @Getter
 public class MyPageResponse {

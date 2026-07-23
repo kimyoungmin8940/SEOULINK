@@ -14,6 +14,8 @@ public class MyCourseResponse {
     private String courseType;
     private String region;
     private Long viewCount;
+    private Double totalDistanceKm;
+    private Double totalCourseMinutes;
     private LocalDateTime createdAt;
 
     public MyCourseResponse(TravelCourse course) {
@@ -24,6 +26,8 @@ public class MyCourseResponse {
         this.courseType = course.getCourseType();
         this.region = course.getRegion();
         this.viewCount = course.getViewCount();
+        this.totalDistanceKm = course.getTotalDistanceKm();
+        this.totalCourseMinutes = course.getTotalCourseTimeMinutes();
         this.createdAt = course.getCreatedAt();
     }
 }

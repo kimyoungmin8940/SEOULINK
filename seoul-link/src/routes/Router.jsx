@@ -26,7 +26,7 @@ import ReviewDetailPage from '../pages/review/ReviewDetailPage';
 import ReviewWritePage from '../pages/review/ReviewWritePage';
 import ReviewEditPage from '../pages/review/ReviewEditPage';
 
-import MyPage from '../pages/MyPage';
+import MyPage from '../pages/mypage/MyPage';
 import MyTravelTypePage from '../pages/mypage/MyTravelTypePage';
 import MyCoursesPage from '../pages/mypage/MyCoursesPage';
 import MyFavoritesPage from '../pages/mypage/MyFavoritesPage';

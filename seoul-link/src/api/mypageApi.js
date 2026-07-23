@@ -1,6 +1,8 @@
 import { apiClient } from './apiClient';
-export { getMyCourses } from './courseApi';
 
-export const getMyTravelType = () => apiClient.get('/mypage/travel-type');
-export const getMyFavorites = () => apiClient.get('/mypage/favorites');
-export const getMyReviews = () => apiClient.get('/mypage/reviews');
+export const getMyPage = (memberId) => apiClient.get(`/mypage/${memberId}`);
+export const getMyCourses = async (memberId) => (await getMyPage(memberId))?.courses || [];
+export const getMyReviews = async (memberId) => (await getMyPage(memberId))?.reviews || [];
+export const getMyTravelType = async (memberId) => (await getMyPage(memberId))?.travelType || null;
+export const getMyPayments = async (memberId) => (await getMyPage(memberId))?.payments || [];
+export const getMyChatbotHistories = async (memberId) => (await getMyPage(memberId))?.chatbotHistories || [];
