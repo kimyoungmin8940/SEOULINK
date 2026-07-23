@@ -95,7 +95,7 @@ function PaymentPage() {
     const member = authStore.getMember();
     if (!member?.memberId) return setError('\uB85C\uADF8\uC778 \uD6C4 \uC774\uC6A9\uAD8C\uC744 \uAD6C\uB9E4\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.');
     if (!widgets) return setError('\uACB0\uC81C \uC218\uB2E8\uC744 \uC900\uBE44\uD558\uACE0 \uC788\uC2B5\uB2C8\uB2E4. \uC7A0\uC2DC \uD6C4 \uB2E4\uC2DC \uC2DC\uB3C4\uD574 \uC8FC\uC138\uC694.');
-    const orderId = `SEOULLINK_${crypto.randomUUID()}`;
+    const orderId = `SEOULINK_${crypto.randomUUID()}`;
     setLoading(true);
     setError('');
     try {

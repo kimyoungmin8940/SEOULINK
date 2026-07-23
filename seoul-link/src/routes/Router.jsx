@@ -31,6 +31,7 @@ import MyTravelTypePage from '../pages/mypage/MyTravelTypePage';
 import MyCoursesPage from '../pages/mypage/MyCoursesPage';
 import MyFavoritesPage from '../pages/mypage/MyFavoritesPage';
 import MyReviewsPage from '../pages/mypage/MyReviewsPage';
+import PaymentHistoryPage from '../pages/mypage/PaymentHistoryPage';
 
 import ChatbotPage from '../pages/chatbot/ChatbotPage';
 
@@ -144,6 +145,7 @@ function Router() {
         '/mypage/courses': <MyCoursesPage />,
         '/mypage/favorites': <MyFavoritesPage />,
         '/mypage/reviews': <MyReviewsPage />,
+        '/mypage/payments': <PaymentHistoryPage />,
 
         '/chatbot': <ChatbotPage />,
 

@@ -126,6 +126,22 @@ public class PaymentService {
     }
 
     /**
+     * 토스 환불을 수행하지 않고, 현재 회원의 프로젝트 내 결제 기록만 삭제한다.
+     */
+    @Transactional
+    public void deletePayment(Long paymentId, Long memberId) {
+        Payment payment = paymentRepository
+                .findById(paymentId)
+                .orElseThrow(() -> new IllegalArgumentException("결제 정보를 찾을 수 없습니다."));
+
+        if (!payment.getMemberId().equals(memberId)) {
+            throw new IllegalArgumentException("본인의 결제내역만 삭제할 수 있습니다.");
+        }
+
+        paymentRepository.delete(payment);
+    }
+
+    /**
      * 결제를 취소 상태로 변경합니다.
      *
      * 현재는 로컬 상태만 변경합니다.

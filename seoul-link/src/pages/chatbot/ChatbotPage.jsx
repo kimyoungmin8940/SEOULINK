@@ -120,9 +120,9 @@ function ChatbotPage() {
             </div>
           </section>
 
-          <a className="chatbot-pass-card" href="/payment">
+          <a className="chatbot-pass-card" href="/mypage/payments">
             <span><Sparkles /> AI 이용권</span>
-            <strong>이용권 확인하기 <span>→</span></strong>
+            <strong>결제 내역 확인하기 <span>→</span></strong>
             <small>결제 후 여행 플래너를 이용할 수 있어요.</small>
           </a>
         </aside>

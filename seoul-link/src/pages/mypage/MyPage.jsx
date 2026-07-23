@@ -59,7 +59,7 @@ const menuItems = [
     },
     {
         label: "결제 내역",
-        path: "/payment",
+        path: "/mypage/payments",
         Icon: CreditCard,
     },
 ];
