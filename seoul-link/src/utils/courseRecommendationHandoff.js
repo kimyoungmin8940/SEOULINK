@@ -227,7 +227,18 @@ export function normalizeCourseRecommendRequest(data) {
         requestError('resultId는 1 이상의 정수여야 합니다.');
     }
 
-    const dailyStartTime = data.dailyStartTime || '10:00';
+    const travelCode = typeof data.travelCode === 'string'
+        ? data.travelCode.trim().toUpperCase()
+        : '';
+    const scheduleType = String(data.scheduleType || travelCode.charAt(4) || '')
+        .trim()
+        .toUpperCase();
+    const defaultDailyStartTime = scheduleType === 'P'
+        ? '11:00'
+        : scheduleType === 'R'
+            ? '13:00'
+            : '10:00';
+    const dailyStartTime = data.dailyStartTime || defaultDailyStartTime;
     if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(dailyStartTime)) {
         requestError('dailyStartTime은 HH:mm 형식이어야 합니다.');
     }
@@ -235,9 +246,6 @@ export function normalizeCourseRecommendRequest(data) {
         requestError('dailyPlans가 한 개 이상 필요합니다.');
     }
 
-    const travelCode = typeof data.travelCode === 'string'
-        ? data.travelCode.trim().toUpperCase()
-        : '';
     if (travelCode && !/^[A-Z]{5}$/.test(travelCode)) {
         requestError('travelCode는 영문 대문자 5자리여야 합니다.');
     }

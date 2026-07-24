@@ -417,8 +417,15 @@ public class CourseOptimizationService {
                     .build();
         }
 
-        List<PlaceCandidateDto> candidates =
-                validateAndRemoveDuplicates(requestedCandidates);
+        // 고정 경로 상세 조회는 이미 선택된 장소와 순서를 그대로 보존해야 한다.
+        // 같은 placeId가 다른 날짜에 재사용된 경우도 별개의 방문이므로 제거하지 않는다.
+        List<PlaceCandidateDto> candidates = new ArrayList<>(
+                requestedCandidates.size()
+        );
+        for (PlaceCandidateDto candidate : requestedCandidates) {
+            validateCandidate(candidate);
+            candidates.add(candidate);
+        }
         Map<LocalDate, List<PlaceCandidateDto>> candidatesByDate =
                 new LinkedHashMap<>();
         for (PlaceCandidateDto candidate : candidates) {

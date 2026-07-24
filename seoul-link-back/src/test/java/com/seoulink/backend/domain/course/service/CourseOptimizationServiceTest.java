@@ -23,6 +23,7 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -1099,6 +1100,79 @@ class CourseOptimizationServiceTest {
         );
         assertEquals(3.5, response.getTotalDistanceKm(), 0.000001);
         assertFalse(response.getEstimatedTravelTimes());
+    }
+
+    @Test
+    @DisplayName("상세 경로 조회는 다른 날짜에 재사용된 같은 장소를 제거하지 않는다")
+    void resolveFixedRouteDetailsPreservesSamePlaceAcrossDifferentDates() {
+        DistanceService mockedDistanceService = mock(DistanceService.class);
+        double[][] distances = {
+                {0.0, 1.0},
+                {0.0, 0.0}
+        };
+        double[][] travelTimes = {
+                {0.0, 10.0},
+                {0.0, 0.0}
+        };
+        boolean[][] estimated = new boolean[2][2];
+        TransitPathType[][] pathTypes = new TransitPathType[2][2];
+        when(mockedDistanceService.calculateRouteLegMatrix(
+                anyList(),
+                eq(TransportMode.WALKING),
+                eq(List.of(0, 1))
+        )).thenReturn(new DistanceService.RouteMatrix(
+                distances,
+                travelTimes,
+                estimated,
+                pathTypes
+        ));
+        CourseOptimizationService service = new CourseOptimizationService(
+                mockedDistanceService,
+                new VisitDurationService()
+        );
+        LocalDate firstDay = LocalDate.of(2026, 7, 24);
+        LocalDate secondDay = LocalDate.of(2026, 7, 25);
+        CourseOptimizeRequest request = CourseOptimizeRequest.builder()
+                .transportMode(TransportMode.WALKING)
+                .placeCandidates(List.of(
+                        place(1L, "첫째 날 출발지", "TOUR", 100.0,
+                                37.5665, 126.9780, firstDay),
+                        place(2L, "재사용 장소", "CAFE", 90.0,
+                                37.5670, 126.9790, firstDay),
+                        place(3L, "둘째 날 출발지", "TOUR", 95.0,
+                                37.5700, 126.9800, secondDay),
+                        place(2L, "재사용 장소", "CAFE", 90.0,
+                                37.5670, 126.9790, secondDay)
+                ))
+                .build();
+
+        CourseOptimizeResponse response =
+                service.resolveFixedRouteDetails(request);
+
+        assertEquals(4, response.getOptimizedPlaces().size());
+        assertEquals(
+                List.of(1L, 2L, 3L, 2L),
+                response.getOptimizedPlaces().stream()
+                        .map(OptimizedPlaceDto::getPlaceId)
+                        .toList()
+        );
+        assertEquals(
+                List.of(firstDay, firstDay, secondDay, secondDay),
+                response.getOptimizedPlaces().stream()
+                        .map(OptimizedPlaceDto::getVisitDate)
+                        .toList()
+        );
+        assertEquals(
+                List.of(1, 2, 1, 2),
+                response.getOptimizedPlaces().stream()
+                        .map(OptimizedPlaceDto::getVisitOrder)
+                        .toList()
+        );
+        verify(mockedDistanceService, times(2)).calculateRouteLegMatrix(
+                anyList(),
+                eq(TransportMode.WALKING),
+                eq(List.of(0, 1))
+        );
     }
 
     @Test

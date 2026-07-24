@@ -90,7 +90,7 @@
  * @property {string=} startDate YYYY-MM-DD
  * @property {string=} endDate YYYY-MM-DD
  * @property {number=} travelDays
- * @property {string=} dailyStartTime HH:mm, 프론트 기본 10:00
+ * @property {string=} dailyStartTime HH:mm, P형 11:00 / R형 13:00
  * @property {string[]=} excludedRecommendationKeys 다시 추천할 때 제외할 이전 코스 조합 키
  * @property {number[]=} previouslyRecommendedPlaceIds 이전 장소 감점용 장소 ID
  * @property {PlaceCandidate[]=} hotelCandidates 2일 이상 일정에서 옵션별 숙소를 고를 후보 풀

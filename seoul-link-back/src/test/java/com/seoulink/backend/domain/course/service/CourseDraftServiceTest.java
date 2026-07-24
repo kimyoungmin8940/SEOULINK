@@ -12,6 +12,7 @@ import com.seoulink.backend.domain.survey.repository.TravelSurveyRepository;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -98,6 +99,7 @@ class CourseDraftServiceTest {
                 placeRecommendationService
         ).createDraft(1L);
 
+        assertEquals(LocalTime.of(11, 0), draft.getDailyStartTime());
         assertEquals(2, draft.getDailyPlans().size());
         assertEquals(2, draft.getHotelCandidates().size());
         assertEquals(6, draft.getDailyPlans().get(0).getTargetPlaceCount());
@@ -122,6 +124,41 @@ class CourseDraftServiceTest {
                 eq("COUPLE"),
                 anySet()
         );
+    }
+
+    @Test
+    void relaxedScheduleStartsAtOnePm() {
+        TravelSurveyRepository travelSurveyRepository = mock(TravelSurveyRepository.class);
+        SurveyResultRepository surveyResultRepository = mock(SurveyResultRepository.class);
+        PlaceRecommendationService placeRecommendationService = mock(PlaceRecommendationService.class);
+        TravelSurvey survey = mock(TravelSurvey.class);
+        SurveyResult surveyResult = mock(SurveyResult.class);
+
+        when(survey.getSurveyId()).thenReturn(2L);
+        when(survey.getRegion()).thenReturn("서울");
+        when(survey.getStartDate()).thenReturn(LocalDate.of(2026, 7, 20));
+        when(survey.getEndDate()).thenReturn(LocalDate.of(2026, 7, 20));
+        when(survey.getCompanionType()).thenReturn("FRIEND");
+        when(survey.getTransportType()).thenReturn("WALKING");
+        when(surveyResult.getResultId()).thenReturn(102L);
+        when(surveyResult.getTravelCode()).thenReturn("ATLSR");
+        when(travelSurveyRepository.findById(2L)).thenReturn(Optional.of(survey));
+        when(surveyResultRepository.findBySurveyId(2L)).thenReturn(Optional.of(surveyResult));
+        when(placeRecommendationService.recommendCandidatePool(
+                eq("ATLSR"), eq("서울"), eq("R"), eq("FRIEND"), anySet()
+        )).thenReturn(pool(
+                List.of(candidate(1L, "관광지 1", "TOUR"), candidate(2L, "관광지 2", "TOUR")),
+                List.of(candidate(11L, "식당 1", "RESTAURANT")),
+                List.of(candidate(21L, "카페 1", "CAFE")),
+                List.of()
+        ));
+
+        CourseDraftResponse draft = new CourseDraftService(
+                travelSurveyRepository, surveyResultRepository, placeRecommendationService
+        ).createDraft(2L);
+
+        assertEquals(LocalTime.of(13, 0), draft.getDailyStartTime());
+        assertEquals(4, draft.getDailyTargetPlaceCount());
     }
 
     private PlaceCandidatePoolResponse pool(

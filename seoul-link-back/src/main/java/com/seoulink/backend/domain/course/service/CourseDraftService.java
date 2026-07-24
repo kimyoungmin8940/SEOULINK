@@ -302,8 +302,8 @@ public class CourseDraftService {
 
     private LocalTime determineDailyStartTime(char scheduleType) {
         return switch (scheduleType) {
-            case 'P' -> LocalTime.of(9, 0);
-            case 'R' -> LocalTime.of(10, 30);
+            case 'P' -> LocalTime.of(11, 0);
+            case 'R' -> LocalTime.of(13, 0);
             default -> throw new IllegalArgumentException(
                     "여행 일정 유형은 P 또는 R이어야 합니다"
             );
