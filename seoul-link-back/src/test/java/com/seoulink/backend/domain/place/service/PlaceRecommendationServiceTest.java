@@ -2,6 +2,7 @@ package com.seoulink.backend.domain.place.service;
 
 import com.seoulink.backend.domain.place.dto.response.PlaceRecommendationListResponse;
 import com.seoulink.backend.domain.place.dto.response.PlaceRecommendationResponse;
+import com.seoulink.backend.domain.place.dto.response.PlaceCandidatePoolResponse;
 import com.seoulink.backend.domain.place.entity.Place;
 import com.seoulink.backend.domain.place.exception.InvalidTravelCodeException;
 import com.seoulink.backend.domain.place.repository.PlaceRepository;
@@ -10,9 +11,11 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Set;
+import java.util.ArrayList;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
@@ -158,6 +161,100 @@ class PlaceRecommendationServiceTest {
         );
     }
 
+    @Test
+    void returnsPackedPoolWithFortyEightUsableCandidates() {
+        List<Place> places = new ArrayList<>();
+        places.addAll(places(1L, 30, "TOUR"));
+        places.addAll(places(101L, 20, "RESTAURANT"));
+        places.addAll(places(201L, 12, "CAFE"));
+        places.addAll(places(301L, 8, "HOTEL"));
+
+        // 최대 검토 여유분 6개가 좌표 누락을 흡수하는지 확인한다.
+        places.get(0).setLatitude(null);
+        places.get(1).setLatitude(null);
+        places.get(2).setLatitude(null);
+        places.get(30).setLongitude(null);
+        places.get(31).setLongitude(null);
+        places.get(50).setLatitude(null);
+
+        when(placeRepository.findByIsActive("Y")).thenReturn(places);
+
+        PlaceCandidatePoolResponse response =
+                placeRecommendationService.recommendCandidatePool(
+                        "ATBSP",
+                        null,
+                        "P",
+                        "FRIENDS",
+                        Set.of()
+                );
+
+        assertEquals(48, response.getTargetCandidateCount());
+        assertEquals(54, response.getMaxLookupCount());
+        assertEquals(24, response.getCandidatesForCategory("TOUR").size());
+        assertEquals(16, response.getCandidatesForCategory("RESTAURANT").size());
+        assertEquals(8, response.getCandidatesForCategory("CAFE").size());
+        assertEquals(48, response.getCandidates().size());
+        assertEquals(6, response.getHotelCandidates().size());
+        assertTrue(response.getCandidates().stream()
+                .allMatch(candidate ->
+                        candidate.getAlternativeCandidates().isEmpty()));
+    }
+
+    @Test
+    void returnsRelaxedPoolAndKeepsExcludedPlacesOnlyAsFallback() {
+        List<Place> places = new ArrayList<>();
+        places.addAll(places(1L, 22, "TOUR"));
+        places.addAll(places(101L, 12, "RESTAURANT"));
+        places.addAll(places(201L, 12, "CAFE"));
+        places.addAll(places(301L, 8, "HOTEL"));
+        places.add(place(999L, "잘못된 카테고리", "OTHER", true));
+
+        Set<Long> excludedPlaceIds = Set.of(1L, 101L, 201L, 301L);
+        when(placeRepository.findByIsActive("Y")).thenReturn(places);
+
+        PlaceCandidatePoolResponse response =
+                placeRecommendationService.recommendCandidatePool(
+                        "ATBSR",
+                        null,
+                        "R",
+                        "COUPLE",
+                        excludedPlaceIds
+                );
+
+        assertEquals(32, response.getTargetCandidateCount());
+        assertEquals(36, response.getMaxLookupCount());
+        assertEquals(16, response.getCandidatesForCategory("TOUR").size());
+        assertEquals(8, response.getCandidatesForCategory("RESTAURANT").size());
+        assertEquals(8, response.getCandidatesForCategory("CAFE").size());
+        assertFalse(response.getCandidates().stream()
+                .anyMatch(candidate ->
+                        excludedPlaceIds.contains(candidate.getPlaceId())));
+        assertTrue(response.getFallbackCandidatesByCategory()
+                .values()
+                .stream()
+                .flatMap(List::stream)
+                .anyMatch(candidate -> candidate.getPlaceId().equals(1L)));
+        assertFalse(response.getHotelCandidates().stream()
+                .anyMatch(candidate -> candidate.getPlaceId().equals(301L)));
+        assertTrue(response.getFallbackHotelCandidates().stream()
+                .anyMatch(candidate -> candidate.getPlaceId().equals(301L)));
+    }
+
+    @Test
+    void rejectsScheduleTypeThatDoesNotMatchTravelCode() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> placeRecommendationService.recommendCandidatePool(
+                        "ATBSP",
+                        null,
+                        "R",
+                        null,
+                        Set.of()
+                )
+        );
+        verifyNoInteractions(placeRepository);
+    }
+
     private Place place(Long id, String name, String category, boolean matchesHistory) {
         Place place = new Place();
         place.setPlaceId(id);
@@ -175,8 +272,28 @@ class PlaceRecommendationServiceTest {
             case "RESTAURANT" -> place.setThemeFoodTourYn("Y");
             case "CAFE" -> place.setThemeCafeTourYn("Y");
             case "HOTEL" -> place.setThemeHotelStayYn("Y");
-            default -> throw new IllegalArgumentException("지원하지 않는 테스트 카테고리입니다.");
+            default -> {
+                // 지원하지 않는 카테고리가 후보 풀에서 제외되는지 검증할 때 사용한다.
+            }
         }
         return place;
+    }
+
+    private List<Place> places(
+            long firstId,
+            int count,
+            String category
+    ) {
+        List<Place> result = new ArrayList<>();
+        for (int index = 0; index < count; index++) {
+            long placeId = firstId + index;
+            result.add(place(
+                    placeId,
+                    category + " " + placeId,
+                    category,
+                    true
+            ));
+        }
+        return result;
     }
 }

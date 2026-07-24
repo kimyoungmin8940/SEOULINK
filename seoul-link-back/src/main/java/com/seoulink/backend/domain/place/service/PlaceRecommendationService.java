@@ -1,6 +1,7 @@
 package com.seoulink.backend.domain.place.service;
 
 import com.seoulink.backend.domain.place.dto.response.PlaceAlternativeResponse;
+import com.seoulink.backend.domain.place.dto.response.PlaceCandidatePoolResponse;
 import com.seoulink.backend.domain.place.dto.response.PlaceRecommendationListResponse;
 import com.seoulink.backend.domain.place.dto.response.PlaceRecommendationResponse;
 import com.seoulink.backend.domain.place.entity.Place;
@@ -10,10 +11,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -42,19 +46,114 @@ public class PlaceRecommendationService {
     private static final double DISPLAY_SCORE_MIN = 70.0;
     private static final double DISPLAY_SCORE_MAX = 95.0;
     private static final double EQUAL_SCORE_DISPLAY_VALUE = 85.0;
+    private static final int HOTEL_CANDIDATE_LIMIT = 6;
 
-    // 역할 1이 카테고리별 목표 개수를 정할 수 있도록 대표 후보에 기본 장소 종류를 고르게 포함한다.
+    private static final String TOUR = "TOUR";
+    private static final String RESTAURANT = "RESTAURANT";
+    private static final String CAFE = "CAFE";
+    private static final String HOTEL = "HOTEL";
+
+    // 기존 추천 API가 기본 장소 종류를 고르게 포함하도록 사용하는 카테고리 목록이다.
     private static final List<String> SUPPORTED_CATEGORIES = List.of(
-            "TOUR",
-            "RESTAURANT",
-            "CAFE",
-            "HOTEL"
+            TOUR,
+            RESTAURANT,
+            CAFE,
+            HOTEL
+    );
+
+    private static final List<String> COURSE_CANDIDATE_CATEGORIES = List.of(
+            TOUR,
+            RESTAURANT,
+            CAFE
     );
 
     private final PlaceRepository placeRepository;
 
     public PlaceRecommendationService(PlaceRepository placeRepository) {
         this.placeRepository = placeRepository;
+    }
+
+    /**
+     * 코스 생성 서비스가 HTTP나 프론트 전달 없이 직접 호출하는 후보 조회 진입점이다.
+     *
+     * <p>P형은 TOUR 24, RESTAURANT 16, CAFE 8의 유효 후보 48개를,
+     * R형은 TOUR 16, RESTAURANT 8, CAFE 8의 유효 후보 32개를 목표로 한다.
+     * 좌표나 카테고리가 잘못된 후보가 섞일 수 있으므로 각각 최대 54개와 36개의
+     * 상위 후보를 검토한다.</p>
+     *
+     * <p>기존 장소 ID는 기본 후보에서 우선 제외하되 후보 부족 시 코스 생성 서비스가
+     * 감점 재사용할 수 있도록 fallbackCandidatesByCategory에 별도로 반환한다.
+     * 장소마다 alternativeCandidates를 중첩하지 않고 같은 카테고리 후보 풀을
+     * 한 번만 제공한다.</p>
+     */
+    public PlaceCandidatePoolResponse recommendCandidatePool(
+            String travelCode,
+            String region,
+            String scheduleType,
+            String companionType,
+            Collection<Long> excludedPlaceIds
+    ) {
+        String normalizedTravelCode = normalizeTravelCode(travelCode);
+        String normalizedRegion = normalizeRegion(region);
+        String normalizedCompanionType =
+                normalizeCompanionType(companionType);
+        String normalizedScheduleType = normalizeScheduleType(
+                scheduleType,
+                normalizedTravelCode
+        );
+        Set<Long> normalizedExcludedPlaceIds =
+                normalizeExcludedPlaceIds(excludedPlaceIds);
+        CandidatePoolPolicy policy =
+                candidatePoolPolicy(normalizedScheduleType);
+
+        List<ScoredPlace> scoredPlaces = scoreAllPlaces(
+                normalizedRegion,
+                normalizedTravelCode,
+                normalizedCompanionType
+        );
+
+        Map<String, List<PlaceRecommendationResponse>>
+                candidatesByCategory = selectCandidatePools(
+                scoredPlaces,
+                policy.targetCounts(),
+                policy.maxLookupCounts(),
+                normalizedExcludedPlaceIds,
+                false
+        );
+
+        Map<String, List<PlaceRecommendationResponse>>
+                fallbackCandidatesByCategory = selectCandidatePools(
+                scoredPlaces,
+                policy.targetCounts(),
+                policy.maxLookupCounts(),
+                normalizedExcludedPlaceIds,
+                true
+        );
+
+        List<PlaceRecommendationResponse> hotelCandidates =
+                selectHotelCandidates(
+                        scoredPlaces,
+                        normalizedExcludedPlaceIds,
+                        false
+                );
+        List<PlaceRecommendationResponse> fallbackHotelCandidates =
+                selectHotelCandidates(
+                        scoredPlaces,
+                        normalizedExcludedPlaceIds,
+                        true
+                );
+
+        return new PlaceCandidatePoolResponse(
+                normalizedTravelCode,
+                normalizedScheduleType,
+                normalizedCompanionType,
+                policy.targetCandidateCount(),
+                policy.maxLookupCount(),
+                candidatesByCategory,
+                fallbackCandidatesByCategory,
+                hotelCandidates,
+                fallbackHotelCandidates
+        );
     }
 
     /**
@@ -71,7 +170,7 @@ public class PlaceRecommendationService {
     }
 
     /**
-     * 역할 1이 지역과 필요한 후보 규모를 지정해 호출하는 최종 추천 진입점이다.
+     * 기존 화면과 테스트가 지역 및 후보 규모를 지정해 호출하는 호환 추천 진입점이다.
      * limitPerCategory가 있으면 각 카테고리에서 해당 개수만큼 반환하고,
      * 없으면 기존 호환 방식대로 전체 limit 안에서 카테고리 대표를 우선 확보한다.
      */
@@ -114,28 +213,11 @@ public class PlaceRecommendationService {
         Integer resolvedLimitPerCategory = resolveLimitPerCategory(limitPerCategory);
         int resolvedAlternativeLimit = resolveLimit(alternativeLimit, DEFAULT_ALTERNATIVE_LIMIT);
 
-        // 추천 대상으로 사용하도록 설정된 활성 장소만 가져온다.
-        List<ScoredPlace> rawScoredPlaces = findActivePlaces(normalizedRegion)
-                .stream()
-
-                // Place와 계산된 점수를 한 쌍으로 묶는다.
-                // DB의 PLACES 테이블에 사용자별 점수를 저장하지 않고 요청할 때마다 계산한다.
-                .map(place -> scorePlace(
-                        place,
-                        normalizedTravelCode,
-                        normalizedCompanionType
-                ))
-
-                // 평점이 높더라도 여행 코드 태그가 하나도 맞지 않으면 추천 대상에서 제외한다.
-                .filter(scoredPlace -> scoredPlace.preferenceScore() > 0)
-
-                .toList();
-
-        // 순위 계산값은 유지하면서 화면에 보이는 점수만 70~95 범위로 정규화한다.
-        List<ScoredPlace> scoredPlaces = normalizeDisplayScores(rawScoredPlaces)
-                .stream()
-                .sorted(scoreComparator())
-                .toList();
+        List<ScoredPlace> scoredPlaces = scoreAllPlaces(
+                normalizedRegion,
+                normalizedTravelCode,
+                normalizedCompanionType
+        );
 
         List<ScoredPlace> recommended = resolvedLimitPerCategory == null
                 ? selectCategoryBalancedPlaces(scoredPlaces, resolvedLimit)
@@ -163,6 +245,146 @@ public class PlaceRecommendationService {
 
         // 최종 JSON: { "travelCode": "ATBSP", "recommendedPlaces": [...] }
         return new PlaceRecommendationListResponse(normalizedTravelCode, recommendedPlaces);
+    }
+
+    /**
+     * 활성 장소를 사용자 취향과 동행 유형으로 점수화하고 표시 점수 70~95로 보정한다.
+     * 추천 API와 코스용 후보 조회가 같은 점수 기준을 사용하도록 한 곳에 모아 둔다.
+     */
+    private List<ScoredPlace> scoreAllPlaces(
+            String region,
+            String travelCode,
+            String companionType
+    ) {
+        List<ScoredPlace> rawScoredPlaces = findActivePlaces(region)
+                .stream()
+                .map(place -> scorePlace(
+                        place,
+                        travelCode,
+                        companionType
+                ))
+                .filter(scoredPlace ->
+                        scoredPlace.preferenceScore() > 0)
+                .toList();
+
+        return normalizeDisplayScores(rawScoredPlaces)
+                .stream()
+                .sorted(scoreComparator())
+                .toList();
+    }
+
+    /**
+     * 일정 유형에 맞는 TOUR·RESTAURANT·CAFE 후보 풀을 만든다.
+     *
+     * <p>fallback=false이면 제외 ID가 아닌 장소를, fallback=true이면 제외 ID인
+     * 장소만 반환한다. 최대 검토 개수를 먼저 적용하고 그 안에서 사용할 수 없는 장소를
+     * 제거하므로 필터 탈락을 고려한 54/36 상한이 실제로 작동한다.</p>
+     */
+    private Map<String, List<PlaceRecommendationResponse>>
+    selectCandidatePools(
+            List<ScoredPlace> scoredPlaces,
+            Map<String, Integer> targetCounts,
+            Map<String, Integer> maxLookupCounts,
+            Set<Long> excludedPlaceIds,
+            boolean fallback
+    ) {
+        Map<String, List<PlaceRecommendationResponse>> pools =
+                new LinkedHashMap<>();
+
+        for (String category : COURSE_CANDIDATE_CATEGORIES) {
+            int targetCount = targetCounts.getOrDefault(category, 0);
+            int maxLookupCount =
+                    maxLookupCounts.getOrDefault(category, targetCount);
+
+            List<PlaceRecommendationResponse> candidates =
+                    scoredPlaces.stream()
+                            .filter(scoredPlace ->
+                                    sameCategory(
+                                            scoredPlace.place().getCategory(),
+                                            category
+                                    ))
+                            .filter(scoredPlace ->
+                                    fallback
+                                            == excludedPlaceIds.contains(
+                                            scoredPlace.place().getPlaceId()
+                                    ))
+                            .limit(maxLookupCount)
+                            .filter(scoredPlace ->
+                                    isUsableCourseCandidate(
+                                            scoredPlace.place()
+                                    ))
+                            .limit(targetCount)
+                            .map(this::toPoolCandidateResponse)
+                            .toList();
+
+            pools.put(category, candidates);
+        }
+
+        return pools;
+    }
+
+    private List<PlaceRecommendationResponse> selectHotelCandidates(
+            List<ScoredPlace> scoredPlaces,
+            Set<Long> excludedPlaceIds,
+            boolean fallback
+    ) {
+        return scoredPlaces.stream()
+                .filter(scoredPlace ->
+                        sameCategory(
+                                scoredPlace.place().getCategory(),
+                                HOTEL
+                        ))
+                .filter(scoredPlace ->
+                        fallback
+                                == excludedPlaceIds.contains(
+                                scoredPlace.place().getPlaceId()
+                        ))
+                .filter(scoredPlace ->
+                        isUsableCourseCandidate(scoredPlace.place()))
+                .limit(HOTEL_CANDIDATE_LIMIT)
+                .map(this::toPoolCandidateResponse)
+                .toList();
+    }
+
+    /**
+     * 코스 후보에서는 장소별 대체 후보를 만들지 않는다.
+     * 같은 카테고리의 나머지 후보 풀이 대체 후보 역할을 한다.
+     */
+    private PlaceRecommendationResponse toPoolCandidateResponse(
+            ScoredPlace scoredPlace
+    ) {
+        return new PlaceRecommendationResponse(
+                scoredPlace.place(),
+                scoredPlace.score(),
+                List.of()
+        );
+    }
+
+    private boolean isUsableCourseCandidate(Place place) {
+        if (place == null || place.getPlaceId() == null) {
+            return false;
+        }
+        if (!SUPPORTED_CATEGORIES.contains(normalizeCategory(
+                place.getCategory()
+        ))) {
+            return false;
+        }
+        return isValidLatitude(place.getLatitude())
+                && isValidLongitude(place.getLongitude());
+    }
+
+    private boolean isValidLatitude(Double latitude) {
+        return latitude != null
+                && Double.isFinite(latitude)
+                && latitude >= -90.0
+                && latitude <= 90.0;
+    }
+
+    private boolean isValidLongitude(Double longitude) {
+        return longitude != null
+                && Double.isFinite(longitude)
+                && longitude >= -180.0
+                && longitude <= 180.0;
     }
 
     /**
@@ -553,6 +775,88 @@ public class PlaceRecommendationService {
         };
     }
 
+    /**
+     * 일정 유형이 생략되면 여행 코드의 마지막 글자를 사용하고,
+     * 둘 다 전달된 경우 서로 같은지 검사한다.
+     */
+    private String normalizeScheduleType(
+            String scheduleType,
+            String travelCode
+    ) {
+        String codeScheduleType =
+                String.valueOf(travelCode.charAt(4));
+        if (scheduleType == null || scheduleType.isBlank()) {
+            return codeScheduleType;
+        }
+
+        String normalized =
+                scheduleType.trim().toUpperCase(Locale.ROOT);
+        if (!normalized.equals("P") && !normalized.equals("R")) {
+            throw new IllegalArgumentException(
+                    "일정 유형은 P 또는 R이어야 합니다."
+            );
+        }
+        if (!normalized.equals(codeScheduleType)) {
+            throw new IllegalArgumentException(
+                    "일정 유형은 여행 코드의 마지막 글자와 같아야 합니다."
+            );
+        }
+        return normalized;
+    }
+
+    private Set<Long> normalizeExcludedPlaceIds(
+            Collection<Long> excludedPlaceIds
+    ) {
+        if (excludedPlaceIds == null || excludedPlaceIds.isEmpty()) {
+            return Set.of();
+        }
+        return excludedPlaceIds.stream()
+                .filter(placeId -> placeId != null && placeId > 0)
+                .collect(Collectors.toUnmodifiableSet());
+    }
+
+    private CandidatePoolPolicy candidatePoolPolicy(
+            String scheduleType
+    ) {
+        if ("P".equals(scheduleType)) {
+            return new CandidatePoolPolicy(
+                    48,
+                    54,
+                    Map.of(
+                            TOUR, 24,
+                            RESTAURANT, 16,
+                            CAFE, 8
+                    ),
+                    Map.of(
+                            TOUR, 27,
+                            RESTAURANT, 18,
+                            CAFE, 9
+                    )
+            );
+        }
+        return new CandidatePoolPolicy(
+                32,
+                36,
+                Map.of(
+                        TOUR, 16,
+                        RESTAURANT, 8,
+                        CAFE, 8
+                ),
+                Map.of(
+                        TOUR, 18,
+                        RESTAURANT, 9,
+                        CAFE, 9
+                )
+        );
+    }
+
+    private String normalizeCategory(String category) {
+        if (category == null) {
+            return "";
+        }
+        return category.trim().toUpperCase(Locale.ROOT);
+    }
+
     // 요청 개수가 비어 있거나 0 이하이면 기본값, 50보다 크면 50을 반환한다.
     private int resolveLimit(Integer value, int defaultValue) {
         if (value == null || value <= 0) {
@@ -635,5 +939,13 @@ public class PlaceRecommendationService {
     // 장소와 계산된 점수를 함께 전달하기 위한 서비스 내부 전용 자료형이다.
     // DB 테이블이나 API JSON에는 ScoredPlace라는 이름으로 노출되지 않는다.
     private record ScoredPlace(Place place, Double score, Double preferenceScore) {
+    }
+
+    private record CandidatePoolPolicy(
+            int targetCandidateCount,
+            int maxLookupCount,
+            Map<String, Integer> targetCounts,
+            Map<String, Integer> maxLookupCounts
+    ) {
     }
 }
