@@ -780,6 +780,19 @@ public class CourseOptimizationService {
                     currentCandidates,
                     distantPlace.getPlaceId()
             );
+            PlaceCandidateDto nextCandidate = null;
+            if (index + 1 < optimizedPlaces.size()) {
+                OptimizedPlaceDto nextPlace = optimizedPlaces.get(index + 1);
+                boolean sameDay = distantPlace.getVisitDate().equals(
+                        nextPlace.getVisitDate()
+                );
+                if (sameDay && nextPlace.getVisitOrder() != 1) {
+                    nextCandidate = findCandidateByPlaceId(
+                            currentCandidates,
+                            nextPlace.getPlaceId()
+                    );
+                }
+            }
             List<PlaceCandidateDto> candidateAlternatives =
                     alternativesByCurrentPlaceId.get(distantCandidate.getPlaceId());
             if (candidateAlternatives == null) {
@@ -789,6 +802,7 @@ public class CourseOptimizationService {
             PlaceCandidateDto alternative = selectBestAlternative(
                     previousCandidate,
                     distantCandidate,
+                    nextCandidate,
                     candidateAlternatives,
                     originalPlaceIds,
                     currentCoursePlaceIds,
@@ -841,12 +855,14 @@ public class CourseOptimizationService {
     }
 
     /**
-     * 날짜·카테고리·중복 조건을 만족하며 새 구간도 허용 기준 안인 후보 중
-     * 이동시간 → 거리 → 추천 점수 → 장소 ID 순으로 가장 좋은 후보를 고른다.
+     * 날짜·카테고리·중복 조건을 만족하며 교체 전후 구간이 허용 기준 안인 후보 중
+     * 앞 구간과 다음 구간의 합산 이동시간 → 합산 거리 → 추천 점수 → 장소 ID
+     * 순으로 가장 좋은 후보를 고른다. 마지막 장소는 기존처럼 앞 구간만 비교한다.
      */
     private PlaceCandidateDto selectBestAlternative(
             PlaceCandidateDto previousPlace,
             PlaceCandidateDto distantPlace,
+            PlaceCandidateDto nextPlace,
             List<PlaceCandidateDto> alternatives,
             Set<Long> originalPlaceIds,
             Set<Long> currentCoursePlaceIds,
@@ -874,6 +890,11 @@ public class CourseOptimizationService {
         List<PlaceCandidateDto> matrixCandidates = new ArrayList<>();
         matrixCandidates.add(previousPlace);
         matrixCandidates.addAll(eligibleAlternatives);
+        int nextPlaceMatrixIndex = -1;
+        if (nextPlace != null) {
+            nextPlaceMatrixIndex = matrixCandidates.size();
+            matrixCandidates.add(nextPlace);
+        }
         boolean useEstimatedCandidateMatrix =
                 estimateCandidatePool
                         || transportMode == TransportMode.PUBLIC_TRANSIT;
@@ -891,25 +912,60 @@ public class CourseOptimizationService {
         int selectedMatrixIndex = -1;
         double shortestTravelTimeMinutes = Double.MAX_VALUE;
         double shortestDistanceKm = Double.MAX_VALUE;
+        int alternativeEndIndex = nextPlaceMatrixIndex < 0
+                ? matrixCandidates.size()
+                : nextPlaceMatrixIndex;
 
-        // 0번은 이전 장소이고 1번부터 실제 대체 후보이다.
-        for (int matrixIndex = 1; matrixIndex < matrixCandidates.size(); matrixIndex++) {
-            double distanceKm = routeMatrix.getDistanceKm(0, matrixIndex);
-            double travelTimeMinutes = routeMatrix.getTravelTimeMinutes(0, matrixIndex);
-            if (isDistantLeg(distanceKm, travelTimeMinutes, transportMode)) {
+        // 0번은 이전 장소이고 1번부터 alternativeEndIndex 직전까지 실제 대체 후보이다.
+        for (int matrixIndex = 1; matrixIndex < alternativeEndIndex; matrixIndex++) {
+            double previousDistanceKm = routeMatrix.getDistanceKm(0, matrixIndex);
+            double previousTravelTimeMinutes = routeMatrix.getTravelTimeMinutes(
+                    0,
+                    matrixIndex
+            );
+            if (isDistantLeg(
+                    previousDistanceKm,
+                    previousTravelTimeMinutes,
+                    transportMode
+            )) {
                 continue;
             }
 
+            double nextDistanceKm = 0.0;
+            double nextTravelTimeMinutes = 0.0;
+            if (nextPlaceMatrixIndex >= 0) {
+                nextDistanceKm = routeMatrix.getDistanceKm(
+                        matrixIndex,
+                        nextPlaceMatrixIndex
+                );
+                nextTravelTimeMinutes = routeMatrix.getTravelTimeMinutes(
+                        matrixIndex,
+                        nextPlaceMatrixIndex
+                );
+                if (isDistantLeg(
+                        nextDistanceKm,
+                        nextTravelTimeMinutes,
+                        transportMode
+                )) {
+                    continue;
+                }
+            }
+
+            double totalTravelTimeMinutes = previousTravelTimeMinutes
+                    + nextTravelTimeMinutes;
+            double totalDistanceKm = previousDistanceKm + nextDistanceKm;
             PlaceCandidateDto candidate = matrixCandidates.get(matrixIndex);
-            boolean faster = travelTimeMinutes
+            boolean faster = totalTravelTimeMinutes
                     < shortestTravelTimeMinutes - ROUTE_TIE_EPSILON;
             boolean sameTravelTime = Math.abs(
-                    travelTimeMinutes - shortestTravelTimeMinutes
+                    totalTravelTimeMinutes - shortestTravelTimeMinutes
             ) <= ROUTE_TIE_EPSILON;
             boolean shorterAtSameTime = sameTravelTime
-                    && distanceKm < shortestDistanceKm - ROUTE_TIE_EPSILON;
+                    && totalDistanceKm < shortestDistanceKm - ROUTE_TIE_EPSILON;
             boolean sameRouteCost = sameTravelTime
-                    && Math.abs(distanceKm - shortestDistanceKm) <= ROUTE_TIE_EPSILON;
+                    && Math.abs(
+                    totalDistanceKm - shortestDistanceKm
+            ) <= ROUTE_TIE_EPSILON;
 
             if (faster
                     || shorterAtSameTime
@@ -918,8 +974,8 @@ public class CourseOptimizationService {
                     matrixCandidates.get(selectedMatrixIndex)
             )))) {
                 selectedMatrixIndex = matrixIndex;
-                shortestTravelTimeMinutes = travelTimeMinutes;
-                shortestDistanceKm = distanceKm;
+                shortestTravelTimeMinutes = totalTravelTimeMinutes;
+                shortestDistanceKm = totalDistanceKm;
             }
         }
 

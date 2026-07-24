@@ -794,6 +794,10 @@ CREATE TABLE COURSE_DETAILS (
                                 DISTANCE_FROM_PREV_KM NUMBER(12, 3) DEFAULT 0 NOT NULL,
                                 TRAVEL_MINUTES_FROM_PREV NUMBER(12, 2) DEFAULT 0 NOT NULL,
 
+    /* 대중교통 이용 시 직전 장소에서 현재 장소까지의 대표 경로 종류 */
+                                TRANSIT_PATH_TYPE VARCHAR2(20),
+                                ROUTE_ESTIMATED NUMBER(1) DEFAULT 0 NOT NULL,
+
     /* 현재 CourseBuilderService 저장 SQL 호환 컬럼 */
                                 MOVE_DISTANCE_M NUMBER,
                                 MOVE_DURATION_MIN NUMBER,
@@ -838,6 +842,20 @@ CREATE TABLE COURSE_DETAILS (
 
                                 CONSTRAINT CK_COURSE_DETAILS_TRAVEL
                                     CHECK (TRAVEL_MINUTES_FROM_PREV >= 0),
+
+                                CONSTRAINT CK_COURSE_DETAILS_TRANSIT_PATH
+                                    CHECK (
+                                        TRANSIT_PATH_TYPE IS NULL
+                                            OR TRANSIT_PATH_TYPE IN (
+                                                'SUBWAY',
+                                                'BUS',
+                                                'BUS_SUBWAY',
+                                                'WALKING'
+                                            )
+                                        ),
+
+                                CONSTRAINT CK_COURSE_DETAILS_ROUTE_ESTIMATED
+                                    CHECK (ROUTE_ESTIMATED IN (0, 1)),
 
                                 CONSTRAINT CK_COURSE_DETAILS_MOVE_DISTANCE
                                     CHECK (MOVE_DISTANCE_M IS NULL OR MOVE_DISTANCE_M >= 0),
@@ -1280,6 +1298,8 @@ COMMENT ON COLUMN COURSE_DETAILS.STAY_MINUTES IS '권장 체류 시간, 분 단�
 COMMENT ON COLUMN COURSE_DETAILS.VISIT_DATE IS '해당 장소를 방문할 날짜';
 COMMENT ON COLUMN COURSE_DETAILS.DISTANCE_FROM_PREV_KM IS '직전 장소로부터의 이동거리, km 단위';
 COMMENT ON COLUMN COURSE_DETAILS.TRAVEL_MINUTES_FROM_PREV IS '직전 장소로부터의 이동시간, 분 단위';
+COMMENT ON COLUMN COURSE_DETAILS.TRANSIT_PATH_TYPE IS '대중교통 선택 시 실제 구간 종류, SUBWAY/BUS/BUS_SUBWAY/WALKING';
+COMMENT ON COLUMN COURSE_DETAILS.ROUTE_ESTIMATED IS '외부 경로 조회 실패로 추정값을 사용했으면 1, 실제 경로면 0';
 COMMENT ON COLUMN COURSE_DETAILS.MOVE_DISTANCE_M IS '현재 CourseBuilderService가 저장하는 장소 간 이동거리, 미터 단위';
 COMMENT ON COLUMN COURSE_DETAILS.MOVE_DURATION_MIN IS '현재 CourseBuilderService가 저장하는 장소 간 이동시간, 분 단위';
 COMMENT ON COLUMN COURSE_DETAILS.CREATED_AT IS '코스 상세 등록 일시';

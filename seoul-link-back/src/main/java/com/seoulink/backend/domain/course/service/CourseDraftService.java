@@ -2,7 +2,7 @@ package com.seoulink.backend.domain.course.service;
 
 import com.seoulink.backend.domain.course.dto.response.CourseDraftResponse;
 import com.seoulink.backend.domain.course.dto.response.DailyCourseDraftResponse;
-import com.seoulink.backend.domain.place.dto.response.PlaceRecommendationListResponse;
+import com.seoulink.backend.domain.place.dto.response.PlaceCandidatePoolResponse;
 import com.seoulink.backend.domain.place.dto.response.PlaceRecommendationResponse;
 import com.seoulink.backend.domain.place.service.PlaceRecommendationService;
 import com.seoulink.backend.domain.survey.entity.SurveyResult;
@@ -13,32 +13,29 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Deque;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.time.LocalTime;
+import java.util.Set;
 
 /**
  * 여행 정보와 설문 결과를 바탕으로 날짜별 추천 코스 초안을 생성하는 서비스입니다.
  *
- * 여행 일수와 여행 유형 코드의 P/R 값을 확인하여 하루 목표 장소 수를 결정하고,
- * PlaceRecommendationService에서 받은 장소 후보를 날짜별로 중복 없이 분배합니다.
- *
- * 여기에서 만들어지는 결과는 방문 순서가 정해진 최종 코스가 아니라,
- * 다음 코스 생성 단계에서 사용할 날짜별 후보군입니다.
+ * <p>설문 메타데이터와 2번 담당자의 장소 후보 풀을 합쳐서
+ * {@code /api/courses/recommend}가 바로 사용할 수 있는 {@code dailyPlans}를 만듭니다.
+ * 앞 날짜에 전달한 장소는 다음 날짜 후보 조회에서 우선 제외하며,
+ * 장소가 부족한 경우에만 후보 풀의 fallback 장소를 최소한으로 재사용합니다.</p>
  */
 @Service
 @Transactional(readOnly = true)
 public class CourseDraftService {
 
     private static final int MAX_TRAVEL_DAYS = 5;
-
-    // 대표 장소 하나당 받을 대체 후보 수
-    private static final int ALTERNATIVE_LIMIT = 3;
+    private static final int HOTEL_CANDIDATE_LIMIT = 6;
 
     private static final String TOUR = "TOUR";
     private static final String RESTAURANT = "RESTAURANT";
@@ -47,57 +44,50 @@ public class CourseDraftService {
 
     private final TravelSurveyRepository travelSurveyRepository;
     private final SurveyResultRepository surveyResultRepository;
+    private final PlaceRecommendationService placeRecommendationService;
 
     public CourseDraftService(
             TravelSurveyRepository travelSurveyRepository,
-            SurveyResultRepository surveyResultRepository
+            SurveyResultRepository surveyResultRepository,
+            PlaceRecommendationService placeRecommendationService
     ) {
         this.travelSurveyRepository = travelSurveyRepository;
         this.surveyResultRepository = surveyResultRepository;
+        this.placeRecommendationService = placeRecommendationService;
     }
 
-    /**
-     * 설문 번호를 기준으로 날짜별 추천 코스 초안을 생성합니다.
-     *
-     * @param surveyId 코스 초안을 만들 설문 번호
-     * @return 여행 전체 정보와 날짜별 추천 후보 목록
-     */
+    /** 설문 번호를 기준으로 날짜별 추천 장소 후보 초안을 생성합니다. */
     public CourseDraftResponse createDraft(Long surveyId) {
         validateSurveyId(surveyId);
 
         TravelSurvey survey = travelSurveyRepository.findById(surveyId)
-                .orElseThrow(() ->
-                        new IllegalArgumentException(
-                                "해당 설문 정보를 찾을 수 없습니다. surveyId=" + surveyId
-                        )
-                );
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "해당 설문 정보를 찾을 수 없습니다. surveyId=" + surveyId
+                ));
 
-        SurveyResult surveyResult =
-                surveyResultRepository.findBySurveyId(surveyId)
-                        .orElseThrow(() ->
-                                new IllegalArgumentException(
-                                        "해당 설문 결과를 찾을 수 없습니다. surveyId=" + surveyId
-                                )
-                        );
+        SurveyResult surveyResult = surveyResultRepository.findBySurveyId(surveyId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "해당 설문 결과를 찾을 수 없습니다. surveyId=" + surveyId
+                ));
 
         int travelDays = calculateTravelDays(
                 survey.getStartDate(),
                 survey.getEndDate()
         );
-
-        String travelCode =
-                normalizeTravelCode(surveyResult.getTravelCode());
-
+        String travelCode = normalizeTravelCode(surveyResult.getTravelCode());
         char scheduleType = travelCode.charAt(4);
-
-        LocalTime dailyStartTime =
-                determineDailyStartTime(scheduleType);
-
-        int dailyTargetPlaceCount =
-                determineTargetPlaceCount(scheduleType);
-
+        LocalTime dailyStartTime = determineDailyStartTime(scheduleType);
+        int dailyTargetPlaceCount = determineTargetPlaceCount(scheduleType);
         Map<String, Integer> dailyCategoryTargets =
-                determineCategoryTargets(scheduleType);
+                determineFinalCategoryTargets(scheduleType);
+
+        DraftCandidateResult candidateResult = createDraftCandidates(
+                survey,
+                travelCode,
+                scheduleType,
+                travelDays,
+                dailyTargetPlaceCount
+        );
 
         return new CourseDraftResponse(
                 survey.getSurveyId(),
@@ -111,291 +101,131 @@ public class CourseDraftService {
                 travelDays,
                 dailyStartTime,
                 dailyTargetPlaceCount,
-                dailyCategoryTargets
+                dailyCategoryTargets,
+                candidateResult.hotelCandidates(),
+                candidateResult.dailyPlans()
         );
     }
 
     /**
-     * 시작일과 종료일을 모두 포함하여 여행 일수를 계산합니다.
+     * 날짜마다 장소 후보 풀을 새로 조회합니다.
      *
-     * 예: 7월 20일부터 7월 22일까지는 3일입니다.
+     * <p>이전 날짜에 이미 전달한 일반 장소 ID를 제외 목록으로 넘겨 날짜 간 중복을
+     * 우선 방지합니다. 데이터가 부족하면 {@link PlaceCandidatePoolResponse}가 제공하는
+     * fallback 후보로 부족분만 채웁니다.</p>
      */
-    private int calculateTravelDays(
-            LocalDate startDate,
-            LocalDate endDate
-    ) {
-        if (startDate == null || endDate == null) {
-            throw new IllegalArgumentException(
-                    "여행 시작일과 종료일이 필요합니다"
-            );
-        }
-
-        if (endDate.isBefore(startDate)) {
-            throw new IllegalArgumentException(
-                    "여행 종료일은 시작일보다 빠를 수 없습니다"
-            );
-        }
-
-        long travelDays =
-                ChronoUnit.DAYS.between(startDate, endDate) + 1;
-
-        if (travelDays > MAX_TRAVEL_DAYS) {
-            throw new IllegalArgumentException(
-                    "여행 기간은 최대 5일까지 가능합니다"
-            );
-        }
-
-        return (int) travelDays;
-    }
-
-    /**
-     * 여행 일정 유형에 따라 하루 코스 시작 시간을 결정합니다.
-     *
-     * P형은 촘촘한 일정이므로 오전 9시에 시작하고,
-     * R형은 여유로운 일정이므로 오전 10시 30분에 시작합니다.
-     */
-    private LocalTime determineDailyStartTime(char scheduleType) {
-        return switch (scheduleType) {
-            case 'P' -> LocalTime.of(9, 0);
-            case 'R' -> LocalTime.of(10, 30);
-            default -> throw new IllegalArgumentException(
-                    "여행 일정 유형은 P 또는 R이어야 합니다"
-            );
-        };
-    }
-
-    /**
-     * P형과 R형에 따라 하루 목표 장소 수를 결정합니다.
-     *
-     * P형: 계획이 촘촘한 여행이므로 하루 6곳
-     * R형: 여유로운 여행이므로 하루 4곳
-     */
-    private int determineTargetPlaceCount(char scheduleType) {
-        return switch (scheduleType) {
-            case 'P' -> 6;
-            case 'R' -> 4;
-            default -> throw new IllegalArgumentException(
-                    "여행 일정 유형은 P 또는 R이어야 합니다"
-            );
-        };
-    }
-
-    /**
-     * 최종 목표 장소 수보다 넉넉하게 전달할 후보 수를 결정합니다.
-     *
-     * P형은 날짜별 최대 15개,
-     * R형은 날짜별 최대 10개의 후보를 전달합니다.
-     *
-     * 장소가 부족하면 확보된 후보만 반환합니다.
-     */
-    private int determineCandidatePlaceCount(char scheduleType) {
-        return switch (scheduleType) {
-            case 'P' -> 15;
-            case 'R' -> 10;
-            default -> throw new IllegalArgumentException(
-                    "여행 일정 유형은 P 또는 R이어야 합니다"
-            );
-        };
-    }
-
-    /**
-     * 여행 일수와 일정 유형에 따라 카테고리별로 요청할 후보 수를 결정합니다.
-     *
-     * P형은 하루 TOUR 후보가 최대 7개 필요하므로 여행 일수에 7을 곱합니다.
-     * R형은 하루 TOUR 후보가 최대 4개 필요하므로 여행 일수에 4를 곱합니다.
-     */
-    private int determineLimitPerCategory(
+    private DraftCandidateResult createDraftCandidates(
+            TravelSurvey survey,
+            String travelCode,
             char scheduleType,
-            int travelDays
-    ) {
-        return switch (scheduleType) {
-            case 'P' -> 7 * travelDays;
-            case 'R' -> 4 * travelDays;
-            default -> throw new IllegalArgumentException(
-                    "여행 일정 유형은 P 또는 R이어야 합니다"
-            );
-        };
-    }
-
-    /**
-     * 일정 유형에 따라 하루에 전달할 카테고리별 후보 개수를 결정합니다.
-     *
-     * P형은 TOUR 7개, RESTAURANT 4개, CAFE 4개로
-     * 하루 최대 15개의 후보를 구성합니다.
-     *
-     * R형은 TOUR 4개, RESTAURANT 3개, CAFE 3개로
-     * 하루 최대 10개의 후보를 구성합니다.
-     *
-     * HOTEL은 이동 코스가 아니라 숙소로 별도 처리하기 때문에
-     * 현재 코스 후보에서는 제외합니다.
-     */
-    private Map<String, Integer> determineCategoryTargets(
-            char scheduleType
-    ) {
-        Map<String, Integer> targets = new LinkedHashMap<>();
-
-        if (scheduleType == 'P') {
-            targets.put(TOUR, 3);
-            targets.put(RESTAURANT, 2);
-            targets.put(CAFE, 1);
-            targets.put(HOTEL, 0);
-
-            return targets;
-        }
-
-        if (scheduleType == 'R') {
-            targets.put(TOUR, 2);
-            targets.put(RESTAURANT, 1);
-            targets.put(CAFE, 1);
-            targets.put(HOTEL, 0);
-
-            return targets;
-        }
-
-        throw new IllegalArgumentException(
-                "여행 일정 유형은 P 또는 R이어야 합니다."
-        );
-    }
-
-    /**
-     * 전체 추천 장소를 TOUR, RESTAURANT, CAFE, HOTEL 후보 보관함으로 나눔
-     */
-    private Map<String, Deque<PlaceRecommendationResponse>>
-    createCandidatePools(
-            List<PlaceRecommendationResponse> recommendedPlaces
-    ) {
-        Map<String, Deque<PlaceRecommendationResponse>> pools =
-                new LinkedHashMap<>();
-
-        pools.put(TOUR, new ArrayDeque<>());
-        pools.put(RESTAURANT, new ArrayDeque<>());
-        pools.put(CAFE, new ArrayDeque<>());
-        pools.put(HOTEL, new ArrayDeque<>());
-
-        if (recommendedPlaces == null) {
-            return pools;
-        }
-
-        for (PlaceRecommendationResponse place : recommendedPlaces) {
-            if (place.getCategory() == null) {
-                continue;
-            }
-
-            String category =
-                    place.getCategory().trim().toUpperCase();
-
-            Deque<PlaceRecommendationResponse> pool =
-                    pools.get(category);
-
-            if (pool != null) {
-                pool.addLast(place);
-            }
-        }
-
-        return pools;
-    }
-
-    /**
-     * 카테고리별 후보를 날짜마다 나누어 담습니다.
-     *
-     * 후보를 큐에서 꺼내 사용하기 때문에 한 번 사용한 placeId가
-     * 다른 날짜의 기본 후보로 다시 들어가지 않습니다.
-     */
-    private List<DailyCourseDraftResponse>
-    distributeCandidatesByDate(
-            LocalDate startDate,
             int travelDays,
-            int targetPlaceCount,
-            int candidatePlaceCount,
-            Map<String, Integer> categoryTargets,
-            Map<String, Deque<PlaceRecommendationResponse>> candidatePools
+            int desiredTargetPlaceCount
     ) {
-        List<List<PlaceRecommendationResponse>> candidatesByDay =
-                new ArrayList<>();
+        Map<String, Integer> desiredCandidateCounts =
+                determineCandidatePoolTargets(scheduleType);
+        Set<Long> previouslyAssignedPlaceIds = new LinkedHashSet<>();
+        List<DailyCourseDraftResponse> dailyPlans = new ArrayList<>();
+        List<PlaceRecommendationResponse> hotelCandidates = List.of();
 
-        // 날짜별 후보 목록을 먼저 생성
-        for (int dayIndex = 0;
-             dayIndex < travelDays;
-             dayIndex++) {
+        for (int dayIndex = 0; dayIndex < travelDays; dayIndex++) {
+            PlaceCandidatePoolResponse pool =
+                    placeRecommendationService.recommendCandidatePool(
+                            travelCode,
+                            survey.getRegion(),
+                            String.valueOf(scheduleType),
+                            survey.getCompanionType(),
+                            previouslyAssignedPlaceIds
+                    );
 
-            candidatesByDay.add(new ArrayList<>());
-        }
-
-        /*
-         * 1차 배정
-         * 모든 날짜에 카테고리별 기본 후보를 먼저 배정한다.
-         *
-         * P형:
-         * TOUR 7, RESTAURANT 4, CAFE 4 = 총 15개
-         *
-         * R형:
-         * TOUR 4, RESTAURANT 3, CAFE 3 = 총 10개
-         */
-        for (int dayIndex = 0;
-             dayIndex < travelDays;
-             dayIndex++) {
-
-            List<PlaceRecommendationResponse> dailyCandidates =
-                    candidatesByDay.get(dayIndex);
-
-            for (Map.Entry<String, Integer> target
-                    : categoryTargets.entrySet()) {
-
-                addCandidates(
-                        candidatePools.get(target.getKey()),
-                        target.getValue(),
-                        dailyCandidates
+            if (dayIndex == 0) {
+                hotelCandidates = mergeUniqueCandidates(
+                        pool.getHotelCandidates(),
+                        pool.getFallbackHotelCandidates(),
+                        HOTEL_CANDIDATE_LIMIT,
+                        new LinkedHashSet<>()
                 );
             }
-        }
 
-        /*
-         * 2차 배정
-         * 카테고리별 기본 후보가 부족한 경우,
-         * 남아 있는 다른 카테고리의 후보를 번갈아 추가합니다.
-         *
-         * P형은 날짜별 최대 15개,
-         * R형은 날짜별 최대 10개가 될 때까지 채웁니다.
-         */
-        for (int dayIndex = 0;
-             dayIndex < travelDays;
-             dayIndex++) {
+            List<PlaceRecommendationResponse> dailyCandidates = new ArrayList<>();
+            Set<Long> dailyCandidateIds = new LinkedHashSet<>();
 
-            fillExtraCandidates(
-                    candidatePools,
-                    candidatePlaceCount,
-                    candidatesByDay.get(dayIndex),
-                    dayIndex
+            for (Map.Entry<String, Integer> target
+                    : desiredCandidateCounts.entrySet()) {
+                List<PlaceRecommendationResponse> selected = mergeUniqueCandidates(
+                        pool.getCandidatesForCategory(target.getKey()),
+                        pool.getFallbackCandidatesForCategory(target.getKey()),
+                        target.getValue(),
+                        dailyCandidateIds
+                );
+                dailyCandidates.addAll(selected);
+            }
+
+            if (dailyCandidates.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "추천 가능한 장소 후보가 없습니다. visitDate="
+                                + survey.getStartDate().plusDays(dayIndex)
+                );
+            }
+
+            previouslyAssignedPlaceIds.addAll(dailyCandidateIds);
+            int resolvedTargetPlaceCount = Math.min(
+                    desiredTargetPlaceCount,
+                    dailyCandidates.size()
             );
+            LocalDate visitDate = survey.getStartDate().plusDays(dayIndex);
+
+            dailyPlans.add(new DailyCourseDraftResponse(
+                    visitDate,
+                    resolvedTargetPlaceCount,
+                    countCandidatesByCategory(dailyCandidates),
+                    dailyCandidates
+            ));
         }
 
-        // 날짜별 응답 DTO 생성
-        List<DailyCourseDraftResponse> dailyPlans =
-                new ArrayList<>();
-
-        for (int dayIndex = 0;
-             dayIndex < travelDays;
-             dayIndex++) {
-
-            LocalDate visitDate =
-                    startDate.plusDays(dayIndex);
-
-            dailyPlans.add(
-                    new DailyCourseDraftResponse(
-                            visitDate,
-                            targetPlaceCount,
-                            // 장소가 부족해 다른 카테고리로 보충된 경우에도 실제 후보 구성과
-                            // 다음 추천 단계의 카테고리 비율이 일치하도록 실개수를 전달한다.
-                            countCandidatesByCategory(candidatesByDay.get(dayIndex)),
-                            candidatesByDay.get(dayIndex)
-                    )
-            );
-        }
-
-        return dailyPlans;
+        return new DraftCandidateResult(hotelCandidates, dailyPlans);
     }
 
-    /** 날짜별로 실제 배정된 후보 수를 TOUR/RESTAURANT/CAFE/HOTEL 순서로 집계한다. */
+    /** 기본 후보를 먼저 사용하고 부족한 수량만 fallback 후보로 채웁니다. */
+    private List<PlaceRecommendationResponse> mergeUniqueCandidates(
+            List<PlaceRecommendationResponse> primary,
+            List<PlaceRecommendationResponse> fallback,
+            int limit,
+            Set<Long> alreadyUsedIds
+    ) {
+        List<PlaceRecommendationResponse> merged = new ArrayList<>();
+        Set<Long> selectedIds = new LinkedHashSet<>(alreadyUsedIds);
+
+        addUniqueCandidates(primary, limit, merged, selectedIds);
+        addUniqueCandidates(fallback, limit, merged, selectedIds);
+
+        alreadyUsedIds.addAll(selectedIds);
+        return merged;
+    }
+
+    private void addUniqueCandidates(
+            List<PlaceRecommendationResponse> source,
+            int limit,
+            List<PlaceRecommendationResponse> destination,
+            Set<Long> selectedIds
+    ) {
+        if (source == null || source.isEmpty()) {
+            return;
+        }
+
+        for (PlaceRecommendationResponse candidate : source) {
+            if (destination.size() >= limit) {
+                return;
+            }
+            if (candidate == null
+                    || candidate.getPlaceId() == null
+                    || !selectedIds.add(candidate.getPlaceId())) {
+                continue;
+            }
+            destination.add(candidate);
+        }
+    }
+
+    /** 실제 전달한 후보 수를 추천 API의 categoryTargets로 사용합니다. */
     private Map<String, Integer> countCandidatesByCategory(
             List<PlaceRecommendationResponse> candidates
     ) {
@@ -406,7 +236,7 @@ public class CourseDraftService {
         counts.put(HOTEL, 0);
 
         for (PlaceRecommendationResponse candidate : candidates) {
-            if (candidate.getCategory() == null) {
+            if (candidate == null || candidate.getCategory() == null) {
                 continue;
             }
             String category = candidate.getCategory().trim().toUpperCase();
@@ -417,89 +247,99 @@ public class CourseDraftService {
         return counts;
     }
 
-    /**
-     * 특정 카테고리 후보 보관함에서 필요한 개수만큼 장소를 꺼냅니다.
-     */
-    private void addCandidates(
-            Deque<PlaceRecommendationResponse> pool,
-            int count,
-            List<PlaceRecommendationResponse> destination
-    ) {
-        if (pool == null) {
-            return;
+    /** 2번 담당자의 후보 풀 정책과 같은 날짜별 후보 규모입니다. */
+    private Map<String, Integer> determineCandidatePoolTargets(char scheduleType) {
+        Map<String, Integer> targets = new LinkedHashMap<>();
+        if (scheduleType == 'P') {
+            targets.put(TOUR, 24);
+            targets.put(RESTAURANT, 16);
+            targets.put(CAFE, 8);
+            return targets;
         }
-
-        for (int index = 0;
-             index < count && !pool.isEmpty();
-             index++) {
-
-            destination.add(pool.removeFirst());
+        if (scheduleType == 'R') {
+            targets.put(TOUR, 16);
+            targets.put(RESTAURANT, 8);
+            targets.put(CAFE, 8);
+            return targets;
         }
+        throw new IllegalArgumentException("여행 일정 유형은 P 또는 R이어야 합니다.");
     }
 
-    /**
-     * 날짜별 목표 후보 수가 될 때까지 남아 있는 후보를 추가합니다.
-     *
-     * 시작 카테고리를 날짜마다 변경하여 특정 카테고리에만
-     * 추가 후보가 집중되는 현상을 줄입니다.
-     */
-    private void fillExtraCandidates(
-            Map<String, Deque<PlaceRecommendationResponse>> candidatePools,
-            int candidatePlaceCount,
-            List<PlaceRecommendationResponse> destination,
-            int dayIndex
-    ) {
-        List<String> categories =
-                List.of(TOUR, RESTAURANT, CAFE);
-
-        int categoryIndex = dayIndex % categories.size();
-        int emptyAttempts = 0;
-
-        while (destination.size() < candidatePlaceCount
-                && emptyAttempts < categories.size()) {
-
-            String category =
-                    categories.get(
-                            categoryIndex % categories.size()
-                    );
-
-            Deque<PlaceRecommendationResponse> pool =
-                    candidatePools.get(category);
-
-            if (pool != null && !pool.isEmpty()) {
-                destination.add(pool.removeFirst());
-                emptyAttempts = 0;
-            } else {
-                emptyAttempts++;
-            }
-
-            categoryIndex++;
+    /** 화면 안내용 최종 장소 비율입니다. */
+    private Map<String, Integer> determineFinalCategoryTargets(char scheduleType) {
+        Map<String, Integer> targets = new LinkedHashMap<>();
+        if (scheduleType == 'P') {
+            targets.put(TOUR, 3);
+            targets.put(RESTAURANT, 2);
+            targets.put(CAFE, 1);
+            targets.put(HOTEL, 0);
+            return targets;
         }
+        if (scheduleType == 'R') {
+            targets.put(TOUR, 2);
+            targets.put(RESTAURANT, 1);
+            targets.put(CAFE, 1);
+            targets.put(HOTEL, 0);
+            return targets;
+        }
+        throw new IllegalArgumentException("여행 일정 유형은 P 또는 R이어야 합니다.");
+    }
+
+    private int calculateTravelDays(LocalDate startDate, LocalDate endDate) {
+        if (startDate == null || endDate == null) {
+            throw new IllegalArgumentException("여행 시작일과 종료일이 필요합니다");
+        }
+        if (endDate.isBefore(startDate)) {
+            throw new IllegalArgumentException("여행 종료일은 시작일보다 빠를 수 없습니다");
+        }
+
+        long travelDays = ChronoUnit.DAYS.between(startDate, endDate) + 1;
+        if (travelDays > MAX_TRAVEL_DAYS) {
+            throw new IllegalArgumentException("여행 기간은 최대 5일까지 가능합니다");
+        }
+        return (int) travelDays;
+    }
+
+    private LocalTime determineDailyStartTime(char scheduleType) {
+        return switch (scheduleType) {
+            case 'P' -> LocalTime.of(9, 0);
+            case 'R' -> LocalTime.of(10, 30);
+            default -> throw new IllegalArgumentException(
+                    "여행 일정 유형은 P 또는 R이어야 합니다"
+            );
+        };
+    }
+
+    private int determineTargetPlaceCount(char scheduleType) {
+        return switch (scheduleType) {
+            case 'P' -> 6;
+            case 'R' -> 4;
+            default -> throw new IllegalArgumentException(
+                    "여행 일정 유형은 P 또는 R이어야 합니다"
+            );
+        };
     }
 
     private String normalizeTravelCode(String travelCode) {
         if (travelCode == null) {
-            throw new IllegalArgumentException(
-                    "여행 유형 코드가 필요합니다"
-            );
+            throw new IllegalArgumentException("여행 유형 코드가 필요합니다");
         }
-
         String normalized = travelCode.trim().toUpperCase();
-
         if (!normalized.matches("[AH][TM][LB][SD][PR]")) {
-            throw new IllegalArgumentException(
-                    "여행 유형 코드 형식이 올바르지 않습니다"
-            );
+            throw new IllegalArgumentException("여행 유형 코드 형식이 올바르지 않습니다");
         }
-
         return normalized;
     }
 
     private void validateSurveyId(Long surveyId) {
         if (surveyId == null || surveyId <= 0) {
-            throw new IllegalArgumentException(
-                    "올바른 설문 번호가 필요합니다"
-            );
+            throw new IllegalArgumentException("올바른 설문 번호가 필요합니다");
         }
+    }
+
+    private record DraftCandidateResult(
+            List<PlaceRecommendationResponse> hotelCandidates,
+            List<DailyCourseDraftResponse> dailyPlans
+    ) {
     }
 }

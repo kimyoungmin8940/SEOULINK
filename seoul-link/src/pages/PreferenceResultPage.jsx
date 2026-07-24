@@ -16,6 +16,8 @@ import {
 import { useRef } from 'react';
 import html2canvas from 'html2canvas';
 
+import RecommendationLoadingOverlay from '../components/common/RecommendationLoadingOverlay';
+
 import {
     getCodeTraits,
     getPreferredRegions,
@@ -83,6 +85,13 @@ function PreferenceResultPage({
 
     return (
         <div className="travel-analysis-page travel-analysis-page--embedded">
+            <RecommendationLoadingOverlay
+                active={isRecommending}
+                title="맞춤 코스를 준비하고 있어요"
+                description="여행 일정과 장소 후보를 정리한 뒤 최적화 화면으로 이동할게요."
+                longWaitDescription="장소 후보를 날짜별로 정리하고 있어 평소보다 조금 더 걸리고 있어요. 준비가 끝나면 자동으로 이동합니다."
+                delay={300}
+            />
             <main className="travel-analysis-main" ref={resultPageRef}>
                 <section className="preference-title-block">
                     <p className="page-kicker">TRAVEL TYPE CODE</p>

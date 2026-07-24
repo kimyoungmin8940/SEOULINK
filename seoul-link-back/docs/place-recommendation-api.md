@@ -14,6 +14,7 @@
 GET /api/places/recommend
     ?travelCode=ATBSP
     &region=성동구
+    &companionType=COUPLE
     &limitPerCategory=5
     &alternativeLimit=3
 ```
@@ -24,6 +25,7 @@ GET /api/places/recommend
 |---|---:|-------------------------------------------------|
 | `travelCode` | Y | `[AH][TM][LB][SD][PR]` 규칙의 5자리 코드               |
 | `region` | N | `성동구`, `종로구` 등. 서울 전체이면 생략                      |
+| `companionType` | N | `SOLO`, `COUPLE`, `FRIENDS`, `FAMILY`. 동행 유형별 최대 10점 가중 |
 | `limitPerCategory` | N | TOUR·RESTAURANT·CAFE·HOTEL별 후보 수, 최대 50         |
 | `alternativeLimit` | N | 대표 후보 하나당 대체 후보 수, 기본 3                         |
 | `limit` | N | 기존 호환용 전체 후보 수. `limitPerCategory`가 있으면 사용하지 않음 |
@@ -76,6 +78,8 @@ GET /api/places/recommend
 ```
 
 대체 후보는 원본과 `category`가 같고 전체 응답에서 중복되지 않는다.
+원점수는 취향 코드·평점·리뷰·동행 유형으로 순위를 정하며, 응답의
+`recommendationScore`는 그 순서를 유지한 채 70~95 범위로 정규화한 표시 점수다.
 
 ## 1번 담당 처리 규칙
 
@@ -90,7 +94,8 @@ PlaceRecommendationListResponse candidates = placeRecommendationService.recommen
         survey.getRegion(),
         null,
         5,
-        3
+        3,
+        survey.getCompanionType()
 );
 ```
 

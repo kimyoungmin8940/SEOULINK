@@ -12,6 +12,7 @@ import {
     ChevronLeft,
     ChevronRight,
     GitCompareArrows,
+    House,
     Info,
     Lightbulb,
     RefreshCw,
@@ -22,6 +23,8 @@ import {
 
 import Header from '../../components/common/Header';
 import Footer from '../../components/common/Footer';
+import RecommendationLoadingOverlay from '../../components/common/RecommendationLoadingOverlay';
+import RecommendationSteps from '../../components/survey/RecommendationSteps';
 import CourseRecommendationCard from '../../components/course/CourseRecommendationCard';
 import CourseMapPreview from '../../components/course/CourseMapPreview';
 import {
@@ -41,6 +44,7 @@ import {
     normalizeTransportMode,
     resolveTransportMode,
 } from '../../utils/courseTransport';
+import { rememberCourseTravelCode } from '../../utils/courseTravelCode';
 import recommendationPreview from '../../mocks/courseRecommendation.json';
 import heroSeoulImage from '../../assets/images/hero-seoul-main.png';
 import hanokImage from '../../assets/images/moods/mood-hanok-photo.png';
@@ -49,12 +53,55 @@ import sunsetImage from '../../assets/images/moods/mood-sunset-seoul.png';
 
 const fallbackImages = [hanokImage, walkingImage, sunsetImage];
 const COURSE_RECOMMEND_HISTORY_KEY = 'seoulinkCourseRecommendHistory';
-const RECOMMENDATION_REQUEST_TIMEOUT_MS = 30_000;
+const RECOMMENDATION_BASE_TIMEOUT_MS = 45_000;
+const RECOMMENDATION_TIMEOUT_PER_EXTRA_DAY_MS = 15_000;
+const RECOMMENDATION_MAX_TIMEOUT_MS = 150_000;
+const ROUTE_DETAILS_REQUEST_TIMEOUT_MS = 30_000;
 // 개발 모드의 중복 effect나 빠른 재시도로 같은 추천 요청이 겹치지 않도록 Promise를 재사용합니다.
 const recommendationPromiseCache = new Map();
 const routeDetailsPromiseCache = new Map();
 // 이전·다음 결과 전환이나 카드 재마운트에서도 같은 DAY 상세를 다시 요청하지 않습니다.
 const routeDetailsResultCache = new Map();
+
+/** 재추천 전·후에 optionNo가 반복되므로 저장 선택 상태는 결과 묶음까지 포함해 구분합니다. */
+function getSaveSelectionKey(recommendationKey, optionNo) {
+    return `${recommendationKey}:${optionNo}`;
+}
+
+/** 기존 배치 저장 API의 한 번당 최대 3개 제한을 지키면서 최대 6개까지 순서대로 저장합니다. */
+async function saveCourseRequests(requests) {
+    const savedCourses = [];
+
+    for (let index = 0; index < requests.length; index += 3) {
+        const requestBatch = requests.slice(index, index + 3);
+
+        try {
+            const batchSavedCourses = requestBatch.length === 1
+                ? [await saveCourse(requestBatch[0])]
+                : (await saveCourses({ courses: requestBatch }))?.savedCourses;
+
+            if (
+                !Array.isArray(batchSavedCourses)
+                || batchSavedCourses.length !== requestBatch.length
+                || batchSavedCourses.some(
+                    (savedCourse) => !Number.isInteger(savedCourse?.courseId),
+                )
+            ) {
+                throw new Error('저장 결과의 코스 ID를 확인할 수 없습니다.');
+            }
+
+            savedCourses.push(...batchSavedCourses);
+        } catch (error) {
+            const saveError = error instanceof Error
+                ? error
+                : new Error('코스를 저장하지 못했습니다.');
+            saveError.savedCourses = [...savedCourses];
+            throw saveError;
+        }
+    }
+
+    return savedCourses;
+}
 
 const travelTypeDimensions = [
     {
@@ -175,24 +222,39 @@ function hasRecommendationPlaces(data) {
     ));
 }
 
-/** 동일 요청은 진행 중인 Promise를 공유하고 30초를 넘기면 로딩을 종료합니다. */
+/** 여행 일수에 맞춰 추천 요청 제한 시간을 계산합니다. */
+function getRecommendationRequestTimeoutMs(request) {
+    const dayCount = Math.max(
+        1,
+        Array.isArray(request?.dailyPlans) ? request.dailyPlans.length : 1,
+    );
+
+    return Math.min(
+        RECOMMENDATION_MAX_TIMEOUT_MS,
+        RECOMMENDATION_BASE_TIMEOUT_MS
+        + ((dayCount - 1) * RECOMMENDATION_TIMEOUT_PER_EXTRA_DAY_MS),
+    );
+}
+
+/** 동일 요청은 진행 중인 Promise를 공유하고 일정 일수에 맞춘 제한 시간까지 기다립니다. */
 function requestRecommendationOnce(request) {
     const cacheKey = JSON.stringify(request);
 
     if (!recommendationPromiseCache.has(cacheKey)) {
         const controller = new AbortController();
+        const timeoutMs = getRecommendationRequestTimeoutMs(request);
         let timedOut = false;
         const timeoutId = window.setTimeout(() => {
             timedOut = true;
             controller.abort();
-        }, RECOMMENDATION_REQUEST_TIMEOUT_MS);
+        }, timeoutMs);
         const pendingRequest = recommendCourse(request, {
             signal: controller.signal,
         })
             .catch((error) => {
                 if (timedOut || error?.name === 'AbortError') {
                     throw new Error(
-                        '추천 계산이 30초를 넘겨 중단됐어요. 잠시 후 다시 시도해 주세요.',
+                        `추천 계산이 ${Math.round(timeoutMs / 1000)}초를 넘겨 중단됐어요. 잠시 후 다시 시도해 주세요.`,
                     );
                 }
                 throw error;
@@ -219,7 +281,7 @@ function requestRouteDetailsOnce(cacheKey, request) {
         const timeoutId = window.setTimeout(() => {
             timedOut = true;
             controller.abort();
-        }, RECOMMENDATION_REQUEST_TIMEOUT_MS);
+        }, ROUTE_DETAILS_REQUEST_TIMEOUT_MS);
         const pendingRequest = resolveCourseRouteDetails(request, {
             signal: controller.signal,
         })
@@ -259,10 +321,10 @@ function getInitialRecommendationState() {
     );
     const navigationRequest = window.history.state?.courseRecommendRequest || null;
     const storedRequest = readStoredObject([
-            COURSE_RECOMMEND_REQUEST_KEY,
-            'courseRecommendRequest',
-            'courseRecommendationRequest',
-        ]);
+        COURSE_RECOMMEND_REQUEST_KEY,
+        'courseRecommendRequest',
+        'courseRecommendationRequest',
+    ]);
     const request = navigationRequest || storedRequest;
 
     if (navigationResponse) {
@@ -605,7 +667,7 @@ function mergeRouteDetails(
                     ...place,
                     distanceFromPreviousKm: resolved.distanceFromPreviousKm,
                     travelTimeFromPreviousMinutes:
-                        resolved.travelTimeFromPreviousMinutes,
+                    resolved.travelTimeFromPreviousMinutes,
                     transitPathType: normalizeTransitPathType(
                         resolved.transitPathType,
                     ),
@@ -754,9 +816,9 @@ function LoadingCards() {
     );
 }
 
-/** 최대 세 개 코스의 거리·시간·장소 수를 나란히 확인하는 비교 영역입니다. */
-function ComparisonPanel({ options, selectedOptionNos, activeDayNo, onRemove, onReset }) {
-    const selectedOptions = options.filter((option) => selectedOptionNos.includes(option.optionNo));
+/** 최초 추천과 재추천을 합쳐 최대 여섯 개 코스의 거리·시간·장소 수를 비교합니다. */
+function ComparisonPanel({ options, selectedCourseKeys, activeDayNo, onRemove, onReset }) {
+    const selectedOptions = options.filter((option) => selectedCourseKeys.includes(option.comparisonKey));
     const activeVisitDate = options
         .map((option) => getOptionDay(option, activeDayNo)?.visitDate)
         .find(Boolean);
@@ -791,9 +853,12 @@ function ComparisonPanel({ options, selectedOptionNos, activeDayNo, onRemove, on
                         const placeCount = Array.isArray(day?.places) ? day.places.length : 0;
 
                         return (
-                            <div className="course-result-compare-item" key={option.optionNo}>
-                                <span>{option.optionName}</span>
-                                <button type="button" aria-label={`${option.optionName} 비교에서 제거`} onClick={() => onRemove(option.optionNo)}>
+                            <div className="course-result-compare-item" key={option.comparisonKey}>
+                                <span>
+                                    <small className="course-result-compare-source">{option.recommendationLabel}</small>
+                                    {option.optionName}
+                                </span>
+                                <button type="button" aria-label={`${option.recommendationLabel} ${option.optionName} 비교에서 제거`} onClick={() => onRemove(option.comparisonKey)}>
                                     <X size={14} aria-hidden="true" />
                                 </button>
                                 <strong>{Number(day?.dailyDistanceKm || 0).toFixed(1)}km</strong>
@@ -813,18 +878,18 @@ function ComparisonPanel({ options, selectedOptionNos, activeDayNo, onRemove, on
     );
 }
 
-/** 취향 기반 3개 코스를 조회·비교하고, 사용자가 선택한 1~3개 코스를 저장하는 결과 화면입니다. */
+/** 최초 추천 3개와 재추천 3개를 조회·비교하고, 사용자가 선택한 최대 6개 코스를 저장하는 결과 화면입니다. */
 function CourseRecommendPage() {
     const [initialState] = useState(getInitialRecommendationPageState);
     const [response, setResponse] = useState(initialState.response);
     const [status, setStatus] = useState(initialState.status);
     const [source, setSource] = useState(initialState.source);
     const [requestError, setRequestError] = useState('');
-    const [comparedOptionNos, setComparedOptionNos] = useState([]);
-    const [selectedSaveOptionNos, setSelectedSaveOptionNos] = useState([]);
+    const [comparedCourseKeys, setComparedCourseKeys] = useState([]);
+    const [selectedSaveCourseKeys, setSelectedSaveCourseKeys] = useState([]);
     const [focusedOptionNo, setFocusedOptionNo] = useState(null);
     const [isSavingSelected, setIsSavingSelected] = useState(false);
-    const [savedCourseIdsByOption, setSavedCourseIdsByOption] = useState({});
+    const [savedCourseIdsBySelectionKey, setSavedCourseIdsBySelectionKey] = useState({});
     const [lastSavedCourseIds, setLastSavedCourseIds] = useState([]);
     const [notice, setNotice] = useState(null);
     const [recommendRequest, setRecommendRequest] = useState(initialState.request);
@@ -844,6 +909,40 @@ function CourseRecommendPage() {
     );
     const profile = useMemo(() => getUserProfile(), []);
     const options = Array.isArray(response?.courseOptions) ? response.courseOptions : [];
+    const activeRecommendationKey = nextRecommendation && showingNextRecommendation
+        ? 'next'
+        : 'previous';
+    const currentRecommendationEntry = {
+        response,
+        request: recommendRequest,
+        source,
+    };
+    const saveRecommendationEntries = [
+        {
+            key: 'previous',
+            entry: activeRecommendationKey === 'previous'
+                ? currentRecommendationEntry
+                : previousRecommendation,
+        },
+        ...(nextRecommendation ? [{
+            key: 'next',
+            entry: activeRecommendationKey === 'next'
+                ? currentRecommendationEntry
+                : nextRecommendation,
+        }] : []),
+    ].filter(({ entry }) => Array.isArray(entry?.response?.courseOptions));
+    const availableSaveCourseCount = saveRecommendationEntries.reduce(
+        (count, { entry }) => count + entry.response.courseOptions.length,
+        0,
+    );
+    const comparisonOptions = saveRecommendationEntries.flatMap(({ key, entry }) => (
+        entry.response.courseOptions.map((option) => ({
+            ...option,
+            comparisonKey: getSaveSelectionKey(key, option.optionNo),
+            recommendationLabel: key === 'previous' ? '첫 추천' : '다시 추천',
+        }))
+    ));
+    const displayRecommendationCount = availableSaveCourseCount || 3;
     const travelCode = getStoredTravelCode(response);
     const travelBadges = getTravelTypeBadges(travelCode);
     // 실제 응답을 우선하고, 값이 없을 때만 요청 또는 UI 미리보기의 이동수단으로 보완합니다.
@@ -861,7 +960,7 @@ function CourseRecommendPage() {
                 getOptionDay(option, activeDayNo),
                 transportMode,
             )
-        ] === 'loading'
+            ] === 'loading'
     ));
     const hasEstimatedTravelTimes = estimatedLegCount > 0;
     const focusedOption = options.find((option) => option.optionNo === focusedOptionNo) || options[0];
@@ -923,12 +1022,11 @@ function CourseRecommendPage() {
         };
     }, [initialState.status, requestRecommendation, status]);
 
-    const toggleCompare = (optionNo) => {
-        // 비교 패널의 화면 밀도를 위해 최근 선택한 세 옵션까지만 유지합니다.
-        setComparedOptionNos((previous) => (
-            previous.includes(optionNo)
-                ? previous.filter((currentOptionNo) => currentOptionNo !== optionNo)
-                : [...previous, optionNo].slice(-3)
+    const toggleCompare = (comparisonKey) => {
+        setComparedCourseKeys((previous) => (
+            previous.includes(comparisonKey)
+                ? previous.filter((currentKey) => currentKey !== comparisonKey)
+                : [...previous, comparisonKey].slice(-6)
         ));
     };
 
@@ -988,7 +1086,7 @@ function CourseRecommendPage() {
                     currentDay.dayNo,
                     null,
                     currentResponse?.dailyStartTime
-                        ?? recommendRequest?.dailyStartTime,
+                    ?? recommendRequest?.dailyStartTime,
                     message,
                 );
                 sessionStorage.setItem(
@@ -1047,7 +1145,7 @@ function CourseRecommendPage() {
                     currentDay.dayNo,
                     routeDetails,
                     currentResponse?.dailyStartTime
-                        ?? recommendRequest?.dailyStartTime,
+                    ?? recommendRequest?.dailyStartTime,
                 );
                 sessionStorage.setItem(
                     COURSE_RECOMMEND_RESPONSE_KEY,
@@ -1080,7 +1178,7 @@ function CourseRecommendPage() {
                     currentDay.dayNo,
                     null,
                     currentResponse?.dailyStartTime
-                        ?? recommendRequest?.dailyStartTime,
+                    ?? recommendRequest?.dailyStartTime,
                     message,
                 );
                 sessionStorage.setItem(
@@ -1174,7 +1272,7 @@ function CourseRecommendPage() {
 
             sessionStorage.setItem(COURSE_RECOMMEND_REQUEST_KEY, JSON.stringify(nextRequest));
             sessionStorage.setItem(COURSE_RECOMMEND_RESPONSE_KEY, JSON.stringify(data));
-            const previousEntry = previousRecommendation || {
+            const previousEntry = {
                 response,
                 request,
                 source,
@@ -1189,11 +1287,8 @@ function CourseRecommendPage() {
             setSource('api');
             setStatus('success');
             setRequestError('');
-            setComparedOptionNos([]);
-            setSelectedSaveOptionNos([]);
             setFocusedOptionNo(data.courseOptions[0]?.optionNo ?? null);
             setActiveDayNo(getFirstDayNo(data));
-            setSavedCourseIdsByOption({});
             setLastSavedCourseIds([]);
             setNotice({
                 tone: 'success',
@@ -1213,47 +1308,78 @@ function CourseRecommendPage() {
     const showRecommendationResult = (entry, showNext) => {
         if (!entry?.response) return;
 
+        const currentEntry = {
+            response,
+            request: recommendRequest,
+            source,
+        };
+        const updatedPreviousRecommendation = showingNextRecommendation
+            ? previousRecommendation
+            : currentEntry;
+        const updatedNextRecommendation = showingNextRecommendation
+            ? currentEntry
+            : nextRecommendation;
+
+        setPreviousRecommendation(updatedPreviousRecommendation);
+        setNextRecommendation(updatedNextRecommendation);
         setResponse(entry.response);
         setRecommendRequest(entry.request);
         setSource(entry.source || 'api');
         setShowingNextRecommendation(showNext);
         setStatus(hasRecommendationPlaces(entry.response) ? 'success' : 'empty');
         setRequestError('');
-        setComparedOptionNos([]);
-        setSelectedSaveOptionNos([]);
         setFocusedOptionNo(entry.response.courseOptions?.[0]?.optionNo ?? null);
         setActiveDayNo(getFirstDayNo(entry.response));
-        setSavedCourseIdsByOption({});
         setLastSavedCourseIds([]);
         setNotice(null);
         sessionStorage.setItem(COURSE_RECOMMEND_REQUEST_KEY, JSON.stringify(entry.request));
         sessionStorage.setItem(COURSE_RECOMMEND_RESPONSE_KEY, JSON.stringify(entry.response));
         persistRecommendationHistory(
-            previousRecommendation,
-            nextRecommendation,
+            updatedPreviousRecommendation,
+            updatedNextRecommendation,
             showNext,
         );
     };
 
-    const toggleSaveSelection = (optionNo) => {
-        if (isSavingSelected || isRecommendingAgain || savedCourseIdsByOption[optionNo]) return;
+    const toggleSaveSelection = (recommendationKey, optionNo) => {
+        const selectionKey = getSaveSelectionKey(recommendationKey, optionNo);
+        if (
+            isSavingSelected
+            || isRecommendingAgain
+            || savedCourseIdsBySelectionKey[selectionKey]
+        ) return;
 
-        setSelectedSaveOptionNos((previous) => (
-            previous.includes(optionNo)
-                ? previous.filter((currentOptionNo) => currentOptionNo !== optionNo)
-                : [...previous, optionNo].slice(-3)
-        ));
+        setSelectedSaveCourseKeys((previous) => {
+            if (previous.includes(selectionKey)) {
+                return previous.filter((currentKey) => currentKey !== selectionKey);
+            }
+
+            if (previous.length >= availableSaveCourseCount) {
+                return previous;
+            }
+
+            return [...previous, selectionKey];
+        });
     };
 
     const handleSaveSelected = async () => {
         if (isRecommendingAgain) return;
 
-        const selectedOptions = options.filter((option) => (
-            selectedSaveOptionNos.includes(option.optionNo)
-            && !savedCourseIdsByOption[option.optionNo]
+        const selectedCourses = saveRecommendationEntries.flatMap(({ key, entry }) => (
+            entry.response.courseOptions
+                .filter((option) => {
+                    const selectionKey = getSaveSelectionKey(key, option.optionNo);
+                    return selectedSaveCourseKeys.includes(selectionKey)
+                        && !savedCourseIdsBySelectionKey[selectionKey];
+                })
+                .map((option) => ({
+                    selectionKey: getSaveSelectionKey(key, option.optionNo),
+                    option,
+                    entry,
+                }))
         ));
 
-        if (selectedOptions.length === 0) {
+        if (selectedCourses.length === 0) {
             setNotice({
                 tone: 'info',
                 message: '저장할 코스를 한 개 이상 선택해주세요.',
@@ -1261,7 +1387,7 @@ function CourseRecommendPage() {
             return;
         }
 
-        if (source === 'preview') {
+        if (selectedCourses.some(({ entry }) => entry.source === 'preview')) {
             setNotice({
                 tone: 'info',
                 message: '현재는 화면 미리보기입니다. 실제 추천 응답이 들어오면 선택한 코스를 저장할 수 있습니다.',
@@ -1283,44 +1409,79 @@ function CourseRecommendPage() {
         setNotice(null);
 
         try {
-            const requests = selectedOptions.map((option) => (
-                buildSaveRequest(option, response, profile, travelCode, transportMode)
-            ));
-            const savedCourses = requests.length === 1
-                ? [await saveCourse(requests[0])]
-                : (await saveCourses({ courses: requests }))?.savedCourses;
+            const requests = selectedCourses.map(({ option, entry }) => {
+                const selectedTransportMode = resolveTransportMode(
+                    entry.response?.transportMode,
+                    entry.request?.transportMode,
+                    entry.source === 'preview' ? recommendationPreview.transportMode : null,
+                );
 
-            if (
-                !Array.isArray(savedCourses)
-                || savedCourses.length !== selectedOptions.length
-                || savedCourses.some((savedCourse) => !Number.isInteger(savedCourse?.courseId))
-            ) {
-                throw new Error('저장 결과의 코스 ID를 확인할 수 없습니다.');
-            }
+                return buildSaveRequest(
+                    option,
+                    entry.response,
+                    profile,
+                    getStoredTravelCode(entry.response),
+                    selectedTransportMode,
+                );
+            });
+            const savedCourses = await saveCourseRequests(requests);
 
-            const savedIdsByOption = {};
-            selectedOptions.forEach((option, index) => {
-                const savedCourse = savedCourses[index];
-                savedIdsByOption[option.optionNo] = savedCourse.courseId;
+            const savedIdsBySelectionKey = {};
+            selectedCourses.forEach(({ selectionKey, entry }, index) => {
+                const savedCourseId = savedCourses[index].courseId;
+                savedIdsBySelectionKey[selectionKey] = savedCourseId;
+                rememberCourseTravelCode(savedCourseId, getStoredTravelCode(entry.response));
             });
 
-            setSavedCourseIdsByOption((previous) => ({
+            setSavedCourseIdsBySelectionKey((previous) => ({
                 ...previous,
-                ...savedIdsByOption,
+                ...savedIdsBySelectionKey,
             }));
             setLastSavedCourseIds(savedCourses.map((savedCourse) => savedCourse.courseId));
-            setSelectedSaveOptionNos([]);
+            setSelectedSaveCourseKeys([]);
             setNotice({
                 tone: 'success',
-                message: selectedOptions.length === 1
+                message: selectedCourses.length === 1
                     ? '선택한 코스를 내 코스에 담았습니다.'
-                    : `선택한 코스 ${selectedOptions.length}개를 각각 내 코스에 담았습니다.`,
+                    : `선택한 코스 ${selectedCourses.length}개를 각각 내 코스에 담았습니다.`,
             });
         } catch (error) {
-            setNotice({
-                tone: 'error',
-                message: error?.message || '코스를 저장하지 못했습니다. 잠시 후 다시 시도해주세요.',
-            });
+            const partiallySavedCourses = Array.isArray(error?.savedCourses)
+                ? error.savedCourses
+                : [];
+
+            if (partiallySavedCourses.length > 0) {
+                const partiallySavedSelections = selectedCourses.slice(
+                    0,
+                    partiallySavedCourses.length,
+                );
+                const savedIdsBySelectionKey = {};
+                partiallySavedSelections.forEach(({ selectionKey, entry }, index) => {
+                    const savedCourseId = partiallySavedCourses[index].courseId;
+                    savedIdsBySelectionKey[selectionKey] = savedCourseId;
+                    rememberCourseTravelCode(savedCourseId, getStoredTravelCode(entry.response));
+                });
+
+                setSavedCourseIdsBySelectionKey((previous) => ({
+                    ...previous,
+                    ...savedIdsBySelectionKey,
+                }));
+                setSelectedSaveCourseKeys((previous) => previous.filter(
+                    (selectionKey) => !savedIdsBySelectionKey[selectionKey],
+                ));
+                setLastSavedCourseIds(
+                    partiallySavedCourses.map((savedCourse) => savedCourse.courseId),
+                );
+                setNotice({
+                    tone: 'error',
+                    message: `선택한 ${selectedCourses.length}개 중 ${partiallySavedCourses.length}개만 저장됐어요. 남은 코스를 다시 저장해 주세요.`,
+                });
+            } else {
+                setNotice({
+                    tone: 'error',
+                    message: error?.message || '코스를 저장하지 못했습니다. 잠시 후 다시 시도해주세요.',
+                });
+            }
         } finally {
             setIsSavingSelected(false);
         }
@@ -1333,11 +1494,27 @@ function CourseRecommendPage() {
         });
     };
 
+    const isRecommendationLoading = status === 'loading' || isRecommendingAgain;
+    const loadingTitle = isRecommendingAgain
+        ? '새로운 추천 코스를 만들고 있어요'
+        : '맞춤 추천 코스를 만들고 있어요';
+    const loadingDescription = isRecommendingAgain
+        ? '기존 코스와 겹치지 않도록 다른 장소 조합과 이동 순서를 계산하고 있어요.'
+        : '취향 점수와 이동 거리, 방문 순서를 함께 계산하고 있어요.';
+
     return (
         <div className="page course-result-page">
+            <RecommendationLoadingOverlay
+                active={isRecommendationLoading}
+                title={loadingTitle}
+                description={loadingDescription}
+                longWaitDescription="추천 가능한 장소 조합을 꼼꼼히 비교하고 있어 평소보다 조금 더 걸리고 있어요. 계산은 정상적으로 진행 중입니다."
+            />
             <Header variant="default" />
 
             <main className="course-result-shell">
+                <RecommendationSteps currentStep={4} />
+
                 <section className="course-result-hero">
                     <div className="course-result-hero-copy">
                         <a className="course-result-back-btn" href="/survey/result" aria-label="취향 분석 결과로 돌아가기">
@@ -1347,7 +1524,7 @@ function CourseRecommendPage() {
                         <div>
                             <p className="course-result-eyebrow"><Sparkles size={14} aria-hidden="true" /> 맞춤 추천 완료</p>
                             <h1><strong>{travelCode}</strong> {profile.name}님을 위한 맞춤 코스 추천</h1>
-                            <p>여행 정보와 취향 분석 결과를 바탕으로 세 가지 서울 여행 코스를 준비했어요.</p>
+                            <p>여행 정보와 취향 분석 결과를 바탕으로 총 {displayRecommendationCount}개의 서울 여행 코스를 준비했어요.</p>
 
                             <div className="course-result-type-badges" aria-label={`여행 유형 ${travelCode}`}>
                                 {travelBadges.map((badge) => (
@@ -1370,7 +1547,9 @@ function CourseRecommendPage() {
 
                 <div className="course-result-toolbar">
                     <div className="course-result-tabs">
-                        <a className="active" href="/courses"><Star size={18} fill="currentColor" aria-hidden="true" />추천 코스</a>
+                        <span className="active course-result-current-tab" aria-current="page">
+                            <Star size={18} fill="currentColor" aria-hidden="true" />추천 코스
+                        </span>
                         {!nextRecommendation ? (
                             <button
                                 type="button"
@@ -1410,13 +1589,17 @@ function CourseRecommendPage() {
                     </div>
 
                     <div className="course-result-toolbar-actions">
+                        <a className="course-result-home-button" href="/">
+                            <House size={17} aria-hidden="true" />
+                            메인화면으로 가기
+                        </a>
                         {source === 'preview' && (
                             <span className="course-result-preview-label"><Info size={14} aria-hidden="true" />UI 미리보기</span>
                         )}
                         <button type="button" onClick={scrollToComparison}>
                             <GitCompareArrows size={17} aria-hidden="true" />
                             코스 비교
-                            <b>{comparedOptionNos.length}</b>
+                            <b>{comparedCourseKeys.length}</b>
                         </button>
                     </div>
                 </div>
@@ -1424,28 +1607,28 @@ function CourseRecommendPage() {
                 {status === 'success'
                     && (isResolvingVisibleRoutes || hasEstimatedTravelTimes)
                     && (
-                    <section className="course-result-estimated-notice" role="status">
-                        <span><Info size={18} aria-hidden="true" /></span>
-                        <div>
-                            <strong>
-                                {isResolvingVisibleRoutes
-                                    ? `카드의 실제 ${transport?.label || '경로'} 이동시간을 확인하고 있어요`
-                                    : `표시 중인 DAY에서 ${estimatedLegCount}개 구간만 예상값이에요`}
-                            </strong>
-                            <p>
-                                {isResolvingVisibleRoutes
-                                    ? '현재 표시 중인 DAY의 인접 구간만 조회하고, 같은 구간은 캐시에서 재사용합니다.'
-                                    : transportMode === 'PUBLIC_TRANSIT'
-                                        ? 'ODsay에서 실제 경로를 받지 못한 구간만 예상 거리와 시간으로 보완했습니다.'
-                                        : 'OpenRouteService에서 실제 경로를 받지 못한 구간입니다. 백엔드의 OPENROUTESERVICE_API_KEY 설정과 실행 로그를 확인해 주세요.'}
-                            </p>
-                        </div>
-                    </section>
+                        <section className="course-result-estimated-notice" role="status">
+                            <span><Info size={18} aria-hidden="true" /></span>
+                            <div>
+                                <strong>
+                                    {isResolvingVisibleRoutes
+                                        ? `카드의 실제 ${transport?.label || '경로'} 이동시간을 확인하고 있어요`
+                                        : `표시 중인 DAY에서 ${estimatedLegCount}개 구간만 예상값이에요`}
+                                </strong>
+                                <p>
+                                    {isResolvingVisibleRoutes
+                                        ? '현재 표시 중인 DAY의 인접 구간만 조회하고, 같은 구간은 캐시에서 재사용합니다.'
+                                        : transportMode === 'PUBLIC_TRANSIT'
+                                            ? 'ODsay에서 실제 경로를 받지 못한 구간만 예상 거리와 시간으로 보완했습니다.'
+                                            : 'OpenRouteService에서 실제 경로를 받지 못한 구간입니다. 백엔드의 OPENROUTESERVICE_API_KEY 설정과 실행 로그를 확인해 주세요.'}
+                                </p>
+                            </div>
+                        </section>
                     )}
 
                 {status === 'success' && options.length > 0 && (
                     <section
-                        className={`course-result-save-selection${selectedSaveOptionNos.length > 0 ? ' has-selection' : ''}`}
+                        className={`course-result-save-selection${selectedSaveCourseKeys.length > 0 ? ' has-selection' : ''}`}
                         aria-label="저장할 추천 코스 선택"
                         aria-busy={isSavingSelected}
                     >
@@ -1453,18 +1636,18 @@ function CourseRecommendPage() {
                             <span><Bookmark size={19} aria-hidden="true" /></span>
                             <div>
                                 <strong>저장할 코스를 선택해 주세요</strong>
-                                <small>한 개는 단건으로, 두 개 이상은 한 번에 각각 별도 코스로 저장돼요.</small>
+                                <small>{nextRecommendation ? `이전·다음 추천 결과에서 최대 ${availableSaveCourseCount}개까지 한 번에 각각 별도 코스로 저장돼요.` : '한 개는 단건으로, 두 개 이상은 한 번에 각각 별도 코스로 저장돼요.'}</small>
                             </div>
                         </div>
 
                         <div className="course-result-save-selection-actions">
-                            <span><b>{selectedSaveOptionNos.length}</b> / 3 선택</span>
-                            {selectedSaveOptionNos.length > 0 && (
+                            <span><b>{selectedSaveCourseKeys.length}</b> / {availableSaveCourseCount} 선택</span>
+                            {selectedSaveCourseKeys.length > 0 && (
                                 <button
                                     className="secondary"
                                     type="button"
                                     disabled={isSavingSelected || isRecommendingAgain}
-                                    onClick={() => setSelectedSaveOptionNos([])}
+                                    onClick={() => setSelectedSaveCourseKeys([])}
                                 >
                                     선택 해제
                                 </button>
@@ -1472,13 +1655,13 @@ function CourseRecommendPage() {
                             <button
                                 className="primary"
                                 type="button"
-                                disabled={isSavingSelected || isRecommendingAgain || selectedSaveOptionNos.length === 0}
+                                disabled={isSavingSelected || isRecommendingAgain || selectedSaveCourseKeys.length === 0}
                                 onClick={handleSaveSelected}
                             >
                                 {isSavingSelected
                                     ? '저장 중...'
-                                    : selectedSaveOptionNos.length > 1
-                                        ? `${selectedSaveOptionNos.length}개 코스 함께 저장`
+                                    : selectedSaveCourseKeys.length > 1
+                                        ? `${selectedSaveCourseKeys.length}개 코스 함께 저장`
                                         : '선택한 코스 저장'}
                             </button>
                         </div>
@@ -1523,53 +1706,66 @@ function CourseRecommendPage() {
                 {status === 'success' && options.length > 0 && (
                     <div className="course-result-layout">
                         <section className="course-result-list" aria-label="맞춤 추천 코스 목록">
-                            {options.map((option, index) => (
-                                <CourseRecommendationCard
-                                    option={option}
-                                    transportMode={transportMode}
-                                    fallbackImage={fallbackImages[index % fallbackImages.length]}
-                                    activeDayNo={activeDayNo}
-                                    isEstimatedTravelTime={Boolean(
-                                        getOptionDay(option, activeDayNo)
-                                            ?.places
-                                            ?.some((place, placeIndex) => (
-                                                placeIndex > 0
-                                                && place.routeEstimated
-                                            )),
-                                    )}
-                                    isCompared={comparedOptionNos.includes(option.optionNo)}
-                                    isSelectedForSave={selectedSaveOptionNos.includes(option.optionNo)}
-                                    isSelectionDisabled={isRecommendingAgain}
-                                    isSaving={isSavingSelected}
-                                    isSaved={Boolean(savedCourseIdsByOption[option.optionNo])}
-                                    isRouteDetailsLoading={
-                                        routeDetailStatusByKey[
-                                            getRouteDetailsKey(
-                                                option,
-                                                getOptionDay(option, activeDayNo),
-                                                transportMode,
-                                            )
-                                        ] === 'loading'
-                                    }
-                                    onToggleCompare={toggleCompare}
-                                    onToggleSaveSelection={toggleSaveSelection}
-                                    onFocusOption={(nextOption) => setFocusedOptionNo(nextOption.optionNo)}
-                                    onActiveDayChange={setActiveDayNo}
-                                    onRequestRouteDetails={requestOptionRouteDetails}
-                                    key={option.optionNo ?? option.optionType}
-                                />
-                            ))}
+                            {options.map((option, index) => {
+                                const saveSelectionKey = getSaveSelectionKey(
+                                    activeRecommendationKey,
+                                    option.optionNo,
+                                );
+
+                                return (
+                                    <CourseRecommendationCard
+                                        option={option}
+                                        transportMode={transportMode}
+                                        fallbackImage={fallbackImages[index % fallbackImages.length]}
+                                        activeDayNo={activeDayNo}
+                                        isEstimatedTravelTime={Boolean(
+                                            getOptionDay(option, activeDayNo)
+                                                ?.places
+                                                ?.some((place, placeIndex) => (
+                                                    placeIndex > 0
+                                                    && place.routeEstimated
+                                                )),
+                                        )}
+                                        isCompared={comparedCourseKeys.includes(
+                                            getSaveSelectionKey(activeRecommendationKey, option.optionNo),
+                                        )}
+                                        isSelectedForSave={selectedSaveCourseKeys.includes(saveSelectionKey)}
+                                        isSelectionDisabled={isRecommendingAgain}
+                                        isSaving={isSavingSelected}
+                                        isSaved={Boolean(savedCourseIdsBySelectionKey[saveSelectionKey])}
+                                        isRouteDetailsLoading={
+                                            routeDetailStatusByKey[
+                                                getRouteDetailsKey(
+                                                    option,
+                                                    getOptionDay(option, activeDayNo),
+                                                    transportMode,
+                                                )
+                                                ] === 'loading'
+                                        }
+                                        onToggleCompare={(optionNo) => (
+                                            toggleCompare(getSaveSelectionKey(activeRecommendationKey, optionNo))
+                                        )}
+                                        onToggleSaveSelection={(optionNo) => (
+                                            toggleSaveSelection(activeRecommendationKey, optionNo)
+                                        )}
+                                        onFocusOption={(nextOption) => setFocusedOptionNo(nextOption.optionNo)}
+                                        onActiveDayChange={setActiveDayNo}
+                                        onRequestRouteDetails={requestOptionRouteDetails}
+                                        key={`${activeRecommendationKey}-${option.optionNo ?? option.optionType}`}
+                                    />
+                                );
+                            })}
                         </section>
 
                         <aside className="course-result-sidebar">
                             <CourseMapPreview option={focusedOption} activeDayNo={activeDayNo} />
 
                             <ComparisonPanel
-                                options={options}
-                                selectedOptionNos={comparedOptionNos}
+                                options={comparisonOptions}
+                                selectedCourseKeys={comparedCourseKeys}
                                 activeDayNo={activeDayNo}
                                 onRemove={toggleCompare}
-                                onReset={() => setComparedOptionNos([])}
+                                onReset={() => setComparedCourseKeys([])}
                             />
 
                             <section className="course-result-tip-card">

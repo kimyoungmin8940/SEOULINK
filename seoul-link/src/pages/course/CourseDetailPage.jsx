@@ -1,14 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
     ArrowLeft,
+    Tag,
     Bookmark,
     CalendarDays,
+    Compass,
     Check,
     ChevronLeft,
     ChevronRight,
     Clock3,
     Heart,
     Info,
+    Lightbulb,
+    MapPin,
     MapPinned,
     RefreshCw,
     Route,
@@ -30,6 +34,11 @@ import {
     normalizeTransitPathType,
     normalizeTransportMode,
 } from '../../utils/courseTransport';
+import {
+    getCurrentTravelCode,
+    getRememberedCourseTravelCode,
+    normalizeTravelCode,
+} from '../../utils/courseTravelCode';
 import recommendationPreview from '../../mocks/courseRecommendation.json';
 import { mockThemeCourseListResponse } from '../../mocks/homeMockData';
 import hanokImage from '../../assets/images/moods/mood-hanok-photo.png';
@@ -57,7 +66,18 @@ const themeFields = [
     ['themeHotelStayYn', '숙소'],
 ];
 
-const travelTypeTones = ['blue', 'purple', 'green', 'orange', 'pink'];
+const travelTypeLabels = {
+    A: '활동형',
+    H: '휴식형',
+    T: '역사형',
+    M: '현대형',
+    L: '럭셔리형',
+    B: '가성비형',
+    S: '안정형',
+    D: '도전형',
+    P: '빽빽한 일정형',
+    R: '여유 일정형',
+};
 const COURSE_DETAIL_ENTRY_KEY = 'seoulinkCourseDetailEntry';
 
 /** 지원하는 상세 경로 전체가 정확히 일치할 때만 조회할 courseId를 구합니다. */
@@ -223,9 +243,12 @@ function normalizeCourseDetail(rawCourse) {
         coverImageUrl: rawCourse?.coverImageUrl
             || places.find((place) => place.imageUrl)?.imageUrl
             || hanokImage,
-        travelCode: /^[A-Z]{5}$/.test(rawCourse?.travelCode || '')
-            ? rawCourse.travelCode
-            : null,
+        travelCode: normalizeTravelCode(
+            rawCourse?.travelCode
+            || rawCourse?.preferenceCode
+            || rawCourse?.typeCode
+            || rawCourse?.surveyTypeCode,
+        ),
         transportMode: normalizeTransportMode(rawCourse?.transportMode),
         estimatedTravelTimes: rawCourse?.estimatedTravelTimes == null
             ? places.some((place) => place.routeEstimated)
@@ -253,6 +276,7 @@ function normalizeCourseDetail(rawCourse) {
 /** 목록 카드에서만 유지되는 이미지·태그는 상세 API의 null 값을 덮지 않는 범위에서 보존합니다. */
 function normalizeApiCourseDetail(response, courseId) {
     const summary = readCourseDetailEntry(courseId)?.summary || {};
+    const rememberedTravelCode = getRememberedCourseTravelCode(courseId);
     const responseTags = Array.isArray(response?.tags) ? response.tags.filter(Boolean) : [];
     const summaryTags = Array.isArray(summary?.tags) ? summary.tags.filter(Boolean) : [];
     const summaryRegions = Array.isArray(summary?.regions)
@@ -262,6 +286,15 @@ function normalizeApiCourseDetail(response, courseId) {
     return normalizeCourseDetail({
         ...summary,
         ...response,
+        travelCode: response?.travelCode
+            || response?.preferenceCode
+            || response?.typeCode
+            || response?.surveyTypeCode
+            || summary?.travelCode
+            || summary?.preferenceCode
+            || summary?.typeCode
+            || rememberedTravelCode
+            || getCurrentTravelCode(recommendationPreview.travelCode),
         coverImageUrl: response?.coverImageUrl
             || summary?.coverImageUrl
             || summary?.imageUrl
@@ -306,13 +339,19 @@ function buildPreviewCourse(courseId) {
         title: summary?.title || previewOption.title,
         description: summary?.description || previewOption.description,
         coverImageUrl: summary?.coverImageUrl || summary?.imageUrl || hanokImage,
-        travelCode: summary ? null : recommendationPreview.travelCode,
+        travelCode: summary?.travelCode
+            || summary?.preferenceCode
+            || summary?.typeCode
+            || getRememberedCourseTravelCode(courseId)
+            || getCurrentTravelCode(recommendationPreview.travelCode),
         // 목록 요약에 이동수단이 없는 예전/테마 미리보기에서도 상세 화면 표기가 사라지지 않게 합니다.
         transportMode: summary?.transportMode || recommendationPreview.transportMode,
         estimatedTravelTimes: summary
             ? summary.estimatedTravelTimes
             : recommendationPreview.estimatedTravelTimes,
         courseType: summary?.themeCode ? 'THEME' : 'SURVEY',
+        optionType: summary?.optionType || (summary ? null : previewOption.optionType),
+        optionName: summary?.optionName || (summary ? null : previewOption.optionName),
         region: summary?.area || summary?.region || '서울',
         tags: summary?.tags || [],
         liked: summary?.liked ?? false,
@@ -479,6 +518,9 @@ function CourseDetailPage() {
     ) ?? -1;
     const themeTags = course ? getThemeTags(course) : [];
     const dateRange = course ? getDateRange(course.days) : '';
+    const travelCodeLabels = course?.travelCode
+        ? course.travelCode.split('').map((letter) => travelTypeLabels[letter]).filter(Boolean)
+        : [];
     const transport = getTransportMeta(course?.transportMode);
     const scheduleNotice = course?.estimatedTravelTimes
         ? `일부 ${transport?.label || '이동'} 구간은 경로 조회가 어려워 예상 거리와 시간으로 보완했습니다. ${transport?.scheduleNotice || '실제 이동 상황과 장소 운영 시간에 따라 일정은 달라질 수 있습니다.'}`
@@ -649,11 +691,23 @@ function CourseDetailPage() {
                             <div className="course-detail-main-column">
                                 <section className="course-detail-hero">
                             <div className="course-detail-hero-copy">
-                                {source === 'preview' && (
-                                    <span className="course-detail-preview-label">
-                                        <Info size={13} aria-hidden="true" /> UI 미리보기
-                                    </span>
-                                )}
+                                <div className="course-detail-label-row">
+                                    {source === 'preview' && (
+                                        <span className="course-detail-preview-label">
+                                            <Info size={13} aria-hidden="true" /> UI 미리보기
+                                        </span>
+                                    )}
+
+                                    {course.travelCode && (
+                                        <span
+                                            className="course-detail-preference-code-label"
+                                            aria-label={`취향 코드 ${course.travelCode}`}
+                                        >
+                                            <Tag size={13} aria-hidden="true" />
+                                            취향 코드 · <strong>{course.travelCode}</strong>
+                                        </span>
+                                    )}
+                                </div>
 
                                 <h1>{course.title}</h1>
 
@@ -666,7 +720,7 @@ function CourseDetailPage() {
                                 <div className="course-detail-hero-meta">
                                     <span><CalendarDays size={17} aria-hidden="true" />{dateRange}</span>
                                     <span><Route size={17} aria-hidden="true" />{course.dayCount}일 코스</span>
-                                    <span><Sparkles size={17} aria-hidden="true" />{getCourseTypeLabel(course.courseType)}</span>
+                                    <span><Compass size={17} aria-hidden="true" />{getCourseTypeLabel(course.courseType)}</span>
                                     {transport && (
                                         <span className="course-detail-transport-badge">
                                             <CourseTransportIcon
@@ -720,7 +774,7 @@ function CourseDetailPage() {
                                 <div><small>장소 체류 시간</small><strong>약 {formatMinutes(course.totalVisitTimeMinutes)}</strong></div>
                             </article>
                             <article>
-                                <span><Sparkles size={21} aria-hidden="true" /></span>
+                                <span><MapPin size={21} aria-hidden="true" /></span>
                                 <div><small>방문 장소</small><strong>{course.placeCount}곳</strong></div>
                             </article>
                                 </section>
@@ -802,8 +856,19 @@ function CourseDetailPage() {
                                         </div>
                                         <div>
                                             <dt><Route size={18} aria-hidden="true" />코스 구성</dt>
-                                            <dd>{course.dayCount}일 · {course.placeCount}곳 · {getCourseTypeLabel(course.courseType)}</dd>
+                                            <dd>{course.dayCount}일 · {course.placeCount}곳</dd>
                                         </div>
+                                        {course.travelCode && (
+                                            <div>
+                                                <dt><Tag size={18} aria-hidden="true" />취향 코드</dt>
+                                                <dd className="course-detail-preference-code-description">
+                                                    <strong>{course.travelCode}</strong>
+                                                    {travelCodeLabels.length > 0 && (
+                                                        <span>{travelCodeLabels.join(' · ')}</span>
+                                                    )}
+                                                </dd>
+                                            </div>
+                                        )}
                                         {transport && (
                                             <div>
                                                 <dt>
@@ -822,18 +887,11 @@ function CourseDetailPage() {
                                             <dd>{themeTags.join(', ')}</dd>
                                         </div>
                                         <div>
-                                            <dt><Sparkles size={18} aria-hidden="true" />추천 이유</dt>
+                                            <dt><Lightbulb size={18} aria-hidden="true" />추천 이유</dt>
                                             <dd>{course.description}</dd>
                                         </div>
                                     </dl>
 
-                                    {course.travelCode && (
-                                        <div className="course-detail-travel-code" aria-label={`여행 유형 ${course.travelCode}`}>
-                                            {course.travelCode.split('').map((letter, index) => (
-                                                <span className={travelTypeTones[index]} key={`${letter}-${index}`}>{letter}</span>
-                                            ))}
-                                        </div>
-                                    )}
                                 </section>
 
                             </aside>

@@ -13,16 +13,34 @@
 - 이동수단 값: `WALKING`, `PUBLIC_TRANSIT`, `DRIVING`
 - 대중교통 구간 종류: `SUBWAY`, `BUS`, `BUS_SUBWAY`
 - `days`는 `dayNo` 오름차순, `places`는 `visitOrder` 오름차순이다.
-- 날짜별 첫 장소를 고정한 뒤 최근접 이웃 경로에 2-opt를 적용하며,
+- 코스 초안의 기본 시작 시각은 일정 유형에 따라 P형 `11:00`, R형 `13:00`으로 정한다.
+- 장소 선발과 기본 최적화가 끝나면 최소 동선보다 `15분` 또는 `20%`를 초과하지 않는
+  순서 안에서 관광지 시작, 첫 음식점의 점심시간 배치, 음식점·카페 연속 방지,
+  오후 카페 배치를 우선한다.
+- 도보 추천은 추정 경로를 사용하지 않고 모든 인접 구간의 실제 도보시간을 `20분 이하`로
+  강제한다. 먼저 총 도보시간이 `(장소 수 - 1) × 15분` 이하인 경로를 찾고, 없으면
+  `(장소 수 - 1) × 18분` 이하까지 완화한다. 두 조건을 모두 만족하지 못하면 장소 수를
+  줄여 다시 탐색하며, 구간당 `20분` 제한은 어떤 경우에도 완화하지 않는다.
+- 기본 경로는 날짜별 첫 장소를 기준으로 최근접 이웃과 2-opt를 적용하며,
   총 이동시간을 우선하고 동률이면 총 거리를 줄인다.
 - 날짜별 첫 장소의 `distanceFromPreviousKm`와
   `travelTimeFromPreviousMinutes`는 `0`이다.
 - `recommendationScore`는 추천 직후 응답에서는 채워진다. 저장 상세 조회에서는
   추천 점수 저장 또는 장소 추천 데이터 연동 전까지 `null`일 수 있다.
-- 상세 조회의 장소명·주소·이미지·좌표는 PLACES 조회 연동 전까지 `null`일 수 있다.
+- 장소 원점수는 취향 코드·평점·리뷰·동행 유형 가중치로 순위를 정하고,
+  화면 표시 점수만 순서를 유지한 채 `70~95` 범위로 정규화한다.
+- 재추천에서는 직전 결과의 장소를 `-20`, 보지 않은 후보를 `+5`로 조정한 뒤
+  표시 점수를 다시 `70~95`로 정규화한다.
+- 2일 이상 일정은 일반 장소 최적화가 끝난 뒤 마지막 여행일을 제외한 DAY 끝에
+  같은 HOTEL을 붙인다. 숙소 구간은 추천 중 추정값으로 계산하고 현재 DAY 경로
+  조회 시 실제값으로 보정한다.
+- 저장 상세 조회의 장소명·카테고리·주소·이미지·좌표·테마는
+  `COURSE_DETAILS.PLACE_ID`로 `PLACES`를 조회해 채운다.
 - 도보·자동차는 OpenRouteService의 `foot-walking`·`driving-car` 프로필을 사용한다.
-  API 키가 없거나 호출에 실패한 경우에는 모드별 임시 계산을 사용하며
-  `estimatedTravelTimes`가 `true`이다.
+  API 키는 백엔드의 `OPENROUTESERVICE_API_KEY` 환경변수에서 읽는다.
+  API 키가 없거나 호출에 실패한 구간은 추정값으로 표시되지만, 도보 추천 선발에서는
+  추정 구간을 제외한다. 따라서 실제 경로만으로 제한을 만족하지 못하면 장소 수를 줄이고,
+  최소 장소 수도 구성할 수 없으면 도보 추천을 실패시킨다.
 - 대중교통은 ODsay `searchPubTransPathT`의 `totalDistance`와 `totalTime`을 사용한다.
   선택된 최단시간 경로의 `pathType`은 `transitPathType`으로 변환한다
   (`1→SUBWAY`, `2→BUS`, `3→BUS_SUBWAY`).
@@ -33,9 +51,10 @@
   `estimatedTravelTimes`가 `true`이다.
 - ODsay의 `-98`(출발지·도착지 700m 이내) 구간은 도보 이동 추정값으로 처리한다.
   이처럼 실제 경로가 없는 추정 구간의 `transitPathType`은 `null`이다.
-- 후보 풀 전체 조합을 평가하는 1차 선별은 호출량을 제어하기 위해 대중교통 전용
-  추정행렬을 사용한다. 선별된 3개 코스의 방문 순서·거리·이동시간·대체 후보 평가는
-  ODsay 실제 결과로 다시 계산한다.
+- 도보 후보 풀은 구간당 20분 상한을 실제 경로로 강제하기 위해 ORS 실제 행렬을
+  사용하며, 이미 조회한 장소 쌍은 캐시한다. 자동차·대중교통 후보 풀의 1차 선별은
+  외부 API를 호출하지 않는 추정행렬을 사용하고, 추천 화면에 표시 중인 DAY의 최종
+  인접 구간만 `POST /api/courses/route-details`로 실제 조회한다.
 
 ## 1. 추천 후보 최적화
 
@@ -172,11 +191,15 @@ DB에 저장하지 않고 최근접 이웃과 2-opt로 방문 순서와 이동�
 | `surveyId` | number | N | 원본 설문 ID. 1번 담당자가 전달하는 추적용 메타데이터 |
 | `resultId` | number | Y | 설문 결과 ID |
 | `travelCode` | string | N | 5자리 여행 유형 코드. 전달되면 응답에 그대로 포함 |
+| `companionType` | string | N | `SOLO`, `COUPLE`, `FRIENDS`, `FAMILY`. 장소 후보 동행 가중치 기준 |
 | `transportMode` | string | Y | 여행 전체 이동수단. `WALKING`, `PUBLIC_TRANSIT`, `DRIVING` 중 하나 |
 | `startDate` | string | N | 전체 여행 시작일 메타데이터, `YYYY-MM-DD` |
 | `endDate` | string | N | 전체 여행 종료일 메타데이터, `YYYY-MM-DD` |
 | `travelDays` | number | N | 전체 여행 일수 메타데이터 |
 | `dailyStartTime` | string | Y | 매일 일정 시작 시각, `HH:mm` |
+| `excludedRecommendationKeys` | string[] | N | 이전에 본 코스 조합 제외 키 |
+| `previouslyRecommendedPlaceIds` | number[] | N | 재추천 시 이전 장소 감점에 사용할 ID |
+| `hotelCandidates` | array | N | 2일 이상 일정에서 마지막 날 전까지 같은 숙소를 붙일 HOTEL 후보 풀 |
 | `dailyPlans` | array | Y | 날짜별 후보 풀과 선발 목표 |
 | `dailyPlans[].visitDate` | string | Y | 방문 날짜 |
 | `dailyPlans[].targetPlaceCount` | number | Y | 해당 날짜에 최종 선발할 장소 수 |
@@ -258,13 +281,15 @@ DB에 저장하지 않고 최근접 이웃과 2-opt로 방문 순서와 이동�
 추가로 `coverImageUrl`, `viewCount`, `createdAt`, `updatedAt`을 반환한다.
 대중교통 코스는 저장 요청에 `transitPathType`을 함께 보내며, 상세 조회에서도 동일한
 값을 반환하므로 새로고침 후에도 구간별 지하철·버스·혼합 표기가 유지된다.
+코스 전체 `transportMode`는 `TRAVEL_COURSES.RESULT_ID`로 `SURVEY_RESULT`와
+`TRAVEL_SURVEY.TRANSPORT_TYPE`을 조회한 뒤 API enum으로 변환한다.
 
 ```json
 {
   "courseId": 20,
   "title": "서울 추천 코스",
   "description": "서울 도심의 대표 관광지를 걷는 코스",
-  "coverImageUrl": null,
+  "coverImageUrl": "https://example.com/place/1.jpg",
   "travelCode": "ATLSR",
   "transportMode": "PUBLIC_TRANSIT",
   "courseType": "SURVEY",
@@ -287,13 +312,13 @@ DB에 저장하지 않고 최근접 이웃과 2-opt로 방문 순서와 이동�
         {
           "detailId": 100,
           "placeId": 1,
-          "placeName": null,
-          "category": null,
-          "address": null,
+          "placeName": "서울시청",
+          "category": "TOUR",
+          "address": "서울특별시 중구 세종대로 110",
           "roadAddress": null,
-          "imageUrl": null,
-          "latitude": null,
-          "longitude": null,
+          "imageUrl": "https://example.com/place/1.jpg",
+          "latitude": 37.5665,
+          "longitude": 126.978,
           "recommendationScore": null,
           "visitOrder": 1,
           "memo": null,
@@ -316,7 +341,9 @@ DB에 저장하지 않고 최근접 이웃과 2-opt로 방문 순서와 이동�
 | `POST` | `/api/courses` | `201` | 사용자가 확정한 코스 한 개 저장 |
 | `POST` | `/api/courses/batch` | `201` | 선택한 코스 1~3개를 단일 트랜잭션으로 일괄 저장 |
 | `GET` | `/api/courses/recommended?memberId={id}` | `200` | 회원의 `SURVEY` 추천 코스 카드 목록 |
-| `GET` | `/api/members/me/courses?memberId={id}` | `200` | 회원의 전체 코스 카드 목록 |
+| `GET` | `/api/courses/my?memberId={id}` | `200` | 회원의 전체 코스 카드 목록 |
+
+기존 `/api/members/me/courses?memberId={id}` 경로도 같은 목록을 반환하는 호환 API로 유지한다.
 
 목록 항목은 `courseId`, `title`, `description`, `coverImageUrl`, `transportMode`, `regions`,
 `tags`, `placeCount`, `dayCount`, 네 가지 합계값, `liked`를 반환한다.
@@ -400,9 +427,13 @@ DB에 저장하지 않고 최근접 이웃과 2-opt로 방문 순서와 이동�
 - 같은 장소 쌍도 이동수단을 포함해 `WALKING:A:B`, `PUBLIC_TRANSIT:A:B`,
   `DRIVING:A:B`로 분리한다.
 - 장소 ID가 같아도 좌표가 변경되면 새 키로 계산한다.
-- OpenRouteService·ODsay 결과와 외부 API 실패 시 대체 결과를 모두 캐시한다.
+- OpenRouteService·ODsay에서 성공한 실제 결과만 캐시한다. 실패 시 대체한 추정값은
+  외부 API가 복구된 뒤 다시 확인할 수 있도록 장기 캐시에 저장하지 않는다.
 - ODsay는 행렬 API가 아니므로 캐시에 없는 방향별 장소 쌍마다 한 번씩 호출한다.
-  후보 수가 많을수록 최초 호출량이 증가하므로 운영 호출 한도와 후보 수를 함께 관리한다.
+  추천 후보 조합에서는 호출하지 않고 현재 표시 중인 DAY의 인접 구간만 조회한다.
+- OpenRouteService Matrix는 카드의 한 DAY를 한 요청으로 조회하며, 기본 서버 예산은
+  하루 450회이다. `OPENROUTESERVICE_DAILY_CALL_BUDGET`으로 조정할 수 있다.
+- ODsay 기본 서버 예산은 하루 900회이며 `ODSAY_DAILY_CALL_BUDGET`으로 조정할 수 있다.
 - 기본 최대 크기는 20,000쌍, 기본 TTL은 1,440분(24시간)이다.
 - 환경변수 `COURSE_DISTANCE_CACHE_MAX_ENTRIES`, `COURSE_DISTANCE_CACHE_TTL_MINUTES`로 조정할 수 있다.
 
@@ -429,7 +460,7 @@ DB에 저장하지 않고 최근접 이웃과 2-opt로 방문 순서와 이동�
 |---|---|---|
 | `resultId` | 추천 저장 전 | 설문 결과 DB ID |
 | `travelCode` | 추천 요청 전 | 영문 5자리 최종 여행 유형 코드 |
-| `transportMode` | 추천 요청 전 | DB 값을 그대로 전달. `WALKING`/`PUBLIC_TRANSIT`/`DRIVING`, null 불가 |
+| `transportMode` | 추천 요청 전 | `TRAVEL_SURVEY.TRANSPORT_TYPE`의 PUBLIC/WALKING/CAR를 `PUBLIC_TRANSIT`/`WALKING`/`DRIVING`으로 변환, null 불가 |
 | 여행 시작일·일수 | 후보 날짜 배정 전 | 최종적으로 각 후보의 `visitDate`로 변환 |
 | `title`, `description`, `region` | 추천 저장 전 | 담당 경계에 따라 생성 주체 확정 필요 |
 

@@ -51,7 +51,7 @@ class CourseRecommendationServiceTest {
         CourseRecommendRequest request = CourseRecommendRequest.builder()
                 .resultId(101L)
                 .travelCode("ATLSR")
-                .transportMode(TransportMode.WALKING)
+                .transportMode(TransportMode.DRIVING)
                 .dailyStartTime(LocalTime.of(10, 0))
                 .dailyPlans(List.of(
                         DailyPlanRequest.builder()
@@ -88,7 +88,7 @@ class CourseRecommendationServiceTest {
 
         assertEquals(101L, response.getResultId());
         assertEquals("ATLSR", response.getTravelCode());
-        assertEquals(TransportMode.WALKING, response.getTransportMode());
+        assertEquals(TransportMode.DRIVING, response.getTransportMode());
         assertTrue(response.getEstimatedTravelTimes());
         assertEquals(LocalTime.of(10, 0), response.getDailyStartTime());
         assertEquals(3, response.getOptionCount());
@@ -105,7 +105,7 @@ class CourseRecommendationServiceTest {
             assertTrue(option.getTitle().endsWith(option.getOptionName()));
             assertTrue(!option.getDescription().isBlank());
             assertTrue(!option.getRecommendationKey().isBlank());
-            assertTrue(option.getRecommendationKey().startsWith("WALKING:"));
+            assertTrue(option.getRecommendationKey().startsWith("DRIVING:"));
             assertTrue(option.getEstimatedTravelTimes());
 
             for (CourseDayResponse day : option.getDays()) {
@@ -149,6 +149,104 @@ class CourseRecommendationServiceTest {
     }
 
     @Test
+    @DisplayName("균형 코스는 정규화된 이동비용으로 먼 고득점 조합보다 가까운 조합을 선택한다")
+    void balancedCourseUsesNormalizedTravelAndDistanceScores() {
+        DistanceService distanceService = new DistanceService() {
+            private RouteMatrix createMatrix(List<PlaceCandidateDto> places) {
+                int size = places.size();
+                double[][] distances = new double[size][size];
+                double[][] travelTimes = new double[size][size];
+                for (int from = 0; from < size; from++) {
+                    for (int to = 0; to < size; to++) {
+                        if (from == to) {
+                            continue;
+                        }
+                        long fromId = places.get(from).getPlaceId();
+                        long toId = places.get(to).getPlaceId();
+                        long smaller = Math.min(fromId, toId);
+                        long larger = Math.max(fromId, toId);
+                        double travelMinutes = 5.0;
+                        double distanceKm = 0.5;
+                        if (smaller == 1L && larger == 2L) {
+                            travelMinutes = 100.0;
+                            distanceKm = 10.0;
+                        } else if ((smaller == 1L || smaller == 2L)
+                                && larger == 4L) {
+                            travelMinutes = 6.0;
+                            distanceKm = 0.6;
+                        }
+                        distances[from][to] = distanceKm;
+                        travelTimes[from][to] = travelMinutes;
+                    }
+                }
+                return new RouteMatrix(
+                        distances,
+                        travelTimes,
+                        true
+                );
+            }
+
+            @Override
+            public RouteMatrix calculateCandidatePoolMatrix(
+                    List<PlaceCandidateDto> places,
+                    TransportMode transportMode
+            ) {
+                return createMatrix(places);
+            }
+
+            @Override
+            public RouteMatrix calculateRouteMatrix(
+                    List<PlaceCandidateDto> places,
+                    TransportMode transportMode
+            ) {
+                return createMatrix(places);
+            }
+        };
+        CourseRecommendationService service = new CourseRecommendationService(
+                new CourseOptimizationService(
+                        distanceService,
+                        new VisitDurationService()
+                ),
+                distanceService
+        );
+        CourseRecommendRequest request = CourseRecommendRequest.builder()
+                .resultId(202L)
+                .travelCode("ATLSR")
+                .transportMode(TransportMode.DRIVING)
+                .dailyStartTime(LocalTime.of(10, 0))
+                .dailyPlans(List.of(DailyPlanRequest.builder()
+                        .visitDate(LocalDate.of(2026, 7, 20))
+                        .targetPlaceCount(2)
+                        .categoryTargets(Map.of("TOUR", 2))
+                        .placeCandidates(List.of(
+                                candidate(1L, "최고점 장소", "TOUR",
+                                        100.0, 37.501, 127.001),
+                                candidate(2L, "고득점이지만 먼 장소", "TOUR",
+                                        95.0, 37.502, 127.002),
+                                candidate(3L, "가까운 장소", "TOUR",
+                                        70.0, 37.503, 127.003),
+                                candidate(4L, "다른 가까운 장소", "TOUR",
+                                        70.0, 37.504, 127.004)
+                        ))
+                        .build()))
+                .build();
+
+        CourseOptionResponse balanced = service.recommend(request)
+                .getCourseOptions()
+                .get(2);
+        List<Long> balancedPlaceIds = balanced.getDays().get(0)
+                .getPlaces().stream()
+                .map(place -> place.getPlaceId())
+                .toList();
+
+        assertTrue(balancedPlaceIds.contains(1L));
+        assertTrue(balancedPlaceIds.contains(3L)
+                || balancedPlaceIds.contains(4L));
+        assertTrue(!balancedPlaceIds.contains(2L));
+        assertEquals(5.0, balanced.getTotalTravelTimeMinutes(), 0.000001);
+    }
+
+    @Test
     @DisplayName("후보 카테고리 7·4·4를 최종 6곳 비율로 축소해 추천한다")
     void scaleCandidateCategoryTargetsToFinalPlaceCount() {
         List<PlaceCandidateDto> candidates = new ArrayList<>();
@@ -186,7 +284,7 @@ class CourseRecommendationServiceTest {
         CourseRecommendRequest request = CourseRecommendRequest.builder()
                 .resultId(101L)
                 .transportMode(TransportMode.DRIVING)
-                .dailyStartTime(LocalTime.of(10, 0))
+                .dailyStartTime(LocalTime.of(11, 0))
                 .dailyPlans(List.of(DailyPlanRequest.builder()
                         .visitDate(LocalDate.of(2026, 7, 20))
                         .targetPlaceCount(6)
@@ -210,6 +308,26 @@ class CourseRecommendationServiceTest {
             assertEquals(3, countCategory(day, "TOUR"));
             assertEquals(2, countCategory(day, "RESTAURANT"));
             assertEquals(1, countCategory(day, "CAFE"));
+            assertEquals("TOUR", day.getPlaces().get(0).getCategory());
+
+            LocalTime firstRestaurantTime = day.getPlaces().stream()
+                    .filter(place -> "RESTAURANT".equals(place.getCategory()))
+                    .map(place -> LocalTime.parse(place.getVisitTime()))
+                    .findFirst()
+                    .orElseThrow();
+            assertTrue(!firstRestaurantTime.isBefore(LocalTime.of(11, 30)));
+            assertTrue(!firstRestaurantTime.isAfter(LocalTime.of(14, 0)));
+
+            for (int index = 1; index < day.getPlaces().size(); index++) {
+                String previousCategory = day.getPlaces().get(index - 1)
+                        .getCategory();
+                String currentCategory = day.getPlaces().get(index)
+                        .getCategory();
+                if (previousCategory.equals(currentCategory)) {
+                    assertTrue(!"RESTAURANT".equals(currentCategory)
+                            && !"CAFE".equals(currentCategory));
+                }
+            }
         }
     }
 
@@ -219,7 +337,7 @@ class CourseRecommendationServiceTest {
         CourseRecommendRequest request = CourseRecommendRequest.builder()
                 .resultId(101L)
                 .travelCode("ATLSR")
-                .transportMode(TransportMode.WALKING)
+                .transportMode(TransportMode.DRIVING)
                 .dailyStartTime(LocalTime.of(10, 0))
                 .dailyPlans(List.of(DailyPlanRequest.builder()
                         .visitDate(LocalDate.of(2026, 7, 20))
@@ -265,7 +383,7 @@ class CourseRecommendationServiceTest {
     void recommendAgainPenalizesPreviousPlaces() {
         CourseRecommendRequest request = CourseRecommendRequest.builder()
                 .resultId(101L)
-                .transportMode(TransportMode.WALKING)
+                .transportMode(TransportMode.DRIVING)
                 .dailyStartTime(LocalTime.of(10, 0))
                 .previouslyRecommendedPlaceIds(List.of(1L, 11L))
                 .dailyPlans(List.of(DailyPlanRequest.builder()
@@ -312,7 +430,7 @@ class CourseRecommendationServiceTest {
         LocalDate finalDate = LocalDate.of(2026, 7, 22);
         CourseRecommendRequest request = CourseRecommendRequest.builder()
                 .resultId(101L)
-                .transportMode(TransportMode.WALKING)
+                .transportMode(TransportMode.DRIVING)
                 .dailyStartTime(LocalTime.of(10, 0))
                 .hotelCandidates(List.of(
                         candidate(100L, "공통 숙소", "HOTEL", 95.0, 37.55, 127.02),
@@ -418,7 +536,7 @@ class CourseRecommendationServiceTest {
         CourseRecommendRequest request = CourseRecommendRequest.builder()
                 .resultId(101L)
                 .travelCode("ATLSP")
-                .transportMode(TransportMode.WALKING)
+                .transportMode(TransportMode.DRIVING)
                 .dailyStartTime(LocalTime.of(9, 0))
                 .dailyPlans(List.of(DailyPlanRequest.builder()
                         .visitDate(visitDate)
@@ -437,7 +555,7 @@ class CourseRecommendationServiceTest {
                 courseRecommendationService.recommend(request);
         Set<Long> firstPlaceIds = ordinaryPlaceIds(first);
         assertEquals(18, firstPlaceIds.size());
-        assertDailyOverlapAtMost(first, 2);
+        assertDailyOverlapAtMost(first, 0);
 
         request.setExcludedRecommendationKeys(first.getCourseOptions().stream()
                 .map(CourseOptionResponse::getRecommendationKey)
@@ -452,7 +570,252 @@ class CourseRecommendationServiceTest {
         assertEquals(18, secondPlaceIds.size());
         assertTrue(firstPlaceIds.stream()
                 .noneMatch(secondPlaceIds::contains));
-        assertDailyOverlapAtMost(second, 2);
+        assertDailyOverlapAtMost(second, 0);
+    }
+
+    @Test
+    @DisplayName("후보가 부족하면 필요한 중복만 허용하고 한 코스에 겹침이 몰리지 않는다")
+    void limitedCandidatePoolUsesOnlyNecessaryOverlap() {
+        LocalDate visitDate = LocalDate.of(2026, 7, 24);
+        List<PlaceCandidateDto> candidates = new ArrayList<>();
+        for (long id = 1; id <= 4; id++) {
+            candidates.add(candidate(
+                    id,
+                    "관광지 " + id,
+                    "TOUR",
+                    100.0 - id,
+                    37.50 + id * 0.001,
+                    127.00 + id * 0.001
+            ));
+        }
+        for (long id = 11; id <= 13; id++) {
+            candidates.add(candidate(
+                    id,
+                    "식당 " + id,
+                    "RESTAURANT",
+                    100.0 - id,
+                    37.51 + id * 0.001,
+                    127.01 + id * 0.001
+            ));
+        }
+        for (long id = 21; id <= 23; id++) {
+            candidates.add(candidate(
+                    id,
+                    "카페 " + id,
+                    "CAFE",
+                    100.0 - id,
+                    37.52 + id * 0.001,
+                    127.02 + id * 0.001
+            ));
+        }
+
+        CourseRecommendRequest request = CourseRecommendRequest.builder()
+                .resultId(101L)
+                .travelCode("ATLSR")
+                .transportMode(TransportMode.DRIVING)
+                .dailyStartTime(LocalTime.of(13, 0))
+                .dailyPlans(List.of(DailyPlanRequest.builder()
+                        .visitDate(visitDate)
+                        .targetPlaceCount(4)
+                        .categoryTargets(Map.of(
+                                "TOUR", 4,
+                                "RESTAURANT", 3,
+                                "CAFE", 3,
+                                "HOTEL", 0
+                        ))
+                        .placeCandidates(candidates)
+                        .build()))
+                .build();
+
+        CourseRecommendResponse response =
+                courseRecommendationService.recommend(request);
+
+        // 3개 코스 12자리 중 후보는 10개이므로 관광지 2자리만 재사용되어야 한다.
+        assertEquals(10, ordinaryPlaceIds(response).size());
+        assertDailyOverlapAtMost(response, 1);
+    }
+
+    @Test
+    @DisplayName("도보 목표 장소 수가 불가능하면 평균 18분과 구간 20분을 지키며 장소 수를 줄인다")
+    void walkingRecommendationReducesPlacesWithoutBreakingLimits() {
+        CourseRecommendationService service = actualWalkingService(
+                Map.of(
+                        pairKey(1L, 2L), 16.0,
+                        pairKey(2L, 3L), 16.0,
+                        pairKey(3L, 4L), 16.0
+                ),
+                120.0
+        );
+        LocalDate visitDate = LocalDate.of(2026, 7, 24);
+        List<PlaceCandidateDto> candidates = List.of(
+                candidate(1L, "도보 장소 1", "TOUR", 96.0, 37.50, 127.00),
+                candidate(2L, "도보 장소 2", "TOUR", 95.0, 37.51, 127.01),
+                candidate(3L, "도보 장소 3", "TOUR", 94.0, 37.52, 127.02),
+                candidate(4L, "도보 장소 4", "TOUR", 93.0, 37.53, 127.03),
+                candidate(5L, "고립 장소 5", "TOUR", 92.0, 37.54, 127.04),
+                candidate(6L, "고립 장소 6", "TOUR", 91.0, 37.55, 127.05)
+        );
+
+        CourseRecommendRequest request = CourseRecommendRequest.builder()
+                .resultId(112L)
+                .travelCode("ATLSP")
+                .transportMode(TransportMode.WALKING)
+                .dailyStartTime(LocalTime.of(11, 0))
+                .dailyPlans(List.of(DailyPlanRequest.builder()
+                        .visitDate(visitDate)
+                        .targetPlaceCount(6)
+                        .categoryTargets(Map.of(
+                                "TOUR", 6,
+                                "RESTAURANT", 0,
+                                "CAFE", 0,
+                                "HOTEL", 0
+                        ))
+                        .placeCandidates(candidates)
+                        .build()))
+                .build();
+
+        CourseRecommendResponse response = service.recommend(request);
+
+        assertEquals(3, response.getOptionCount());
+        for (CourseOptionResponse option : response.getCourseOptions()) {
+            CourseDayResponse day = option.getDays().get(0);
+            assertEquals(4, day.getPlaces().size());
+            assertTrue(!option.getEstimatedTravelTimes());
+            assertWalkingLimits(day);
+            assertEquals(48.0, option.getTotalTravelTimeMinutes(), 0.000001);
+        }
+    }
+
+    @Test
+    @DisplayName("도보는 고득점 평균 17분 경로보다 평균 15분 이하 경로를 먼저 선택한다")
+    void walkingRecommendationPrefersFifteenMinuteTier() {
+        CourseRecommendationService service = actualWalkingService(
+                Map.of(
+                        pairKey(1L, 2L), 17.0,
+                        pairKey(2L, 3L), 17.0,
+                        pairKey(4L, 5L), 10.0,
+                        pairKey(5L, 6L), 10.0
+                ),
+                120.0
+        );
+        List<PlaceCandidateDto> candidates = List.of(
+                candidate(1L, "고득점 장소 1", "TOUR", 100.0, 37.50, 127.00),
+                candidate(2L, "고득점 장소 2", "TOUR", 99.0, 37.51, 127.01),
+                candidate(3L, "고득점 장소 3", "TOUR", 98.0, 37.52, 127.02),
+                candidate(4L, "가까운 장소 4", "TOUR", 80.0, 37.53, 127.03),
+                candidate(5L, "가까운 장소 5", "TOUR", 79.0, 37.54, 127.04),
+                candidate(6L, "가까운 장소 6", "TOUR", 78.0, 37.55, 127.05)
+        );
+
+        CourseRecommendRequest request = CourseRecommendRequest.builder()
+                .resultId(113L)
+                .travelCode("ATLSP")
+                .transportMode(TransportMode.WALKING)
+                .dailyStartTime(LocalTime.of(11, 0))
+                .dailyPlans(List.of(DailyPlanRequest.builder()
+                        .visitDate(LocalDate.of(2026, 7, 24))
+                        .targetPlaceCount(3)
+                        .categoryTargets(Map.of(
+                                "TOUR", 3,
+                                "RESTAURANT", 0,
+                                "CAFE", 0,
+                                "HOTEL", 0
+                        ))
+                        .placeCandidates(candidates)
+                        .build()))
+                .build();
+
+        CourseOptionResponse preference = service.recommend(request)
+                .getCourseOptions()
+                .get(0);
+        Set<Long> selectedIds = preference.getDays().get(0).getPlaces()
+                .stream()
+                .map(place -> place.getPlaceId())
+                .collect(java.util.stream.Collectors.toSet());
+
+        assertEquals(Set.of(4L, 5L, 6L), selectedIds);
+        assertEquals(20.0, preference.getTotalTravelTimeMinutes(), 0.000001);
+        assertWalkingLimits(preference.getDays().get(0));
+    }
+
+    @Test
+    @DisplayName("도보 평균 15분 경로가 없으면 장소 수를 유지한 채 평균 18분 단계로 완화한다")
+    void walkingRecommendationUsesEighteenMinuteTierBeforeReducingPlaces() {
+        CourseRecommendationService service = actualWalkingService(
+                Map.of(
+                        pairKey(1L, 2L), 17.0,
+                        pairKey(2L, 3L), 17.0
+                ),
+                120.0
+        );
+        List<PlaceCandidateDto> candidates = List.of(
+                candidate(1L, "도보 장소 1", "TOUR", 96.0, 37.50, 127.00),
+                candidate(2L, "도보 장소 2", "TOUR", 95.0, 37.51, 127.01),
+                candidate(3L, "도보 장소 3", "TOUR", 94.0, 37.52, 127.02)
+        );
+
+        CourseRecommendRequest request = CourseRecommendRequest.builder()
+                .resultId(114L)
+                .travelCode("ATLSP")
+                .transportMode(TransportMode.WALKING)
+                .dailyStartTime(LocalTime.of(11, 0))
+                .dailyPlans(List.of(DailyPlanRequest.builder()
+                        .visitDate(LocalDate.of(2026, 7, 24))
+                        .targetPlaceCount(3)
+                        .categoryTargets(Map.of(
+                                "TOUR", 3,
+                                "RESTAURANT", 0,
+                                "CAFE", 0,
+                                "HOTEL", 0
+                        ))
+                        .placeCandidates(candidates)
+                        .build()))
+                .build();
+
+        CourseRecommendResponse response = service.recommend(request);
+
+        for (CourseOptionResponse option : response.getCourseOptions()) {
+            CourseDayResponse day = option.getDays().get(0);
+            assertEquals(3, day.getPlaces().size());
+            assertEquals(34.0, option.getTotalTravelTimeMinutes(), 0.000001);
+            assertWalkingLimits(day);
+        }
+    }
+
+    @Test
+    @DisplayName("도보 구간당 20분 제한은 장소 수를 줄여도 절대 완화하지 않는다")
+    void walkingRecommendationNeverRelaxesTwentyMinuteLegLimit() {
+        CourseRecommendationService service = actualWalkingService(
+                Map.of(pairKey(1L, 2L), 21.0),
+                120.0
+        );
+        List<PlaceCandidateDto> candidates = List.of(
+                candidate(1L, "도보 장소 1", "TOUR", 96.0, 37.50, 127.00),
+                candidate(2L, "도보 장소 2", "TOUR", 95.0, 37.51, 127.01)
+        );
+
+        CourseRecommendRequest request = CourseRecommendRequest.builder()
+                .resultId(115L)
+                .travelCode("ATLSP")
+                .transportMode(TransportMode.WALKING)
+                .dailyStartTime(LocalTime.of(11, 0))
+                .dailyPlans(List.of(DailyPlanRequest.builder()
+                        .visitDate(LocalDate.of(2026, 7, 24))
+                        .targetPlaceCount(2)
+                        .categoryTargets(Map.of(
+                                "TOUR", 2,
+                                "RESTAURANT", 0,
+                                "CAFE", 0,
+                                "HOTEL", 0
+                        ))
+                        .placeCandidates(candidates)
+                        .build()))
+                .build();
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> service.recommend(request)
+        );
     }
 
     @Test
@@ -624,6 +987,95 @@ class CourseRecommendationServiceTest {
                 assertTrue(overlap.size() <= limit);
             }
         }
+    }
+
+    private CourseRecommendationService actualWalkingService(
+            Map<String, Double> pairMinutes,
+            double defaultMinutes
+    ) {
+        DistanceService distanceService = new DistanceService() {
+            private RouteMatrix createMatrix(
+                    List<PlaceCandidateDto> places
+            ) {
+                int size = places.size();
+                double[][] distances = new double[size][size];
+                double[][] travelTimes = new double[size][size];
+                for (int from = 0; from < size; from++) {
+                    for (int to = 0; to < size; to++) {
+                        if (from == to) {
+                            continue;
+                        }
+                        double minutes = pairMinutes.getOrDefault(
+                                pairKey(
+                                        places.get(from).getPlaceId(),
+                                        places.get(to).getPlaceId()
+                                ),
+                                defaultMinutes
+                        );
+                        travelTimes[from][to] = minutes;
+                        distances[from][to] = minutes / 12.0;
+                    }
+                }
+                return new RouteMatrix(
+                        distances,
+                        travelTimes,
+                        false
+                );
+            }
+
+            @Override
+            public RouteMatrix calculateCandidatePoolMatrix(
+                    List<PlaceCandidateDto> places,
+                    TransportMode transportMode
+            ) {
+                return createMatrix(places);
+            }
+
+            @Override
+            public RouteMatrix calculateRouteMatrix(
+                    List<PlaceCandidateDto> places,
+                    TransportMode transportMode
+            ) {
+                return createMatrix(places);
+            }
+        };
+        return new CourseRecommendationService(
+                new CourseOptimizationService(
+                        distanceService,
+                        new VisitDurationService()
+                ),
+                distanceService
+        );
+    }
+
+    private String pairKey(Long left, Long right) {
+        long minimum = Math.min(left, right);
+        long maximum = Math.max(left, right);
+        return minimum + ":" + maximum;
+    }
+
+    private void assertWalkingLimits(CourseDayResponse day) {
+        double totalMinutes = 0.0;
+        int legCount = 0;
+        for (int index = 1; index < day.getPlaces().size(); index++) {
+            double minutes = day.getPlaces().get(index)
+                    .getTravelTimeFromPreviousMinutes();
+            assertTrue(
+                    minutes <= 20.0 + 0.000001,
+                    "도보 구간이 20분을 초과했습니다: " + minutes
+            );
+            assertTrue(
+                    !Boolean.TRUE.equals(
+                            day.getPlaces().get(index).getRouteEstimated()
+                    )
+            );
+            totalMinutes += minutes;
+            legCount++;
+        }
+        assertTrue(
+                totalMinutes <= legCount * 18.0 + 0.000001,
+                "도보 평균이 18분을 초과했습니다: total=" + totalMinutes
+        );
     }
 
     private PlaceCandidateDto candidate(

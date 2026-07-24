@@ -17,6 +17,8 @@ import com.seoulink.backend.domain.course.service.CourseOptimizationService;
 import com.seoulink.backend.domain.course.service.CourseRecommendationService;
 import com.seoulink.backend.domain.course.service.CourseSaveService;
 import com.seoulink.backend.domain.course.service.CourseService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -39,6 +41,8 @@ import java.util.NoSuchElementException;
 @RestController
 @RequestMapping("/api/courses")
 public class CourseController {
+
+    private static final Logger log = LoggerFactory.getLogger(CourseController.class);
 
     // 후보 초안, 최적화, 추천 코스 생성, 저장, 조회 책임을 각 서비스에 위임한다.
     private final CourseDraftService courseDraftService;
@@ -191,6 +195,7 @@ public class CourseController {
     public CourseErrorResponse handleCourseProcessingFailure(
             IllegalStateException exception
     ) {
+        log.error("코스 처리 중 내부 오류가 발생했습니다.", exception);
         return new CourseErrorResponse(
                 "COURSE_PROCESSING_FAILED",
                 "코스 처리 중 오류가 발생했습니다."

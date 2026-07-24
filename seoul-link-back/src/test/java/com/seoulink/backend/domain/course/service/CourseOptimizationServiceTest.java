@@ -626,6 +626,100 @@ class CourseOptimizationServiceTest {
     }
 
     @Test
+    @DisplayName("중간 장소 교체는 앞뒤 구간의 합산 이동시간이 가장 짧은 후보를 선택한다")
+    void selectReplacementUsingPreviousAndNextLegs() {
+        DistanceService mockedDistanceService = mock(DistanceService.class);
+        when(mockedDistanceService.calculateRouteMatrix(
+                anyList(),
+                eq(TransportMode.WALKING)
+        )).thenAnswer(invocation -> {
+            List<PlaceCandidateDto> places = invocation.getArgument(0);
+            int size = places.size();
+            double[][] distances = new double[size][size];
+            double[][] travelTimes = new double[size][size];
+
+            for (int from = 0; from < size; from++) {
+                for (int to = 0; to < size; to++) {
+                    if (from == to) {
+                        continue;
+                    }
+                    long fromId = places.get(from).getPlaceId();
+                    long toId = places.get(to).getPlaceId();
+                    long smaller = Math.min(fromId, toId);
+                    long larger = Math.max(fromId, toId);
+                    double travelMinutes = 15.0;
+                    double distanceKm = 1.0;
+
+                    if (smaller == 1L && larger == 2L) {
+                        travelMinutes = 35.0;
+                        distanceKm = 1.5;
+                    } else if (smaller == 2L && larger == 3L) {
+                        travelMinutes = 5.0;
+                        distanceKm = 0.3;
+                    } else if (smaller == 1L && larger == 3L) {
+                        travelMinutes = 50.0;
+                        distanceKm = 1.9;
+                    } else if (smaller == 1L && larger == 4L) {
+                        // 앞 구간만 보면 가장 가까운 후보이다.
+                        travelMinutes = 5.0;
+                        distanceKm = 0.3;
+                    } else if (smaller == 3L && larger == 4L) {
+                        // 하지만 다음 장소까지 포함하면 총 34분이다.
+                        travelMinutes = 29.0;
+                        distanceKm = 1.8;
+                    } else if (smaller == 1L && larger == 5L) {
+                        travelMinutes = 10.0;
+                        distanceKm = 0.7;
+                    } else if (smaller == 3L && larger == 5L) {
+                        // 앞뒤 합계 15분으로 실제 전체 동선이 더 좋다.
+                        travelMinutes = 5.0;
+                        distanceKm = 0.3;
+                    }
+                    distances[from][to] = distanceKm;
+                    travelTimes[from][to] = travelMinutes;
+                }
+            }
+            return new DistanceService.RouteMatrix(distances, travelTimes);
+        });
+        CourseOptimizationService service = new CourseOptimizationService(
+                mockedDistanceService,
+                new VisitDurationService()
+        );
+        LocalDate visitDate = LocalDate.of(2026, 7, 20);
+        PlaceCandidateDto distantPlace = place(
+                2L, "먼 중간 관광지", "TOUR", 90.0,
+                37.5700, 127.0100, visitDate
+        );
+        distantPlace.setAlternativeCandidates(List.of(
+                place(4L, "앞 구간만 가까운 후보", "TOUR", 95.0,
+                        37.5701, 127.0101, null),
+                place(5L, "전체 동선이 짧은 후보", "TOUR", 80.0,
+                        37.5702, 127.0102, null)
+        ));
+
+        CourseOptimizeResponse response = service.optimize(
+                CourseOptimizeRequest.builder()
+                        .transportMode(TransportMode.WALKING)
+                        .placeCandidates(List.of(
+                                place(1L, "출발지", "TOUR", 100.0,
+                                        37.5600, 127.0000, visitDate),
+                                distantPlace,
+                                place(3L, "다음 장소", "TOUR", 70.0,
+                                        37.5800, 127.0200, visitDate)
+                        ))
+                        .build()
+        );
+
+        assertEquals(
+                List.of(1L, 5L, 3L),
+                response.getOptimizedPlaces().stream()
+                        .map(OptimizedPlaceDto::getPlaceId)
+                        .toList()
+        );
+        assertEquals(15.0, response.getTotalTravelTimeMinutes(), 0.000001);
+    }
+
+    @Test
     @DisplayName("조건을 만족하는 대체 후보가 없으면 원래 장소와 경로를 유지한다")
     void keepOriginalPlaceWhenNoUsableAlternativeExists() {
         LocalDate visitDate = LocalDate.of(2026, 7, 20);

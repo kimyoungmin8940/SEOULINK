@@ -1,7 +1,7 @@
 package com.seoulink.backend.domain.course.service;
 
 import com.seoulink.backend.domain.course.dto.response.CourseDraftResponse;
-import com.seoulink.backend.domain.place.dto.response.PlaceRecommendationListResponse;
+import com.seoulink.backend.domain.place.dto.response.PlaceCandidatePoolResponse;
 import com.seoulink.backend.domain.place.dto.response.PlaceRecommendationResponse;
 import com.seoulink.backend.domain.place.entity.Place;
 import com.seoulink.backend.domain.place.service.PlaceRecommendationService;
@@ -12,19 +12,26 @@ import com.seoulink.backend.domain.survey.repository.TravelSurveyRepository;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anySet;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class CourseDraftServiceTest {
 
     @Test
-    void forwardsCompanionTypeAndSeparatesHotelCandidates() {
+    void createsDailyPlansAndHotelCandidatesFromLatestCandidatePool() {
         TravelSurveyRepository travelSurveyRepository =
                 mock(TravelSurveyRepository.class);
         SurveyResultRepository surveyResultRepository =
@@ -41,30 +48,49 @@ class CourseDraftServiceTest {
         when(survey.getCompanionType()).thenReturn("COUPLE");
         when(survey.getTransportType()).thenReturn("WALKING");
         when(surveyResult.getResultId()).thenReturn(101L);
-        when(surveyResult.getTravelCode()).thenReturn("ATLSR");
+        when(surveyResult.getTravelCode()).thenReturn("ATLSP");
         when(travelSurveyRepository.findById(1L))
                 .thenReturn(Optional.of(survey));
         when(surveyResultRepository.findBySurveyId(1L))
                 .thenReturn(Optional.of(surveyResult));
 
-        List<PlaceRecommendationResponse> recommendations = List.of(
-                response(place(1L, "관광지", "TOUR")),
-                response(place(2L, "식당", "RESTAURANT")),
-                response(place(3L, "카페", "CAFE")),
-                response(place(100L, "숙소 1", "HOTEL")),
-                response(place(101L, "숙소 2", "HOTEL"))
+        PlaceCandidatePoolResponse firstDayPool = pool(
+                List.of(
+                        candidate(1L, "관광지 1", "TOUR"),
+                        candidate(2L, "관광지 2", "TOUR"),
+                        candidate(3L, "관광지 3", "TOUR")
+                ),
+                List.of(
+                        candidate(11L, "식당 1", "RESTAURANT"),
+                        candidate(12L, "식당 2", "RESTAURANT")
+                ),
+                List.of(candidate(21L, "카페 1", "CAFE")),
+                List.of(
+                        candidate(100L, "숙소 1", "HOTEL"),
+                        candidate(101L, "숙소 2", "HOTEL")
+                )
         );
-        when(placeRecommendationService.recommend(
-                "ATLSR",
-                "서울",
-                null,
-                8,
-                3,
-                "COUPLE"
-        )).thenReturn(new PlaceRecommendationListResponse(
-                "ATLSR",
-                recommendations
-        ));
+        PlaceCandidatePoolResponse secondDayPool = pool(
+                List.of(
+                        candidate(4L, "관광지 4", "TOUR"),
+                        candidate(5L, "관광지 5", "TOUR"),
+                        candidate(6L, "관광지 6", "TOUR")
+                ),
+                List.of(
+                        candidate(13L, "식당 3", "RESTAURANT"),
+                        candidate(14L, "식당 4", "RESTAURANT")
+                ),
+                List.of(candidate(22L, "카페 2", "CAFE")),
+                List.of()
+        );
+
+        when(placeRecommendationService.recommendCandidatePool(
+                eq("ATLSP"),
+                eq("서울"),
+                eq("P"),
+                eq("COUPLE"),
+                anySet()
+        )).thenReturn(firstDayPool, secondDayPool);
 
         CourseDraftResponse draft = new CourseDraftService(
                 travelSurveyRepository,
@@ -72,39 +98,76 @@ class CourseDraftServiceTest {
                 placeRecommendationService
         ).createDraft(1L);
 
+        assertEquals(2, draft.getDailyPlans().size());
         assertEquals(2, draft.getHotelCandidates().size());
+        assertEquals(6, draft.getDailyPlans().get(0).getTargetPlaceCount());
+        assertEquals(6, draft.getDailyPlans().get(0).getPlaceCandidates().size());
+        assertEquals(LocalDate.of(2026, 7, 21),
+                draft.getDailyPlans().get(1).getVisitDate());
         assertTrue(draft.getHotelCandidates().stream()
                 .allMatch(candidate -> "HOTEL".equals(candidate.getCategory())));
-        assertTrue(draft.getDailyPlans().stream()
-                .flatMap(day -> day.getPlaceCandidates().stream())
-                .noneMatch(candidate -> "HOTEL".equals(candidate.getCategory())));
-        verify(placeRecommendationService).recommend(
-                "ATLSR",
-                "서울",
-                null,
-                8,
-                3,
-                "COUPLE"
+
+        Set<Long> firstDayIds = draft.getDailyPlans().get(0)
+                .getPlaceCandidates().stream()
+                .map(PlaceRecommendationResponse::getPlaceId)
+                .collect(java.util.stream.Collectors.toSet());
+        assertFalse(draft.getDailyPlans().get(1).getPlaceCandidates().stream()
+                .map(PlaceRecommendationResponse::getPlaceId)
+                .anyMatch(firstDayIds::contains));
+
+        verify(placeRecommendationService, times(2)).recommendCandidatePool(
+                eq("ATLSP"),
+                eq("서울"),
+                eq("P"),
+                eq("COUPLE"),
+                anySet()
         );
     }
 
-    private Place place(Long id, String name, String category) {
+    private PlaceCandidatePoolResponse pool(
+            List<PlaceRecommendationResponse> tours,
+            List<PlaceRecommendationResponse> restaurants,
+            List<PlaceRecommendationResponse> cafes,
+            List<PlaceRecommendationResponse> hotels
+    ) {
+        Map<String, List<PlaceRecommendationResponse>> candidates =
+                new LinkedHashMap<>();
+        candidates.put("TOUR", tours);
+        candidates.put("RESTAURANT", restaurants);
+        candidates.put("CAFE", cafes);
+
+        Map<String, List<PlaceRecommendationResponse>> fallback =
+                new LinkedHashMap<>();
+        fallback.put("TOUR", List.of());
+        fallback.put("RESTAURANT", List.of());
+        fallback.put("CAFE", List.of());
+
+        return new PlaceCandidatePoolResponse(
+                "ATLSP",
+                "P",
+                "COUPLE",
+                48,
+                54,
+                candidates,
+                fallback,
+                hotels,
+                List.of()
+        );
+    }
+
+    private PlaceRecommendationResponse candidate(
+            Long id,
+            String name,
+            String category
+    ) {
         Place place = new Place();
         place.setPlaceId(id);
         place.setName(name);
         place.setCategory(category);
         place.setRegion("서울");
-        place.setAddress("서울 " + name);
         place.setLatitude(37.5 + id / 10_000.0);
         place.setLongitude(127.0 + id / 10_000.0);
         place.setImageUrl("https://example.com/" + id + ".jpg");
-        if ("HOTEL".equals(category)) {
-            place.setThemeHotelStayYn("Y");
-        }
-        return place;
-    }
-
-    private PlaceRecommendationResponse response(Place place) {
         return new PlaceRecommendationResponse(place, 90.0, List.of());
     }
 }

@@ -102,13 +102,22 @@ function getThemeTags(option, places) {
 }
 
 /** 카드에 항상 표시하는 하루 동선의 장소명과 실제 경로 기준 도착 시각입니다. */
-function RouteStop({ place, fallbackImage, isLast }) {
+function RouteStop({ place, fallbackImage, hasPrevious }) {
     const meta = categoryMeta[place.category] || categoryMeta.TOUR;
     const Icon = meta.Icon;
     const imageUrl = getPlaceImage(place);
 
     return (
         <li className="course-result-stop">
+            {hasPrevious && (
+                <ArrowRight
+                    className="course-result-stop-arrow"
+                    size={17}
+                    strokeWidth={2}
+                    aria-hidden="true"
+                />
+            )}
+
             <div className="course-result-stop-main">
                 <span className={`course-result-stop-visual ${meta.tone}`}>
                     {imageUrl ? (
@@ -132,14 +141,6 @@ function RouteStop({ place, fallbackImage, isLast }) {
                 </span>
             </div>
 
-            {!isLast && (
-                <ArrowRight
-                    className="course-result-stop-arrow"
-                    size={17}
-                    strokeWidth={2}
-                    aria-hidden="true"
-                />
-            )}
         </li>
     );
 }
@@ -274,6 +275,7 @@ function CourseRecommendationCard({
     const [isBookmarked, setIsBookmarked] = useState(false);
     const [isExpanded, setIsExpanded] = useState(false);
     const activeDay = days.find((day) => day.dayNo === activeDayNo) || days[0] || { places: [] };
+    const activeDayPlaces = Array.isArray(activeDay.places) ? activeDay.places : [];
     const allPlaces = useMemo(
         () => days.flatMap((day) => (Array.isArray(day.places) ? day.places : [])),
         [days],
@@ -410,12 +412,12 @@ function CourseRecommendationCard({
                     )}
 
                     <ol className="course-result-stops">
-                        {(activeDay.places || []).slice(0, 5).map((place, index, visiblePlaces) => (
+                        {activeDayPlaces.map((place, index) => (
                             <RouteStop
                                 key={`${place.placeId}-${place.visitOrder ?? index}`}
                                 place={place}
                                 fallbackImage={fallbackImage}
-                                isLast={index === visiblePlaces.length - 1}
+                                hasPrevious={index > 0}
                             />
                         ))}
                     </ol>

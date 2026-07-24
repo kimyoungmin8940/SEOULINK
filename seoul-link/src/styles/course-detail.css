@@ -106,9 +106,18 @@
   justify-content: flex-start;
 }
 
-.course-detail-preview-label {
+.course-detail-label-row {
   min-height: 23px;
   margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.course-detail-preview-label {
+  min-height: 23px;
+  margin-bottom: 0;
   padding: 3px 9px;
   border: 1px solid #cfe3f4;
   border-radius: 999px;
@@ -119,6 +128,27 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
+}
+
+.course-detail-preference-code-label {
+  min-height: 23px;
+  padding: 3px 9px;
+  border: 1px solid #c9e1f6;
+  border-radius: 999px;
+  background: #edf7ff;
+  color: #2275b9;
+  font-size: 11px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.course-detail-preference-code-label strong {
+  color: #126fc0;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.7px;
 }
 
 .course-detail-hero h1 {
@@ -841,48 +871,20 @@
   word-break: keep-all;
 }
 
-.course-detail-travel-code {
-  margin-top: 18px;
-  padding-top: 15px;
-  border-top: 1px solid #e8f0f6;
+.course-detail-preference-code-description {
   display: flex;
-  gap: 8px;
+  flex-direction: column;
+  gap: 2px;
 }
 
-.course-detail-travel-code span {
-  width: 29px;
-  height: 29px;
-  border-radius: 7px;
-  font-size: 16px;
-  font-weight: 900;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.course-detail-preference-code-description strong {
+  color: #286caa;
+  font-size: 11px;
+  font-weight: 850;
 }
 
-.course-detail-travel-code .blue {
-  background: #e5f2ff;
-  color: #1677da;
-}
-
-.course-detail-travel-code .purple {
-  background: #f3e7ff;
-  color: #9350cd;
-}
-
-.course-detail-travel-code .green {
-  background: #e5f8e8;
-  color: #2b9a49;
-}
-
-.course-detail-travel-code .orange {
-  background: #fff0df;
-  color: #ef8c2f;
-}
-
-.course-detail-travel-code .pink {
-  background: #ffe7f0;
-  color: #e75088;
+.course-detail-preference-code-description span {
+  color: #788b9c;
 }
 
 .course-detail-save-card {
