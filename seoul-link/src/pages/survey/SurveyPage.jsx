@@ -52,6 +52,11 @@ function SurveyPage() {
         setCurrentQuestionIndex,
     ] = useState(0);
 
+    const [
+        furthestQuestionIndex,
+        setFurthestQuestionIndex
+    ] = useState(0);
+
     const [selectedOptionId, setSelectedOptionId] = useState(null);
     const [answers, setAnswers] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -121,6 +126,7 @@ function SurveyPage() {
         }
 
         setCurrentQuestionIndex(0);
+        setFurthestQuestionIndex(0);
         setSelectedOptionId(null);
         setAnswers([]);
         setSelectionError('');
@@ -177,8 +183,68 @@ function SurveyPage() {
     const currentQuestion = questions[currentQuestionIndex];
     const currentNumber = currentQuestionIndex + 1;
     const totalCount = questions.length;
-    const progress = (currentNumber / totalCount) * 100;
+    const progress = (currentQuestionIndex / totalCount) * 100;
     const isLastQuestion = currentQuestionIndex === totalCount - 1;
+
+    const canGoPrevious = currentQuestionIndex > 0;
+
+    const canGoForward =
+        currentQuestionIndex < furthestQuestionIndex &&
+        currentQuestionIndex < totalCount - 1;
+
+    const saveCurrentSelection = () => {
+        if (selectedOptionId === null) {
+            return answers;
+        }
+
+        const updatedAnswers = [
+            ...answers.filter(
+                (answer) =>
+                    answer.questionId !== currentQuestion.questionId
+            ),
+            {
+                questionId: currentQuestion.questionId,
+                optionId: selectedOptionId,
+            },
+        ];
+
+        setAnswers(updatedAnswers);
+        return updatedAnswers;
+    };
+
+    const moveToQuestion = (targetIndex) => {
+        if (
+            isSubmitting ||
+            targetIndex < 0 ||
+            targetIndex >= totalCount
+        ) {
+            return;
+        }
+
+        const updatedAnswers = saveCurrentSelection();
+
+        const targetQuestion = questions[targetIndex];
+        const savedAnswer = updatedAnswers.find(
+            (answer) =>
+                answer.questionId === targetQuestion.questionId
+        );
+
+        setCurrentQuestionIndex(targetIndex);
+        setSelectedOptionId(savedAnswer?.optionId ?? null);
+        setSelectionError('');
+    };
+
+    const handlePreviousQuestion = () => {
+        if (canGoPrevious) {
+            moveToQuestion(currentQuestionIndex - 1);
+        }
+    };
+
+    const handleForwardQuestion = () => {
+        if (canGoForward) {
+            moveToQuestion(currentQuestionIndex + 1);
+        }
+    };
 
     //다음 질문으로 이동하거나 마지막 답변을 백엔드에 제출
 
@@ -212,11 +278,23 @@ function SurveyPage() {
             setAnswers(nextAnswers);
 
             if (!isLastQuestion) {
-                setCurrentQuestionIndex(
-                    (previousIndex) =>
-                        previousIndex + 1
+                const nextQuestionIndex = currentQuestionIndex + 1;
+                const nextQuestion = questions[nextQuestionIndex];
+
+                const savedNextAnswer = nextAnswers.find(
+                    (answer) =>
+                        answer.questionId === nextQuestion.questionId
                 );
-                setSelectedOptionId(null);
+
+                setFurthestQuestionIndex(
+                    (previousIndex) =>
+                        Math.max(previousIndex, nextQuestionIndex)
+                );
+
+                setCurrentQuestionIndex(nextQuestionIndex);
+                setSelectedOptionId(
+                    savedNextAnswer?.optionId ?? null
+                );
                 setSelectionError('');
 
                 return;
@@ -292,12 +370,12 @@ function SurveyPage() {
                 question={currentQuestion}
                 currentNumber={currentNumber}
                 totalCount={totalCount}
-                selectedOptionId={
-                    selectedOptionId
-                }
-                onSelect={
-                    handleOptionSelect
-                }
+                selectedOptionId={selectedOptionId}
+                onSelect={handleOptionSelect}
+                onPrevious={handlePreviousQuestion}
+                onForward={handleForwardQuestion}
+                canGoPrevious={canGoPrevious}
+                canGoForward={canGoForward}
             />
 
             {selectionError && (

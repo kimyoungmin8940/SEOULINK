@@ -62,7 +62,7 @@ export const travelCodeDimensions = [
                 color: 'tone-b',
             },
             L: {
-                label: '프리미엄형',
+                label: '럭셔리형',
                 answer: '퀄리티와 특별함을 중요하게 생각해요',
                 short: '특별한 경험',
                 description: '조금 더 비용을 쓰더라도 완성도 높은 공간과 서비스를 선호해요',

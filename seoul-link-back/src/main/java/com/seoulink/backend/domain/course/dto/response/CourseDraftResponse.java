@@ -1,11 +1,11 @@
 package com.seoulink.backend.domain.course.dto.response;
 
-import com.seoulink.backend.domain.place.dto.response.PlaceRecommendationResponse;
 import lombok.Getter;
 
 import java.time.LocalDate;
-import java.util.List;
 import java.time.LocalTime;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import com.fasterxml.jackson.annotation.JsonFormat;
 
 /**
@@ -27,6 +27,7 @@ public class CourseDraftResponse {
     private final Long surveyId;
     private final Long resultId;
     private final String travelCode;
+    private final String scheduleType;
     private final String companionType;
     private final String transportType;
     private final LocalDate startDate;
@@ -34,32 +35,34 @@ public class CourseDraftResponse {
     private final int travelDays;
     @JsonFormat(pattern = "HH:mm")
     private final LocalTime dailyStartTime;
-    private final List<PlaceRecommendationResponse> hotelCandidates;
-    private final List<DailyCourseDraftResponse> dailyPlans;
+    private final int dailyTargetPlaceCount;
+    private final Map<String, Integer> dailyCategoryTargets;
 
     public CourseDraftResponse(
             Long surveyId,
             Long resultId,
             String travelCode,
+            String scheduleType,
             String companionType,
             String transportType,
             LocalDate startDate,
             LocalDate endDate,
             int travelDays,
             LocalTime dailyStartTime,
-            List<PlaceRecommendationResponse> hotelCandidates,
-            List<DailyCourseDraftResponse> dailyPlans
+            int dailyTargetPlaceCount,
+            Map<String, Integer> dailyCategoryTargets
     ) {
         this.surveyId = surveyId;
         this.resultId = resultId;
         this.travelCode = travelCode;
+        this.scheduleType = scheduleType;
         this.companionType = companionType;
         this.transportType = transportType;
         this.startDate = startDate;
         this.endDate = endDate;
         this.travelDays = travelDays;
         this.dailyStartTime = dailyStartTime;
-        this.hotelCandidates = hotelCandidates;
-        this.dailyPlans = dailyPlans;
+        this.dailyTargetPlaceCount = dailyTargetPlaceCount;
+        this.dailyCategoryTargets = new LinkedHashMap<>(dailyCategoryTargets);
     }
 }

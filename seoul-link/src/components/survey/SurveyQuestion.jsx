@@ -1,12 +1,21 @@
-import { Check, Lightbulb } from 'lucide-react';
+import {
+    Check,
+    Lightbulb,
+    ChevronLeft,
+    ChevronRight,
+} from 'lucide-react';
 
 function SurveyQuestion({
-    question,
-    currentNumber,
-    totalCount,
-    selectedOptionId,
-    onSelect,
-}) {
+                            question,
+                            currentNumber,
+                            totalCount,
+                            selectedOptionId,
+                            onSelect,
+                            onPrevious,
+                            onForward,
+                            canGoPrevious,
+                            canGoForward,
+                        }) {
     const options = question.options ?? [];
 
     return (
@@ -23,67 +32,95 @@ function SurveyQuestion({
                 </p>
             </div>
 
-            <div
-                className="survey-option-grid"
-                role="radiogroup"
-                aria-label={question.questionText}
-            >
-                {options.map((option) => {
-                    const isSelected =
-                        selectedOptionId ===
-                        option.optionId;
+            <div className="survey-question-navigation">
+                <button
+                    className="survey-question-nav-btn previous"
+                    type="button"
+                    onClick={onPrevious}
+                    disabled={!canGoPrevious}
+                    aria-label="이전 질문 보기"
+                >
+                    <ChevronLeft
+                        size={32}
+                        strokeWidth={2.3}
+                    />
+                </button>
 
-                    return (
-                        <button
-                            key={option.optionId}
-                            className={
-                                isSelected
-                                    ? 'survey-option-card selected'
-                                    : 'survey-option-card'
-                            }
-                            type="button"
-                            role="radio"
-                            aria-checked={isSelected}
-                            onClick={() =>
-                                onSelect(option.optionId)
-                            }
-                        >
-                            {isSelected && (
-                                <span
-                                    className="survey-selected-check"
-                                    aria-hidden="true"
-                                >
+                <div
+                    className="survey-option-grid"
+                    role="radiogroup"
+                    aria-label={question.questionText}
+                >
+                    {options.map((option) => {
+                        const isSelected =
+                            selectedOptionId ===
+                            option.optionId;
+
+                        return (
+                            <button
+                                key={option.optionId}
+                                className={
+                                    isSelected
+                                        ? 'survey-option-card selected'
+                                        : 'survey-option-card'
+                                }
+                                type="button"
+                                role="radio"
+                                aria-checked={isSelected}
+                                onClick={() =>
+                                    onSelect(option.optionId)
+                                }
+                            >
+                                {isSelected && (
+                                    <span
+                                        className="survey-selected-check"
+                                        aria-hidden="true"
+                                    >
                                     <Check
                                         size={14}
                                         strokeWidth={3}
                                     />
                                 </span>
-                            )}
-
-                            <div className="survey-option-image">
-                                {option.imageUrl ? (
-                                    <img
-                                        src={option.imageUrl}
-                                        alt={
-                                            option.optionText
-                                        }
-                                    />
-                                ) : (
-                                    <div
-                                        className="survey-option-image-placeholder"
-                                        aria-hidden="true"
-                                    />
                                 )}
-                            </div>
 
-                            <div className="survey-option-content">
-                                <strong>
-                                    {option.optionText}
-                                </strong>
-                            </div>
-                        </button>
-                    );
-                })}
+                                <div className="survey-option-image">
+                                    {option.imageUrl ? (
+                                        <img
+                                            src={option.imageUrl}
+                                            alt={
+                                                option.optionText
+                                            }
+                                        />
+                                    ) : (
+                                        <div
+                                            className="survey-option-image-placeholder"
+                                            aria-hidden="true"
+                                        />
+                                    )}
+                                </div>
+
+                                <div className="survey-option-content">
+                                    <strong>
+                                        {option.optionText}
+                                    </strong>
+                                </div>
+                            </button>
+                        );
+                    })}
+                </div>
+
+                <button
+                    className="survey-question-nav-btn next"
+                    type="button"
+                    onClick={onForward}
+                    disabled={!canGoForward}
+                    aria-label="다음 답변 질문 보기"
+                >
+                    <ChevronRight
+                        size={32}
+                        strokeWidth={2.3}
+                    />
+                </button>
             </div>
 
             <div className="survey-tip-box">

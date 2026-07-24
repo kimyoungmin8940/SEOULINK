@@ -35,14 +35,14 @@ function getToday() {
     return localToday.toISOString().slice(0, 10);
 }
 
-/** 시작일을 포함해 최대 7일까지 선택할 수 있도록 종료일 상한을 계산합니다. */
+/** 시작일을 포함해 최대 5일까지 선택할 수 있도록 종료일 상한을 계산합니다. */
 function getMaximumEndDate(startDate) {
     if (!startDate) {
         return '';
     }
 
     const maximumEndDate = new Date(`${startDate}T00:00:00`);
-    maximumEndDate.setDate(maximumEndDate.getDate() + 6);
+    maximumEndDate.setDate(maximumEndDate.getDate() + 4);
 
     const localMaximumEndDate = new Date(
         maximumEndDate.getTime() - maximumEndDate.getTimezoneOffset() * 60 * 1000,
@@ -112,8 +112,8 @@ function TravelInfoPage() {
             return;
         }
 
-        if (travelDays > 7) {
-            setErrorMessage('여행 기간은 최대 7일까지 선택할 수 있습니다.');
+        if (travelDays > 5) {
+            setErrorMessage('여행 기간은 최대 5일까지 선택할 수 있습니다.');
             return;
         }
 

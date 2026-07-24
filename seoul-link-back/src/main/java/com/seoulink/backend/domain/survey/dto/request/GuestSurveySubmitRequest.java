@@ -58,9 +58,9 @@ public record GuestSurveySubmitRequest(
         return !endDate.isBefore(startDate);
     }
 
-    //여행 기간을 시작일 포함 최대 7일로 제한
+    //여행 기간을 시작일 포함 최대 5일로 제한
     @AssertTrue(
-            message = "여행 기간은 최대 7일까지 선택할 수 있습니다"
+            message = "여행 기간은 최대 5일까지 선택할 수 있습니다"
     )
     public boolean isTravelDurationValid() {
         if (startDate == null || endDate == null) {
@@ -77,6 +77,6 @@ public record GuestSurveySubmitRequest(
                         endDate
                 ) + 1;
 
-        return travelDays <= 7;
+        return travelDays <= 5;
     }
 }

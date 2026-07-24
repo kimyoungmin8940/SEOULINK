@@ -35,7 +35,7 @@ import java.time.LocalTime;
 @Transactional(readOnly = true)
 public class CourseDraftService {
 
-    private static final int MAX_TRAVEL_DAYS = 7;
+    private static final int MAX_TRAVEL_DAYS = 5;
 
     // 대표 장소 하나당 받을 대체 후보 수
     private static final int ALTERNATIVE_LIMIT = 3;
@@ -47,16 +47,13 @@ public class CourseDraftService {
 
     private final TravelSurveyRepository travelSurveyRepository;
     private final SurveyResultRepository surveyResultRepository;
-    private final PlaceRecommendationService placeRecommendationService;
 
     public CourseDraftService(
             TravelSurveyRepository travelSurveyRepository,
-            SurveyResultRepository surveyResultRepository,
-            PlaceRecommendationService placeRecommendationService
+            SurveyResultRepository surveyResultRepository
     ) {
         this.travelSurveyRepository = travelSurveyRepository;
         this.surveyResultRepository = surveyResultRepository;
-        this.placeRecommendationService = placeRecommendationService;
     }
 
     /**
@@ -68,103 +65,53 @@ public class CourseDraftService {
     public CourseDraftResponse createDraft(Long surveyId) {
         validateSurveyId(surveyId);
 
-        // 1. 여행 지역과 날짜가 저장된 설문 정보를 조회
         TravelSurvey survey = travelSurveyRepository.findById(surveyId)
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "해당 설문 정보를 찾을 수 없습니다. surveyId=" + surveyId
-                ));
+                .orElseThrow(() ->
+                        new IllegalArgumentException(
+                                "해당 설문 정보를 찾을 수 없습니다. surveyId=" + surveyId
+                        )
+                );
 
-        // 2. 설문을 통해 완성된 여행 유형 코드를 조회
-        SurveyResult surveyResult = surveyResultRepository.findBySurveyId(surveyId)
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "해당 설문의 결과를 찾을 수 없습니다. surveyId=" + surveyId
-                ));
+        SurveyResult surveyResult =
+                surveyResultRepository.findBySurveyId(surveyId)
+                        .orElseThrow(() ->
+                                new IllegalArgumentException(
+                                        "해당 설문 결과를 찾을 수 없습니다. surveyId=" + surveyId
+                                )
+                        );
 
         int travelDays = calculateTravelDays(
                 survey.getStartDate(),
                 survey.getEndDate()
         );
 
-        String travelCode = normalizeTravelCode(
-                surveyResult.getTravelCode()
-        );
+        String travelCode =
+                normalizeTravelCode(surveyResult.getTravelCode());
 
         char scheduleType = travelCode.charAt(4);
 
         LocalTime dailyStartTime =
                 determineDailyStartTime(scheduleType);
 
-        int targetPlaceCount =
+        int dailyTargetPlaceCount =
                 determineTargetPlaceCount(scheduleType);
 
-        int candidatePlaceCount =
-                determineCandidatePlaceCount(scheduleType);
-
-        Map<String, Integer> categoryTargets =
+        Map<String, Integer> dailyCategoryTargets =
                 determineCategoryTargets(scheduleType);
-
-        int limitPerCategory =
-                determineLimitPerCategory(
-                        scheduleType,
-                        travelDays
-                );
-
-        /*
-         * 3. 장소 추천 서비스를 직접 호출
-         *
-         * 같은 Spring Boot 서버 안에 있으므로
-         * /api/places/recommend 주소로 HTTP 요청을 보내지 않고
-         * PlaceRecommendationService를 직접 사용합니다.
-         */
-        PlaceRecommendationListResponse recommendation =
-                placeRecommendationService.recommend(
-                        travelCode,
-                        survey.getRegion(),
-                        null,
-                        limitPerCategory,
-                        ALTERNATIVE_LIMIT,
-                        survey.getCompanionType()
-                );
-
-        /*
-         * 후보를 카테고리별로 나누어 보관합니다.
-         * HOTEL은 일반 방문 후보에서는 제외하고 2일 이상 일정의 숙소 후보로 별도 전달합니다.
-         */
-        Map<String, Deque<PlaceRecommendationResponse>> candidatePools =
-                createCandidatePools(
-                        recommendation.getRecommendedPlaces()
-                );
-        List<PlaceRecommendationResponse> hotelCandidates =
-                travelDays >= 2
-                        ? List.copyOf(candidatePools.getOrDefault(
-                                HOTEL,
-                                new ArrayDeque<>()
-                        ))
-                        : List.of();
-
-        // 4. 추천 후보를 날짜별로 중복 없이 배분
-        List<DailyCourseDraftResponse> dailyPlans =
-                distributeCandidatesByDate(
-                        survey.getStartDate(),
-                        travelDays,
-                        targetPlaceCount,
-                        candidatePlaceCount,
-                        categoryTargets,
-                        candidatePools
-                );
 
         return new CourseDraftResponse(
                 survey.getSurveyId(),
                 surveyResult.getResultId(),
                 travelCode,
+                String.valueOf(scheduleType),
                 survey.getCompanionType(),
                 survey.getTransportType(),
                 survey.getStartDate(),
                 survey.getEndDate(),
                 travelDays,
                 dailyStartTime,
-                hotelCandidates,
-                dailyPlans
+                dailyTargetPlaceCount,
+                dailyCategoryTargets
         );
     }
 
@@ -194,7 +141,7 @@ public class CourseDraftService {
 
         if (travelDays > MAX_TRAVEL_DAYS) {
             throw new IllegalArgumentException(
-                    "여행 기간은 최대 7일까지 가능합니다"
+                    "여행 기간은 최대 5일까지 가능합니다"
             );
         }
 
@@ -288,18 +235,18 @@ public class CourseDraftService {
         Map<String, Integer> targets = new LinkedHashMap<>();
 
         if (scheduleType == 'P') {
-            targets.put(TOUR, 7);
-            targets.put(RESTAURANT, 4);
-            targets.put(CAFE, 4);
+            targets.put(TOUR, 3);
+            targets.put(RESTAURANT, 2);
+            targets.put(CAFE, 1);
             targets.put(HOTEL, 0);
 
             return targets;
         }
 
         if (scheduleType == 'R') {
-            targets.put(TOUR, 4);
-            targets.put(RESTAURANT, 3);
-            targets.put(CAFE, 3);
+            targets.put(TOUR, 2);
+            targets.put(RESTAURANT, 1);
+            targets.put(CAFE, 1);
             targets.put(HOTEL, 0);
 
             return targets;
