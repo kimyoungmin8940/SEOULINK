@@ -6,16 +6,22 @@ import com.seoulink.backend.domain.course.dto.request.CourseRecommendRequest;
 import com.seoulink.backend.domain.course.dto.request.CourseSaveRequest;
 import com.seoulink.backend.domain.course.dto.response.CourseBatchSaveResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseDetailResponse;
+import com.seoulink.backend.domain.course.dto.response.CourseDraftResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseErrorResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseOptimizeResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseRecommendResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseRecommendationResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseSaveResponse;
+import com.seoulink.backend.domain.course.service.CourseDraftService;
 import com.seoulink.backend.domain.course.service.CourseOptimizationService;
 import com.seoulink.backend.domain.course.service.CourseRecommendationService;
 import com.seoulink.backend.domain.course.service.CourseSaveService;
 import com.seoulink.backend.domain.course.service.CourseService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -30,28 +36,41 @@ import java.util.List;
 import java.util.NoSuchElementException;
 
 /**
- * 여행 코스 최적화·저장·조회 HTTP 요청을 처리한다.
+ * 추천 후보 초안 생성부터 코스 최적화·저장·조회까지의 HTTP 요청을 처리한다.
  */
 @RestController
 @RequestMapping("/api/courses")
 public class CourseController {
 
-    // 최적화만 실행하는 흐름, 최적화 후 저장하는 흐름, 저장·조회 흐름을 각각 분리한다.
+    private static final Logger log = LoggerFactory.getLogger(CourseController.class);
+
+    // 후보 초안, 최적화, 추천 코스 생성, 저장, 조회 책임을 각 서비스에 위임한다.
+    private final CourseDraftService courseDraftService;
     private final CourseOptimizationService courseOptimizationService;
     private final CourseRecommendationService courseRecommendationService;
     private final CourseSaveService courseSaveService;
     private final CourseService courseService;
 
     public CourseController(
+            CourseDraftService courseDraftService,
             CourseOptimizationService courseOptimizationService,
             CourseRecommendationService courseRecommendationService,
             CourseSaveService courseSaveService,
             CourseService courseService
     ) {
+        this.courseDraftService = courseDraftService;
         this.courseOptimizationService = courseOptimizationService;
         this.courseRecommendationService = courseRecommendationService;
         this.courseSaveService = courseSaveService;
         this.courseService = courseService;
+    }
+
+    /** 설문 번호를 기준으로 날짜별 추천 장소 후보 초안을 생성한다. */
+    @GetMapping("/draft")
+    public ResponseEntity<CourseDraftResponse> getCourseDraft(
+            @RequestParam Long surveyId
+    ) {
+        return ResponseEntity.ok(courseDraftService.createDraft(surveyId));
     }
 
     /**
@@ -65,6 +84,17 @@ public class CourseController {
             @RequestBody CourseOptimizeRequest request
     ) {
         return courseOptimizationService.optimize(request);
+    }
+
+    /**
+     * 추천 카드에 현재 표시되는 DAY의 고정된 방문 순서만 실제 경로로 보완한다.
+     * 대중교통에서는 인접한 장소 쌍만 ODsay로 조회한다.
+     */
+    @PostMapping("/route-details")
+    public CourseOptimizeResponse resolveRouteDetails(
+            @RequestBody CourseOptimizeRequest request
+    ) {
+        return courseOptimizationService.resolveFixedRouteDetails(request);
     }
 
     /** 날짜별 후보 풀에서 서로 다른 추천 코스 3개를 생성해 반환한다. */
@@ -99,8 +129,23 @@ public class CourseController {
 
     /** 저장된 코스 기본정보와 날짜별 장소 순서를 조회한다. */
     @GetMapping("/{courseId}")
-    public CourseDetailResponse getCourse(@PathVariable Long courseId) {
-        return courseService.getCourse(courseId);
+    public CourseDetailResponse getCourse(
+            @PathVariable Long courseId,
+            @RequestParam(required = false) Long memberId
+    ) {
+        // 로그인 통합 전에는 memberId가 전달된 경우에만 비공개 코스 소유권을 확인한다.
+        // JWT 인증이 합쳐지면 쿼리 파라미터 대신 인증 객체의 회원 ID를 넘기면 된다.
+        return memberId == null
+                ? courseService.getCourse(courseId)
+                : courseService.getMemberCourse(courseId, memberId);
+    }
+
+    /** 로그인 회원이 저장한 모든 코스를 최신순으로 조회한다. */
+    @GetMapping("/my")
+    public List<CourseRecommendationResponse> getMyCourses(
+            @RequestParam Long memberId
+    ) {
+        return courseService.getMemberCourses(memberId);
     }
 
     /** 로그인 연동 전에는 memberId를 임시 쿼리 파라미터로 받는다. */
@@ -123,6 +168,18 @@ public class CourseController {
         return new CourseErrorResponse("INVALID_REQUEST", exception.getMessage());
     }
 
+    /** enum에 없는 이동수단처럼 JSON 자체를 변환할 수 없는 요청도 400으로 반환한다. */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public CourseErrorResponse handleUnreadableRequest(
+            HttpMessageNotReadableException exception
+    ) {
+        return new CourseErrorResponse(
+                "INVALID_REQUEST",
+                "요청 JSON의 값 또는 형식이 올바르지 않습니다."
+        );
+    }
+
     /** 존재하지 않는 코스를 조회한 경우 404 응답으로 변환한다. */
     @ExceptionHandler(NoSuchElementException.class)
     @ResponseStatus(HttpStatus.NOT_FOUND)
@@ -138,6 +195,7 @@ public class CourseController {
     public CourseErrorResponse handleCourseProcessingFailure(
             IllegalStateException exception
     ) {
+        log.error("코스 처리 중 내부 오류가 발생했습니다.", exception);
         return new CourseErrorResponse(
                 "COURSE_PROCESSING_FAILED",
                 "코스 처리 중 오류가 발생했습니다."

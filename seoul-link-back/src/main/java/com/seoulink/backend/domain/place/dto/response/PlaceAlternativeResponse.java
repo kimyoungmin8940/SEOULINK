@@ -1,0 +1,48 @@
+package com.seoulink.backend.domain.place.dto.response;
+
+import com.seoulink.backend.domain.place.entity.Place;
+import lombok.Getter;
+
+@Getter
+public class PlaceAlternativeResponse {
+
+    private final Long placeId;
+    private final String placeName;
+    private final String category;
+    private final Double recommendationScore;
+    private final Double latitude;
+    private final Double longitude;
+    private final String address;
+    private final String roadAddress;
+    private final String region;
+    private final String imageUrl;
+    private final String themePalaceCultureYn;
+    private final String themeNatureHangangYn;
+    private final String themeDateYn;
+    private final String themeFoodTourYn;
+    private final String themeCafeTourYn;
+    private final String themeShoppingHotplaceYn;
+    private final String themeNightViewYn;
+    private final String themeHotelStayYn;
+
+    public PlaceAlternativeResponse(Place place, Double recommendationScore) {
+        this.placeId = place.getPlaceId();
+        this.placeName = place.getName();
+        this.category = place.getCategory();
+        this.recommendationScore = recommendationScore;
+        this.latitude = place.getLatitude();
+        this.longitude = place.getLongitude();
+        this.address = place.getAddress();
+        this.roadAddress = place.getRoadAddress();
+        this.region = place.getRegion();
+        this.imageUrl = place.getImageUrl();
+        this.themePalaceCultureYn = place.getThemePalaceCultureYn();
+        this.themeNatureHangangYn = place.getThemeNatureHangangYn();
+        this.themeDateYn = place.getThemeDateYn();
+        this.themeFoodTourYn = place.getThemeFoodTourYn();
+        this.themeCafeTourYn = place.getThemeCafeTourYn();
+        this.themeShoppingHotplaceYn = place.getThemeShoppingHotplaceYn();
+        this.themeNightViewYn = place.getThemeNightViewYn();
+        this.themeHotelStayYn = place.getThemeHotelStayYn();
+    }
+}

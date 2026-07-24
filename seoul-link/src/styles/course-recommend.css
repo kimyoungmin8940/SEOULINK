@@ -1,0 +1,2108 @@
+/*
+  course-recommend.css
+  - 취향 검사 이후 표시되는 맞춤 추천 결과 화면 전용 스타일
+  - 공통 Header/Footer는 수정하지 않고 결과 본문에만 적용합니다.
+*/
+
+.course-result-page {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 7% 9%, rgba(54, 183, 242, 0.11), transparent 24%),
+    radial-gradient(circle at 94% 35%, rgba(19, 120, 216, 0.08), transparent 27%),
+    #f5f9fd;
+}
+
+.course-result-shell {
+  /* 기존 공통 헤더 바와 같은 좌우 기준선을 사용합니다. */
+  width: min(85vw, 1440px);
+  flex: 1;
+  margin: 0 auto;
+  padding: 102px 0 92px;
+}
+
+/* 상단 맞춤 결과 요약 배너 */
+.course-result-hero {
+  min-height: 184px;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(216, 230, 242, 0.9);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 15px 40px rgba(31, 68, 101, 0.1);
+}
+
+.course-result-hero-copy {
+  width: 67%;
+  min-height: 184px;
+  position: relative;
+  z-index: 3;
+  padding: 28px 30px;
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+}
+
+.course-result-back-btn {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  margin-top: 2px;
+  border: 1px solid #dce8f2;
+  border-radius: 11px;
+  background: #ffffff;
+  color: #536b80;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 5px 13px rgba(32, 65, 95, 0.07);
+  transition: 0.18s ease;
+}
+
+.course-result-back-btn:hover {
+  transform: translateX(-2px);
+  border-color: #a9c8e5;
+  color: var(--primary-blue);
+}
+
+.course-result-eyebrow {
+  margin: 0 0 7px;
+  color: var(--primary-blue);
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: 0.05em;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.course-result-hero h1 {
+  margin: 0;
+  color: #18334a;
+  font-size: clamp(24px, 2vw, 31px);
+  font-weight: 850;
+  letter-spacing: -0.9px;
+}
+
+.course-result-hero h1 strong {
+  color: var(--primary-blue);
+}
+
+.course-result-hero-copy > div > p:not(.course-result-eyebrow) {
+  margin: 8px 0 0;
+  color: #708294;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.course-result-type-badges {
+  margin-top: 17px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.course-result-type-badges > span {
+  min-height: 29px;
+  padding: 4px 10px 4px 5px;
+  border: 1px solid #e2ebf3;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.88);
+  color: #52687c;
+  font-size: 12px;
+  font-weight: 750;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.course-result-type-badges b {
+  width: 21px;
+  height: 21px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.course-result-type-badges .blue b {
+  background: #e5f2ff;
+  color: #1677da;
+}
+
+.course-result-type-badges .purple b {
+  background: #f3e7ff;
+  color: #9350cd;
+}
+
+.course-result-type-badges .green b {
+  background: #e5f8e8;
+  color: #2b9a49;
+}
+
+.course-result-type-badges .orange b {
+  background: #fff0df;
+  color: #ef8c2f;
+}
+
+.course-result-type-badges .pink b {
+  background: #ffe7f0;
+  color: #e75088;
+}
+
+.course-result-hero-visual {
+  width: 43%;
+  position: absolute;
+  inset: 0 0 0 auto;
+  overflow: hidden;
+  border-radius: 0 24px 24px 0;
+  background: #d9edfb;
+}
+
+.course-result-hero-visual::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: linear-gradient(90deg, #ffffff 0%, rgba(255, 255, 255, 0.76) 18%, rgba(255, 255, 255, 0.08) 65%);
+}
+
+.course-result-hero-visual::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  z-index: 2;
+  height: 55%;
+  background: linear-gradient(0deg, rgba(10, 53, 82, 0.22), transparent);
+}
+
+.course-result-hero-visual img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 66% 50%;
+  display: block;
+}
+
+.course-result-hero-orbit {
+  position: absolute;
+  z-index: 3;
+  border: 1px solid rgba(255, 255, 255, 0.52);
+  border-radius: 50%;
+}
+
+.course-result-hero-orbit.orbit-one {
+  width: 120px;
+  height: 120px;
+  right: 83px;
+  bottom: -52px;
+}
+
+.course-result-hero-orbit.orbit-two {
+  width: 170px;
+  height: 170px;
+  right: 58px;
+  bottom: -77px;
+}
+
+.course-result-hero-pin {
+  width: 38px;
+  height: 38px;
+  position: absolute;
+  right: 124px;
+  bottom: 36px;
+  z-index: 4;
+  border: 4px solid rgba(255, 255, 255, 0.9);
+  border-radius: 50% 50% 50% 10%;
+  background: var(--primary-blue);
+  color: #ffffff;
+  transform: rotate(-45deg);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 10px 24px rgba(3, 72, 137, 0.3);
+}
+
+.course-result-hero-pin svg {
+  transform: rotate(45deg);
+}
+
+/* 추천/재추천 탭과 비교 버튼 */
+.course-result-toolbar {
+  min-height: 66px;
+  margin: 18px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.course-result-tabs {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.course-result-tabs a,
+.course-result-tabs button,
+.course-result-tabs .course-result-current-tab {
+  min-width: 210px;
+  height: 48px;
+  padding: 0 20px;
+  border: 1px solid #dce7f0;
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #61768a;
+  font-size: 14px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  box-shadow: 0 7px 18px rgba(31, 68, 101, 0.06);
+  transition: 0.18s ease;
+}
+
+.course-result-tabs a.active,
+.course-result-tabs .course-result-current-tab.active {
+  border-color: var(--primary-blue);
+  background: #ffffff;
+  color: var(--primary-blue);
+  box-shadow: 0 8px 21px rgba(19, 120, 216, 0.14), inset 0 0 0 1px rgba(19, 120, 216, 0.05);
+}
+
+.course-result-tabs .course-result-current-tab {
+  cursor: default;
+  user-select: none;
+}
+
+.course-result-tabs a:hover,
+.course-result-tabs button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: #9fc9ed;
+}
+
+.course-result-tabs button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.course-result-tabs button:disabled {
+  cursor: wait;
+  opacity: 0.68;
+}
+
+.course-result-tabs button .is-spinning {
+  animation: course-result-spin 0.85s linear infinite;
+}
+
+/* 재추천은 한 번만 실행하고 같은 자리에 이전·다음 결과 전환 버튼을 배치합니다. */
+.course-result-history-navigation {
+  min-width: 210px;
+  height: 48px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.course-result-tabs .course-result-history-navigation button {
+  min-width: 0;
+  height: 48px;
+  padding: 0 9px;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.course-result-tabs .course-result-history-navigation button.active {
+  border-color: #9fc9ed;
+  background: #f3f9ff;
+  color: var(--primary-blue);
+}
+
+.course-result-tabs .course-result-history-navigation button:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.course-result-toolbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.course-result-preview-label {
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: #edf5fc;
+  color: #71869a;
+  font-size: 11px;
+  font-weight: 750;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.course-result-toolbar-actions > a,
+.course-result-toolbar-actions > button {
+  height: 42px;
+  padding: 0 13px 0 15px;
+  border: 1px solid #dce7f0;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #546c81;
+  font-size: 13px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  box-shadow: 0 7px 18px rgba(31, 68, 101, 0.07);
+  cursor: pointer;
+  transition: 0.18s ease;
+}
+
+.course-result-toolbar-actions > a:hover,
+.course-result-toolbar-actions > button:hover {
+  border-color: #9fc9ed;
+  color: var(--primary-blue);
+  transform: translateY(-1px);
+}
+
+.course-result-home-button {
+  text-decoration: none;
+}
+
+.course-result-toolbar-actions > button b {
+  width: 23px;
+  height: 23px;
+  border-radius: 50%;
+  background: var(--sub-blue);
+  color: var(--primary-blue);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+}
+
+/* 외부 경로 API 대신 예상값으로 보완된 구간이 있을 때만 표시합니다. */
+.course-result-estimated-notice {
+  min-height: 62px;
+  margin: -4px 0 16px;
+  padding: 11px 14px;
+  border: 1px solid #f0d9a5;
+  border-radius: 14px;
+  background: #fffaf0;
+  color: #6f5b30;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.course-result-estimated-notice > span {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  border-radius: 50%;
+  background: #fff0ca;
+  color: #b47b11;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.course-result-estimated-notice div {
+  min-width: 0;
+}
+
+.course-result-estimated-notice strong {
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.course-result-estimated-notice p {
+  margin: 3px 0 0;
+  color: #8a7448;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+/* 추천 카드에서 고른 1~3개 코스를 단건/일괄 저장하는 선택 바 */
+.course-result-save-selection {
+  min-height: 76px;
+  margin: -4px 0 18px;
+  padding: 13px 15px;
+  border: 1px solid #d9e7f2;
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 8px 22px rgba(31, 68, 101, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.course-result-save-selection.has-selection {
+  border-color: #9fcdf0;
+  box-shadow: 0 10px 26px rgba(19, 120, 216, 0.11);
+}
+
+.course-result-save-selection-copy,
+.course-result-save-selection-actions {
+  display: flex;
+  align-items: center;
+}
+
+.course-result-save-selection-copy {
+  min-width: 0;
+  gap: 11px;
+}
+
+.course-result-save-selection-copy > span {
+  width: 39px;
+  height: 39px;
+  flex: 0 0 39px;
+  border-radius: 12px;
+  background: var(--sub-blue);
+  color: var(--primary-blue);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.course-result-save-selection-copy > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.course-result-save-selection-copy strong {
+  color: #29445a;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.course-result-save-selection-copy small {
+  color: #74889a;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.course-result-save-selection-actions {
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+.course-result-save-selection-actions > span {
+  margin-right: 3px;
+  color: #687d90;
+  font-size: 11px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.course-result-save-selection-actions > span b {
+  color: var(--primary-blue);
+  font-size: 14px;
+}
+
+.course-result-save-selection-actions button {
+  min-height: 38px;
+  padding: 0 13px;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 800;
+  transition: 0.18s ease;
+}
+
+.course-result-save-selection-actions button.secondary {
+  border: 1px solid #dbe7f0;
+  background: #ffffff;
+  color: #62788b;
+}
+
+.course-result-save-selection-actions button.primary {
+  min-width: 142px;
+  background: var(--primary-blue);
+  color: #ffffff;
+  box-shadow: 0 7px 16px rgba(19, 120, 216, 0.17);
+}
+
+.course-result-save-selection-actions button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.course-result-save-selection-actions button.primary:hover:not(:disabled) {
+  background: var(--primary-blue-dark);
+}
+
+.course-result-save-selection-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.course-result-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 310px;
+  align-items: start;
+  gap: 20px;
+}
+
+.course-result-list {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* 개별 추천 코스 카드 */
+.course-result-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #dce8f2;
+  border-radius: 19px;
+  background: #ffffff;
+  box-shadow: 0 10px 26px rgba(27, 61, 92, 0.075);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.course-result-card:hover,
+.course-result-card:focus-within {
+  transform: translateY(-2px);
+  border-color: #c3dcee;
+  box-shadow: 0 18px 40px rgba(27, 61, 92, 0.11);
+}
+
+.course-result-card.preference {
+  --course-option-color: #1378d8;
+  --course-option-soft: #eaf4ff;
+}
+
+.course-result-card.distance {
+  --course-option-color: #2fa667;
+  --course-option-soft: #e9f8f0;
+}
+
+.course-result-card.balanced {
+  --course-option-color: #8a5bc7;
+  --course-option-soft: #f3ebfc;
+}
+
+.course-result-card-main {
+  min-height: 164px;
+  padding: 14px 18px 12px 14px;
+  display: grid;
+  grid-template-columns: 270px minmax(0, 1fr);
+  gap: 19px;
+}
+
+.course-result-cover {
+  min-height: 144px;
+  position: relative;
+  overflow: hidden;
+  border-radius: 13px;
+  background: #dce9f2;
+}
+
+.course-result-cover img {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  inset: 0;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.35s ease;
+}
+
+.course-result-card:hover .course-result-cover img {
+  transform: scale(1.025);
+}
+
+.course-result-cover-gradient {
+  position: absolute;
+  inset: auto 0 0;
+  height: 46%;
+  background: linear-gradient(0deg, rgba(8, 34, 52, 0.48), transparent);
+}
+
+.course-result-rank-badge {
+  min-width: 49px;
+  height: 27px;
+  padding: 0 10px;
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 3;
+  border-radius: 13px 0 10px 0;
+  background: var(--course-option-color);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.course-result-option-label {
+  position: absolute;
+  left: 13px;
+  bottom: 11px;
+  z-index: 2;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 850;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.38);
+}
+
+.course-result-summary {
+  min-width: 0;
+  position: relative;
+  padding: 2px 0;
+}
+
+.course-result-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.course-result-option-name {
+  margin-bottom: 4px;
+  color: var(--course-option-color);
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0.02em;
+}
+
+.course-result-option-name-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.course-result-option-name-row .course-result-option-name {
+  margin-bottom: 0;
+}
+
+.course-result-estimated-badge {
+  min-height: 20px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #fff5dc;
+  color: #a96e08;
+  font-size: 9px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.course-result-title-row h2 {
+  margin: 3px 0 0;
+  color: #1b354c;
+  font-size: clamp(17px, 1.3vw, 21px);
+  font-weight: 850;
+  letter-spacing: -0.45px;
+  word-break: keep-all;
+}
+
+.course-result-bookmark-btn {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  padding: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #91a5b8;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: 0.18s ease;
+}
+
+.course-result-bookmark-btn:hover {
+  background: #f4f8fb;
+  color: var(--primary-blue);
+}
+
+.course-result-bookmark-btn.bookmarked {
+  color: var(--primary-blue);
+}
+
+.course-result-bookmark-btn.bookmarked svg {
+  fill: currentColor;
+}
+
+.course-result-description {
+  max-width: 700px;
+  margin: 7px 0 10px;
+  color: #768899;
+  font-size: 12px;
+  line-height: 1.55;
+  word-break: keep-all;
+}
+
+.course-result-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px 14px;
+  color: #61758a;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.course-result-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.course-result-meta svg {
+  color: #7f93a6;
+}
+
+.course-result-tags {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.course-result-tags span {
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: #f2f6f9;
+  color: #6e8192;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.course-result-score {
+  position: absolute;
+  right: 1px;
+  bottom: 4px;
+  color: #efaa1b;
+  font-size: 11px;
+  font-weight: 750;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.course-result-score strong {
+  color: #3f566a;
+  font-size: 13px;
+}
+
+.course-result-route-row {
+  min-height: 0;
+  padding: 13px 18px 14px;
+  border-top: 1px solid #e8eff5;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 150px;
+  align-items: stretch;
+  gap: 17px;
+}
+
+.course-result-route-content {
+  min-width: 0;
+  /* 한 줄일 때 버튼 높이에 맞춰 위로 붙지 않고 기존처럼 세로 중앙에 둔다. */
+  align-self: center;
+}
+
+.course-result-day-tabs {
+  margin-bottom: 8px;
+  display: flex;
+  gap: 6px;
+}
+
+.course-result-day-tabs button {
+  height: 24px;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: #eff4f8;
+  color: #7a8d9f;
+  font-size: 9px;
+  font-weight: 850;
+}
+
+.course-result-day-tabs button.active {
+  background: var(--course-option-soft);
+  color: var(--course-option-color);
+}
+
+.course-result-stops {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  row-gap: 12px;
+}
+
+.course-result-stop {
+  min-width: 0;
+  max-width: 25%;
+  flex: 0 0 25%;
+  display: flex;
+  align-items: center;
+}
+
+.course-result-stop-main {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.course-result-stop-visual {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  overflow: hidden;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.course-result-stop-visual img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.course-result-stop-visual.tour,
+.course-result-expanded-icon.tour {
+  background: #e5f2ff;
+  color: #287fd0;
+}
+
+.course-result-stop-visual.restaurant,
+.course-result-expanded-icon.restaurant {
+  background: #fff0df;
+  color: #ed8c34;
+}
+
+.course-result-stop-visual.cafe,
+.course-result-expanded-icon.cafe {
+  background: #f2e9fc;
+  color: #9259cb;
+}
+
+.course-result-stop-visual.hotel,
+.course-result-expanded-icon.hotel {
+  background: #e5f7e9;
+  color: #43a35e;
+}
+
+.course-result-stop-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.course-result-stop-copy strong {
+  overflow: hidden;
+  color: #314b61;
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.course-result-stop-copy small {
+  color: #8294a5;
+  font-size: 9px;
+  font-weight: 650;
+}
+
+.course-result-stop-arrow {
+  flex: 0 0 auto;
+  margin: 0 6px;
+  color: #4c9feb;
+}
+
+.course-result-card-actions {
+  align-self: end;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.course-result-card-actions button {
+  min-height: 35px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  transition: 0.18s ease;
+}
+
+.course-result-detail-btn,
+.course-result-compare-btn {
+  border: 1px solid #dbe7f0;
+  background: #ffffff;
+  color: #61768a;
+}
+
+.course-result-detail-btn {
+  grid-column: 1 / -1;
+}
+
+.course-result-compare-btn.selected {
+  border-color: #9bc8ed;
+  background: #eef7ff;
+  color: var(--primary-blue);
+}
+
+.course-result-compare-label,
+.course-result-save-label {
+  line-height: 1.15;
+  text-align: center;
+}
+
+.course-result-save-btn {
+  border: 1px solid #a9cfee;
+  background: #f4faff;
+  color: var(--primary-blue);
+}
+
+.course-result-save-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: var(--primary-blue);
+  background: #e9f5ff;
+}
+
+.course-result-save-btn:disabled {
+  cursor: default;
+  opacity: 0.72;
+}
+
+.course-result-save-btn.saved {
+  background: #2fa667;
+  border-color: #2fa667;
+  color: #ffffff;
+}
+
+.course-result-save-btn.selected {
+  border-color: var(--primary-blue);
+  background: var(--primary-blue);
+  color: #ffffff;
+  box-shadow: 0 7px 15px rgba(19, 120, 216, 0.18);
+}
+
+.course-result-save-btn.selected:hover:not(:disabled) {
+  background: var(--primary-blue-dark);
+}
+
+/* 카드 내 상세 일정 펼침 영역 */
+.course-result-expanded {
+  padding: 11px 18px 19px;
+  border-top: 1px solid #edf2f6;
+  background: #fbfdff;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 14px;
+}
+
+.course-result-expanded-day {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid #e1ebf3;
+  border-radius: 13px;
+  background: #ffffff;
+}
+
+.course-result-expanded-heading {
+  margin-bottom: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.course-result-expanded-heading span {
+  color: var(--course-option-color);
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.course-result-expanded-heading strong {
+  color: #788c9e;
+  font-size: 10px;
+}
+
+.course-route-detail-state {
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  font-size: 9px;
+  font-weight: 750;
+  line-height: 1.55;
+}
+
+.course-route-detail-state.loading {
+  border: 1px solid #cfe4f7;
+  background: #f0f8ff;
+  color: #3577af;
+}
+
+.course-route-detail-state.unavailable {
+  border: 1px solid #f2d595;
+  background: #fff9ea;
+  color: #8b651c;
+}
+
+.course-result-expanded-day ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  /* 이동 안내 행까지 한 묶음으로 계산해 장소와 장소 사이 간격을 동일하게 맞춥니다. */
+  gap: 0;
+}
+
+.course-result-expanded-day li {
+  min-height: 52px;
+  position: relative;
+  display: grid;
+  grid-template-columns: 19px 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+}
+
+/* 이동 정보는 이전 장소 아래가 아니라 다음 장소 위에 배치해 모든 장소 사이 간격을 맞춥니다. */
+.course-result-expanded-day li.has-transfer {
+  grid-template-rows: 30px minmax(52px, auto);
+  row-gap: 0;
+}
+
+/* 장소 사이 이동 구간을 왼쪽 순번 영역부터 가르는 옅은 구분선입니다. */
+.course-result-expanded-day li.has-transfer::before {
+  content: "";
+  position: absolute;
+  top: 15px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: #edf1f4;
+}
+
+.course-result-expanded-icon {
+  width: 28px;
+  height: 28px;
+  grid-column: 2;
+  border-radius: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.course-result-expanded-order {
+  width: 18px;
+  height: 18px;
+  grid-column: 1;
+  border-radius: 50%;
+  background: #eef4f8;
+  color: #6e8295;
+  font-size: 9px;
+  font-weight: 850;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.course-result-expanded-place {
+  min-width: 0;
+  grid-column: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.course-result-expanded-time {
+  grid-column: 4;
+}
+
+.course-result-expanded-day li.has-transfer > .course-result-expanded-icon,
+.course-result-expanded-day li.has-transfer > .course-result-expanded-order,
+.course-result-expanded-day li.has-transfer > .course-result-expanded-place,
+.course-result-expanded-day li.has-transfer > .course-result-expanded-time {
+  grid-row: 2;
+}
+
+.course-result-expanded-place strong {
+  overflow: hidden;
+  color: #304b62;
+  font-size: 12px;
+  font-weight: 850;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.course-result-expanded-place small {
+  color: #667d91;
+  font-size: 9.5px;
+  font-weight: 750;
+}
+
+/* 아이콘·거리·시간·이동수단 배지를 분리하지 않고 오른쪽의 한 정보 묶음으로 정렬합니다. */
+.course-result-expanded-time,
+.course-result-expanded-move {
+  color: #8899a8;
+  font-size: 9px;
+  font-weight: 650;
+}
+
+.course-result-expanded-move {
+  grid-column: 3 / -1;
+  grid-row: 1;
+  min-height: 30px;
+  width: auto;
+  position: relative;
+  z-index: 1;
+  justify-self: end;
+  padding-left: 10px;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  /* 이동 문구가 위아래 장소 사이의 중앙보다 아래로 처져 보이지 않게 미세 조정합니다. */
+  transform: translateY(-1px);
+}
+
+.course-result-expanded-move-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  color: #7b91a5;
+}
+
+.course-result-expanded-move-icon svg {
+  color: #7893ab;
+}
+
+.course-result-expanded-move-summary {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+
+.course-result-expanded-move-metrics {
+  color: #7b91a5;
+  font-weight: 700;
+}
+
+.course-result-expanded-move-badge {
+  flex: 0 0 auto;
+  min-width: 48px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: #4b96d7;
+  color: #ffffff;
+  font-size: 8px;
+  font-weight: 850;
+  line-height: 1;
+  text-align: center;
+  white-space: nowrap;
+  box-shadow: 0 3px 8px rgba(47, 126, 195, 0.16);
+}
+
+.course-route-estimated-badge {
+  flex: 0 0 auto;
+  padding: 3px 7px;
+  border: 1px solid #f0c36a;
+  border-radius: 999px;
+  background: #fff8e8;
+  color: #9a6513;
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 850;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* 오른쪽 사이드 카드 공통 */
+.course-result-sidebar {
+  min-width: 0;
+  position: sticky;
+  top: 98px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.course-result-map-card,
+.course-result-compare-card,
+.course-result-tip-card {
+  border: 1px solid #dce8f2;
+  border-radius: 17px;
+  background: #ffffff;
+  box-shadow: 0 10px 25px rgba(27, 61, 92, 0.07);
+}
+
+.course-result-map-card,
+.course-result-compare-card {
+  padding: 15px;
+}
+
+.course-result-side-heading {
+  min-height: 29px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 9px;
+}
+
+.course-result-side-heading > div {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.course-result-side-icon {
+  width: 27px;
+  height: 27px;
+  flex: 0 0 27px;
+  border-radius: 8px;
+  background: var(--sub-blue);
+  color: var(--primary-blue);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.course-result-side-heading h2 {
+  margin: 0;
+  color: #263f55;
+  font-size: 13px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.course-result-side-heading > span {
+  overflow: hidden;
+  color: #7d90a2;
+  font-size: 9px;
+  font-weight: 700;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.course-result-side-heading > button {
+  padding: 3px;
+  background: transparent;
+  color: var(--primary-blue);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.course-result-compare-reset-row {
+  margin: -4px 0 9px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.course-result-compare-reset-row span {
+  color: #8a9cab;
+  font-size: 8.5px;
+  font-weight: 700;
+}
+
+.course-result-compare-reset-row button {
+  padding: 3px;
+  background: transparent;
+  color: var(--primary-blue);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.course-result-map-canvas {
+  height: 190px;
+  min-height: 190px;
+  position: relative;
+  overflow: hidden;
+  border-radius: 12px;
+  background:
+    linear-gradient(32deg, transparent 48%, rgba(255, 255, 255, 0.8) 49%, rgba(255, 255, 255, 0.8) 51%, transparent 52%),
+    linear-gradient(145deg, transparent 46%, rgba(255, 255, 255, 0.75) 47%, rgba(255, 255, 255, 0.75) 50%, transparent 51%),
+    #eaf3e6;
+}
+
+.course-result-map-legend {
+  position: absolute;
+  right: 54px;
+  bottom: 9px;
+  left: 10px;
+  min-height: 27px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #657b8e;
+  font-size: 9px;
+  font-weight: 750;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  box-shadow: 0 5px 12px rgba(40, 76, 105, 0.08);
+}
+
+.course-result-map-legend svg {
+  color: var(--primary-blue);
+}
+
+/* 추천 동선 지도에서는 범례와 겹치지 않도록 확대·축소 버튼을 오른쪽 아래에 둡니다. */
+.course-result-map-canvas .kakao-course-map-zoom-control {
+  right: 10px;
+  bottom: 9px;
+}
+
+.course-result-compare-empty {
+  min-height: 95px;
+  border: 1px dashed #cfdde8;
+  border-radius: 11px;
+  color: #8da0b1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.course-result-compare-empty p {
+  margin: 6px 0 2px;
+  color: #61778a;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.course-result-compare-empty small {
+  font-size: 9px;
+}
+
+.course-result-compare-list {
+  max-height: 370px;
+  padding-right: 3px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.course-result-compare-item {
+  min-height: 56px;
+  padding: 9px 9px 8px;
+  border: 1px solid #e2ebf2;
+  border-radius: 10px;
+  background: #fbfdff;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 6px;
+}
+
+.course-result-compare-item > span {
+  min-width: 0;
+  overflow: hidden;
+  color: #536b80;
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.course-result-compare-item .course-result-compare-source {
+  color: #8ca0b2;
+  font-size: 8px;
+  font-weight: 750;
+  line-height: 1.2;
+  text-align: left;
+}
+
+.course-result-compare-item > button {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  justify-self: end;
+  border-radius: 50%;
+  background: #edf3f7;
+  color: #8294a4;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.course-result-compare-item strong {
+  margin-top: 3px;
+  color: var(--primary-blue);
+  font-size: 11px;
+}
+
+.course-result-compare-item > small {
+  margin-top: 3px;
+  color: #8798a7;
+  font-size: 8px;
+  text-align: right;
+}
+
+.course-result-compare-guide {
+  margin: 9px 1px 0;
+  color: #8294a5;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.course-result-tip-card {
+  min-height: 128px;
+  padding: 17px;
+  border-color: #d8eafa;
+  background: linear-gradient(145deg, rgba(237, 247, 255, 0.98), rgba(247, 251, 255, 0.98));
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.course-result-tip-icon {
+  width: 31px;
+  height: 31px;
+  flex: 0 0 31px;
+  color: var(--primary-blue);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.course-result-tip-icon svg {
+  width: 24px;
+  height: 24px;
+  stroke-width: 2.2;
+  filter: drop-shadow(0 2px 4px rgba(24, 118, 221, 0.16));
+}
+
+.course-result-tip-card h2 {
+  margin: 2px 0 7px;
+  color: var(--primary-blue);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.course-result-tip-card p {
+  margin: 0;
+  color: #647b8f;
+  font-size: 10px;
+  line-height: 1.65;
+  word-break: keep-all;
+}
+
+/* 로딩, 오류, 결과 없음 */
+.course-result-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.course-result-loading-card {
+  min-height: 260px;
+  padding: 15px;
+  border: 1px solid #e0eaf2;
+  border-radius: 18px;
+  background: #ffffff;
+  display: grid;
+  grid-template-columns: 270px 1fr;
+  gap: 20px;
+}
+
+.course-result-loading-image,
+.course-result-loading-lines i {
+  border-radius: 12px;
+  background: linear-gradient(90deg, #edf2f6 25%, #f8fafc 50%, #edf2f6 75%);
+  background-size: 200% 100%;
+  animation: course-result-shimmer 1.4s infinite linear;
+}
+
+.course-result-loading-image {
+  min-height: 150px;
+}
+
+.course-result-loading-lines {
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+}
+
+.course-result-loading-lines i {
+  width: 60%;
+  height: 16px;
+}
+
+.course-result-loading-lines i:first-child {
+  width: 82%;
+  height: 25px;
+}
+
+.course-result-loading-lines i:last-child {
+  width: 45%;
+}
+
+@keyframes course-result-shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes course-result-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.course-result-state-card {
+  min-height: 370px;
+  padding: 45px 28px;
+  border: 1px solid #dce8f2;
+  border-radius: 20px;
+  background: #ffffff;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 12px 30px rgba(27, 61, 92, 0.08);
+}
+
+.course-result-state-card > span {
+  width: 49px;
+  height: 49px;
+  border-radius: 15px;
+  background: var(--sub-blue);
+  color: var(--primary-blue);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.course-result-state-card > span.error {
+  background: #fff0f2;
+  color: #d84d62;
+}
+
+.course-result-state-card h2 {
+  margin: 16px 0 7px;
+  color: #243f56;
+  font-size: 21px;
+}
+
+.course-result-state-card p {
+  margin: 0;
+  color: #75899a;
+  font-size: 13px;
+}
+
+.course-result-state-card > div {
+  margin-top: 20px;
+  display: flex;
+  gap: 8px;
+}
+
+.course-result-state-card button,
+.course-result-state-card a {
+  min-height: 41px;
+  padding: 0 16px;
+  border-radius: 10px;
+  background: var(--primary-blue);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.course-result-state-card button.secondary {
+  border: 1px solid #dbe6ef;
+  background: #ffffff;
+  color: #62788b;
+}
+
+/* 저장 및 안내 토스트 */
+.course-result-toast {
+  max-width: min(520px, calc(100% - 36px));
+  min-height: 54px;
+  padding: 10px 11px 10px 13px;
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 140;
+  border: 1px solid #d9e6ef;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.97);
+  color: #536b80;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  box-shadow: 0 17px 42px rgba(24, 52, 77, 0.18);
+  backdrop-filter: blur(16px);
+}
+
+.course-result-toast > span {
+  width: 29px;
+  height: 29px;
+  flex: 0 0 29px;
+  border-radius: 9px;
+  background: #eaf4ff;
+  color: var(--primary-blue);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.course-result-toast.success > span {
+  background: #e7f7ed;
+  color: #2e9b59;
+}
+
+.course-result-toast.error > span {
+  background: #fff0f2;
+  color: #d94d62;
+}
+
+.course-result-toast p {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.course-result-toast > a {
+  flex: 0 0 auto;
+  color: var(--primary-blue);
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.course-result-toast > button {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  padding: 0;
+  border-radius: 8px;
+  background: #f1f5f8;
+  color: #7c8f9f;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (max-width: 1220px) {
+  .course-result-layout {
+    grid-template-columns: minmax(0, 1fr) 278px;
+  }
+
+  .course-result-card-main {
+    grid-template-columns: 225px minmax(0, 1fr);
+  }
+
+  .course-result-route-row {
+    grid-template-columns: minmax(0, 1fr) 135px;
+  }
+
+
+  .course-result-stop {
+    max-width: 33.333%;
+    flex-basis: 33.333%;
+  }
+}
+
+@media (max-width: 980px) {
+  .course-result-hero-copy {
+    width: 78%;
+  }
+
+  .course-result-hero-visual {
+    width: 38%;
+  }
+
+  .course-result-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .course-result-stop {
+    max-width: 25%;
+    flex-basis: 25%;
+  }
+
+  .course-result-sidebar {
+    position: static;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .course-result-tip-card {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 760px) {
+  .course-result-shell {
+    padding-top: 92px;
+  }
+
+  .course-result-hero {
+    min-height: 292px;
+  }
+
+  .course-result-hero-copy {
+    width: 100%;
+    min-height: 292px;
+    padding: 22px 19px 112px;
+    gap: 12px;
+  }
+
+  .course-result-hero h1 {
+    font-size: 22px;
+  }
+
+  .course-result-hero-visual {
+    width: 100%;
+    height: 105px;
+    inset: auto 0 0;
+    border-radius: 0 0 24px 24px;
+  }
+
+  .course-result-hero-visual::before {
+    background: linear-gradient(180deg, #ffffff, rgba(255, 255, 255, 0.04) 65%);
+  }
+
+  .course-result-hero-pin,
+  .course-result-hero-orbit {
+    display: none;
+  }
+
+  .course-result-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .course-result-tabs {
+    width: 100%;
+  }
+
+  .course-result-tabs a,
+  .course-result-tabs button,
+  .course-result-tabs .course-result-current-tab {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .course-result-history-navigation {
+    min-width: 0;
+    flex: 1.35;
+  }
+
+  .course-result-toolbar-actions {
+    justify-content: flex-end;
+  }
+
+  .course-result-save-selection {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .course-result-save-selection-actions {
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+
+  .course-result-card-main {
+    grid-template-columns: 1fr;
+  }
+
+  .course-result-cover {
+    min-height: 190px;
+  }
+
+  .course-result-summary {
+    padding-bottom: 32px;
+  }
+
+  .course-result-route-row {
+    grid-template-columns: 1fr;
+  }
+
+  .course-result-stop {
+    max-width: 33.333%;
+    flex-basis: 33.333%;
+  }
+
+  .course-result-card-actions {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .course-result-detail-btn {
+    grid-column: auto;
+  }
+
+  .course-result-sidebar {
+    grid-template-columns: 1fr;
+  }
+
+  .course-result-tip-card {
+    grid-column: auto;
+  }
+
+  .course-result-toast {
+    right: 18px;
+    bottom: 18px;
+    left: 18px;
+    max-width: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .course-result-type-badges > span {
+    font-size: 10px;
+  }
+
+  .course-result-preview-label {
+    display: none;
+  }
+
+  .course-result-save-selection-actions > span {
+    width: 100%;
+    margin: 0 0 2px;
+  }
+
+  .course-result-save-selection-actions button {
+    flex: 1;
+  }
+
+  .course-result-card-actions {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .course-result-detail-btn {
+    grid-column: 1 / -1;
+  }
+
+  .course-result-stop {
+    max-width: 50%;
+    flex-basis: 50%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .course-result-card,
+  .course-result-cover img,
+  .course-result-tabs a,
+  .course-result-tabs button,
+  .course-result-back-btn,
+  .course-result-card-actions button {
+    transition: none;
+  }
+
+  .course-result-loading-image,
+  .course-result-loading-lines i,
+  .course-result-tabs button .is-spinning {
+    animation: none;
+  }
+}
+
+/* 추천 준비가 길어질 때 사용하는 공통 전체 화면 로딩 안내 */
+.recommendation-loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.recommendation-loading-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(225, 240, 251, 0.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.recommendation-loading-panel {
+  position: relative;
+  width: min(430px, 100%);
+  min-height: 320px;
+  padding: 42px 34px 34px;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 24px 70px rgba(47, 99, 139, 0.2);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.recommendation-loading-spinner {
+  position: relative;
+  width: 78px;
+  height: 78px;
+  margin-bottom: 19px;
+  color: #1986e8;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.recommendation-loading-spinner > svg {
+  animation: recommendation-loading-spin 1.05s linear infinite;
+}
+
+.recommendation-loading-spinner > span {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 42px;
+  height: 42px;
+  border-radius: 15px;
+  background: linear-gradient(145deg, #e6f4ff, #f7fbff);
+  color: #147bd2;
+  box-shadow: 0 7px 20px rgba(24, 134, 232, 0.17);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.recommendation-loading-kicker {
+  margin: 0 0 8px;
+  color: #1682df;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+}
+
+.recommendation-loading-panel h2 {
+  margin: 0;
+  color: #18364f;
+  font-size: 24px;
+  font-weight: 900;
+  line-height: 1.35;
+  word-break: keep-all;
+}
+
+.recommendation-loading-panel > p:not(.recommendation-loading-kicker) {
+  min-height: 48px;
+  margin: 13px 0 15px;
+  color: #71879a;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.7;
+  word-break: keep-all;
+}
+
+.recommendation-loading-dots {
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.recommendation-loading-dots i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #2b91e8;
+  animation: recommendation-loading-bounce 1.2s ease-in-out infinite;
+}
+
+.recommendation-loading-dots i:nth-child(2) {
+  animation-delay: 0.14s;
+}
+
+.recommendation-loading-dots i:nth-child(3) {
+  animation-delay: 0.28s;
+}
+
+.recommendation-loading-panel small {
+  margin-top: 13px;
+  color: #9aaaba;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+@keyframes recommendation-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes recommendation-loading-bounce {
+  0%,
+  80%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0) scale(0.82);
+  }
+
+  40% {
+    opacity: 1;
+    transform: translateY(-5px) scale(1);
+  }
+}
+
+@media (max-width: 560px) {
+  .recommendation-loading-overlay {
+    padding: 18px;
+  }
+
+  .recommendation-loading-panel {
+    min-height: 290px;
+    padding: 36px 24px 29px;
+    border-radius: 23px;
+  }
+
+  .recommendation-loading-panel h2 {
+    font-size: 21px;
+  }
+
+  .recommendation-loading-panel > p:not(.recommendation-loading-kicker) {
+    font-size: 13px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .recommendation-loading-spinner > svg,
+  .recommendation-loading-dots i {
+    animation-duration: 2.2s;
+  }
+}

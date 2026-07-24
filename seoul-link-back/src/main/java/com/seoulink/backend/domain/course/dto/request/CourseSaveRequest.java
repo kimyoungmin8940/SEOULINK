@@ -1,5 +1,6 @@
 package com.seoulink.backend.domain.course.dto.request;
 
+import com.seoulink.backend.domain.course.model.TransportMode;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -31,6 +32,10 @@ public class CourseSaveRequest {
     private String title;
     private String description;
     private String travelCode;
+
+    // 추천 계산·검증에 사용하며, SURVEY 코스 조회 시에는 resultId로 연결된
+    // TRAVEL_SURVEY.TRANSPORT_TYPE 값을 다시 읽어 같은 이동수단을 복원한다.
+    private TransportMode transportMode;
 
     // CUSTOM(직접 생성), SURVEY(취향 추천), CHATBOT(AI 생성) 중 하나이다.
     @Builder.Default

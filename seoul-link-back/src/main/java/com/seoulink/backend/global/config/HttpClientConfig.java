@@ -17,7 +17,10 @@ public class HttpClientConfig {
 
     // 외부 API 지연이 전체 추천 요청을 오래 붙잡지 않도록 연결·응답 제한시간을 분리한다.
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(3);
-    private static final Duration READ_TIMEOUT = Duration.ofSeconds(8);
+    private static final Duration OPENROUTE_READ_TIMEOUT =
+            Duration.ofSeconds(8);
+    private static final Duration ODSAY_READ_TIMEOUT =
+            Duration.ofSeconds(5);
 
     /**
      * OpenRouteService 전용 RestClient를 생성한다.
@@ -32,13 +35,34 @@ public class HttpClientConfig {
     public RestClient openRouteServiceRestClient(
             @Value("${external.openroute.base-url}") String baseUrl
     ) {
+        return createRestClient(baseUrl, OPENROUTE_READ_TIMEOUT);
+    }
+
+    /**
+     * ODsay 대중교통 길찾기 전용 RestClient를 생성한다.
+     *
+     * <p>Server API Key는 {@code OdsayClient}가 환경변수에서 읽어 요청 쿼리에만
+     * 추가하며, 이 공통 설정이나 로그에는 저장하지 않는다.</p>
+     */
+    @Bean("odsayRestClient")
+    public RestClient odsayRestClient(
+            @Value("${external.odsay.base-url}") String baseUrl
+    ) {
+        return createRestClient(baseUrl, ODSAY_READ_TIMEOUT);
+    }
+
+    /** 외부 서비스별 기본 주소와 응답 제한시간을 적용한다. */
+    private RestClient createRestClient(
+            String baseUrl,
+            Duration readTimeout
+    ) {
         HttpClient httpClient = HttpClient.newBuilder()
                 .connectTimeout(CONNECT_TIMEOUT)
                 .build();
 
         JdkClientHttpRequestFactory requestFactory =
                 new JdkClientHttpRequestFactory(httpClient);
-        requestFactory.setReadTimeout(READ_TIMEOUT);
+        requestFactory.setReadTimeout(readTimeout);
 
         return RestClient.builder()
                 .baseUrl(baseUrl)

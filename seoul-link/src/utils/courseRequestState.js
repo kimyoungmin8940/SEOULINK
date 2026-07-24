@@ -27,6 +27,12 @@ export function isCourseDataEmpty(data) {
             Array.isArray(day.places) && day.places.length > 0
         ));
     }
+    if (Array.isArray(data.courseOptions)) {
+        return !data.courseOptions.some((option) => (
+            Array.isArray(option.days)
+            && option.days.some((day) => Array.isArray(day.places) && day.places.length > 0)
+        ));
+    }
     if (Array.isArray(data.optimizedPlaces)) {
         return data.optimizedPlaces.length === 0;
     }
@@ -34,6 +40,7 @@ export function isCourseDataEmpty(data) {
 }
 
 export function createResolvedState(data, isEmpty = isCourseDataEmpty) {
+    // HTTP 성공과 실제 표시할 데이터 존재 여부를 분리해 빈 결과 전용 UI를 보여줍니다.
     return {
         status: isEmpty(data)
             ? COURSE_REQUEST_STATUS.EMPTY

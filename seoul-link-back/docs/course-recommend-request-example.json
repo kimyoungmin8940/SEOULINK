@@ -1,11 +1,34 @@
 {
+  "surveyId": 1,
   "resultId": 101,
   "travelCode": "ATLSR",
+  "companionType": "COUPLE",
+  "transportMode": "PUBLIC_TRANSIT",
+  "startDate": "2026-07-20",
+  "endDate": "2026-07-21",
+  "travelDays": 2,
   "dailyStartTime": "10:00",
-
-  "weatherStatus": "RAIN",
-  "temperature": 27.5,
-  "rainProbability": 80,
+  "excludedRecommendationKeys": [],
+  "previouslyRecommendedPlaceIds": [],
+  "hotelCandidates": [
+    {
+      "placeId": 100,
+      "placeName": "서울 공통 숙소",
+      "category": "HOTEL",
+      "recommendationScore": 93.0,
+      "latitude": 37.5512,
+      "longitude": 127.0215,
+      "themePalaceCultureYn": "N",
+      "themeNatureHangangYn": "N",
+      "themeDateYn": "Y",
+      "themeFoodTourYn": "N",
+      "themeCafeTourYn": "N",
+      "themeShoppingHotplaceYn": "N",
+      "themeNightViewYn": "N",
+      "themeHotelStayYn": "Y",
+      "alternativeCandidates": []
+    }
+  ],
 
   "dailyPlans": [
     {

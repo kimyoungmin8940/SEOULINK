@@ -1,7 +1,11 @@
+// 백엔드 API를 호출할 때 공통으로 사용하는 fetch 기반 클라이언트입니다.
+// VITE_API_BASE_URL은 기존 프로젝트 규칙대로 `/api`까지 포함합니다.
+
 export const API_BASE_URL = (
-    import.meta.env?.VITE_API_BASE_URL || "http://localhost:8080/api"
+    import.meta.env?.VITE_API_BASE_URL || "/api"
 ).replace(/\/+$/, "");
 
+/** 화면에서 HTTP 상태와 백엔드 오류 코드를 함께 구분할 수 있는 공통 오류입니다. */
 export class ApiError extends Error {
     constructor(status, code, message, details = null) {
         super(message);
@@ -18,6 +22,7 @@ async function parseResponseBody(response) {
     }
 
     const text = await response.text();
+
     if (!text) {
         return null;
     }
@@ -33,17 +38,24 @@ async function request(path, options = {}) {
     const accessToken = typeof localStorage === "undefined"
         ? null
         : localStorage.getItem("accessToken");
-const { headers: optionHeaders, ...fetchOptions } = options;
-    const isFormData =
-        typeof FormData !== 'undefined' && fetchOptions.body instanceof FormData;
+
+    const { headers: optionHeaders, ...fetchOptions } = options;
+
+    const isFormData = typeof FormData !== "undefined"
+        && fetchOptions.body instanceof FormData;
 
     let response;
+
     try {
         response = await fetch(`${API_BASE_URL}${path}`, {
             ...fetchOptions,
             headers: {
-                ...(isFormData ? {} : { "Content-Type": "application/json" }),
-                ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+                ...(isFormData
+                    ? {}
+                    : { "Content-Type": "application/json" }),
+                ...(accessToken
+                    ? { Authorization: `Bearer ${accessToken}` }
+                    : {}),
                 ...optionHeaders,
             },
         });
@@ -61,6 +73,7 @@ const { headers: optionHeaders, ...fetchOptions } = options;
     }
 
     const body = await parseResponseBody(response);
+
     if (!response.ok) {
         const hasStructuredError = body
             && typeof body === "object"
@@ -85,25 +98,26 @@ export const apiClient = {
         ...options,
         method: "GET",
     }),
+
     post: (path, body, options = {}) => request(path, {
         ...options,
         method: "POST",
         body: JSON.stringify(body),
     }),
+
+    // 사진 파일처럼 FormData를 보내는 요청에 사용합니다.
     postForm: (path, formData, options = {}) => request(path, {
         ...options,
         method: "POST",
         body: formData,
-    }),    put: (path, body, options = {}) => request(path, {
-        ...options,
-        method: "PUT",
-        body: JSON.stringify(body),
     }),
+
     patch: (path, body, options = {}) => request(path, {
         ...options,
         method: "PATCH",
         body: JSON.stringify(body),
     }),
+
     delete: (path, options = {}) => request(path, {
         ...options,
         method: "DELETE",

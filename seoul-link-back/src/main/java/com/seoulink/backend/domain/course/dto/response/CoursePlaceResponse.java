@@ -1,5 +1,6 @@
 package com.seoulink.backend.domain.course.dto.response;
 
+import com.seoulink.backend.domain.course.model.TransitPathType;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -18,7 +19,7 @@ public class CoursePlaceResponse {
     private Long detailId;
     private Long placeId;
 
-    /* PLACES 도메인 통합 후 placeId로 조회해 채울 화면 표시 정보이다. */
+    // COURSE_DETAILS에는 중복 저장하지 않고, 상세 조회 시 placeId로 PLACES를 일괄 조회해 채운다.
     private String placeName;
     private String category;
     private String address;
@@ -28,7 +29,7 @@ public class CoursePlaceResponse {
     private Double longitude;
     private Double recommendationScore;
 
-    // 추천 후보에서 전달된 8개 테마 여부이다.
+    // PLACES에 저장된 장소별 8개 테마 여부이다.
     private String themePalaceCultureYn;
     private String themeNatureHangangYn;
     private String themeDateYn;
@@ -44,7 +45,9 @@ public class CoursePlaceResponse {
     private String visitTime;
     private Integer expectedVisitMinutes;
 
-    // 같은 날짜의 첫 장소는 이전 장소가 없으므로 두 값이 0이다.
+    // 같은 날짜의 첫 장소는 이전 장소가 없으므로 거리·시간은 0이고 경로 종류는 null이다.
     private Double distanceFromPreviousKm;
     private Double travelTimeFromPreviousMinutes;
+    private TransitPathType transitPathType;
+    private Boolean routeEstimated;
 }

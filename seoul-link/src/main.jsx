@@ -17,3 +17,8 @@ createRoot(document.getElementById('root')).render(
         <App />
     </StrictMode>,
 );
+
+console.log(
+    "카카오 지도 키 로드:",
+    Boolean(import.meta.env.VITE_KAKAO_MAP_KEY)
+);

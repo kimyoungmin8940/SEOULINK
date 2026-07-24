@@ -64,7 +64,6 @@ public class ReviewService {
         review.setCompanion(request.getCompanion());
         Review saved = reviews.save(review);
         replaceImagesAndTags(saved.getReviewId(), request.getImageUrls(), request.getTags());
-        refreshPlaceStats(saved.getPlaceId());
         return toResponse(saved, request.getMemberId());
     }
     @Transactional
@@ -74,7 +73,6 @@ public class ReviewService {
         requireOwner(review, request.getMemberId());
         review.update(request.getReviewTitle(), request.getReviewContent(), request.getRating(), firstImage(request.getImageUrls()), request.getVisitDate(), request.getCompanion());
         replaceImagesAndTags(reviewId, request.getImageUrls(), request.getTags());
-        refreshPlaceStats(review.getPlaceId());
         return toResponse(review, request.getMemberId());
     }
     // 좋아요 순과 일반 정렬을 구분해 목록을 조회하고, 화면용 응답으로 변환한다.
@@ -131,7 +129,6 @@ public class ReviewService {
         Review review=activeReview(reviewId);
         requireOwner(review,memberId);
         review.deleteReview();
-        refreshPlaceStats(review.getPlaceId());
     }
     // 태그 집계 결과에서 화면에 노출할 상위 8개 태그만 선택한다.
     public List<String> popularTags() {
@@ -191,9 +188,6 @@ public class ReviewService {
     }
     private void requireOwner(Review review, Long memberId) {
         if (!Objects.equals(review.getMemberId(), memberId)) throw new IllegalArgumentException("Only the author can change this review.");
-    }
-    private void refreshPlaceStats(Long id) {
-        places.findById(id).ifPresent(p -> p.updateReviewStats(reviews.averageRatingByPlaceId(id), reviews.countByPlaceIdAndIsDeleted(id,"N")));
     }
     private Sort toSort(String sort) {
         if("views".equals(sort)) return Sort.by(Sort.Direction.DESC,"viewCount");

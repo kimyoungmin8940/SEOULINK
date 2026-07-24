@@ -1,6 +1,24 @@
 package com.seoulink.backend.domain.place.entity;
 
-import jakarta.persistence.*;
+/**
+ * ERD의 {@code PLACES} 테이블과 매핑될 장소 엔티티이다.
+ *
+ * <p>장소명, 카테고리, 주소, 위도·경도, 이미지, 평점,
+ * 운영 정보, 검색용 태그 등 코스 구성에 필요한 장소 정보를 관리한다.</p>
+ *
+ * <p>컬럼 수가 많으므로 ERD의 컬럼명·자료형·NULL 허용 여부를 기준으로 정확히 매핑한다.</p>
+ */
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Lob;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
+import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -40,7 +58,7 @@ public class Place {
     private String name;
 
     @Column(name = "CATEGORY", nullable = false, length = 50)
-    private String category; // TOUR, RESTAURANT, CAFE, HOTEL
+    private String category;
 
     @Column(name = "API_CATEGORY", length = 200)
     private String apiCategory;
@@ -103,6 +121,30 @@ public class Place {
     @Column(name = "TAG_PACKED", nullable = false, length = 1)
     private String tagPacked = "N";
 
+    @Column(name = "THEME_PALACE_CULTURE_YN", nullable = false, length = 1)
+    private String themePalaceCultureYn = "N";
+
+    @Column(name = "THEME_NATURE_HANGANG_YN", nullable = false, length = 1)
+    private String themeNatureHangangYn = "N";
+
+    @Column(name = "THEME_DATE_YN", nullable = false, length = 1)
+    private String themeDateYn = "N";
+
+    @Column(name = "THEME_FOOD_TOUR_YN", nullable = false, length = 1)
+    private String themeFoodTourYn = "N";
+
+    @Column(name = "THEME_CAFE_TOUR_YN", nullable = false, length = 1)
+    private String themeCafeTourYn = "N";
+
+    @Column(name = "THEME_SHOPPING_HOTPLACE_YN", nullable = false, length = 1)
+    private String themeShoppingHotplaceYn = "N";
+
+    @Column(name = "THEME_NIGHT_VIEW_YN", nullable = false, length = 1)
+    private String themeNightViewYn = "N";
+
+    @Column(name = "THEME_HOTEL_STAY_YN", nullable = false, length = 1)
+    private String themeHotelStayYn = "N";
+
     @Column(name = "IS_ACTIVE", nullable = false, length = 1)
     private String isActive = "Y";
 
@@ -111,6 +153,9 @@ public class Place {
 
     @Column(name = "UPDATED_AT", nullable = false)
     private LocalDateTime updatedAt = LocalDateTime.now();
+
+    @Column(name = "AVG_STAY_MINUTES")
+    private Integer avgStayMinutes = 60;
 
     @PrePersist
     public void prePersist() {
@@ -124,18 +169,22 @@ public class Place {
         if (tagDopamine == null) tagDopamine = "N";
         if (tagRelax == null) tagRelax = "N";
         if (tagPacked == null) tagPacked = "N";
+        if (themePalaceCultureYn == null) themePalaceCultureYn = "N";
+        if (themeNatureHangangYn == null) themeNatureHangangYn = "N";
+        if (themeDateYn == null) themeDateYn = "N";
+        if (themeFoodTourYn == null) themeFoodTourYn = "N";
+        if (themeCafeTourYn == null) themeCafeTourYn = "N";
+        if (themeShoppingHotplaceYn == null) themeShoppingHotplaceYn = "N";
+        if (themeNightViewYn == null) themeNightViewYn = "N";
+        if (themeHotelStayYn == null) themeHotelStayYn = "N";
         if (isActive == null) isActive = "Y";
         if (createdAt == null) createdAt = LocalDateTime.now();
         if (updatedAt == null) updatedAt = LocalDateTime.now();
+        if (avgStayMinutes == null) avgStayMinutes = 60;
     }
 
     @PreUpdate
     public void preUpdate() {
         updatedAt = LocalDateTime.now();
-    }
-
-    public void updateReviewStats(Double rating, Integer reviewCount) {
-        this.rating = rating == null ? 0.0 : rating;
-        this.reviewCount = reviewCount == null ? 0 : reviewCount;
     }
 }

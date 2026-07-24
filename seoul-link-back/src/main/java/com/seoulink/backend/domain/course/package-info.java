@@ -9,7 +9,10 @@
  *       -> DistanceService / VisitDurationService}</li>
  *   <li>취향 추천 코스 생성:
  *       {@code CourseController -> CourseRecommendationService
- *       -> CourseOptimizationService -> CourseSaveService}</li>
+ *       -> CourseOptimizationService}</li>
+ *   <li>선택한 추천 코스 저장:
+ *       {@code CourseController -> CourseSaveService
+ *       -> TravelCourseRepository / CourseDetailRepository}</li>
  *   <li>저장 코스 조회:
  *       {@code CourseController / MemberCourseController -> CourseService
  *       -> TravelCourseRepository / CourseDetailRepository}</li>
@@ -19,7 +22,8 @@
  * {@code dto.response}는 최적화·저장·조회 결과, {@code entity}는 Oracle 테이블 매핑,
  * {@code repository}는 저장·정렬 조회를 담당한다.</p>
  *
- * <p>현재 요청의 {@code memberId}와 일부 화면용 장소 정보는 회원·PLACES 도메인 통합 전
- * 임시 연결 방식이다. 관련 클래스 주석에 통합 후 변경 지점을 함께 표시했다.</p>
+ * <p>현재 요청의 {@code memberId}는 회원 도메인 통합 전 임시 연결 방식이다. 장소 이름,
+ * 주소, 이미지 등 화면 표시 정보는 추천 입력에서 결과까지 보존하며, PLACES 도메인 통합
+ * 후에는 {@code placeId} 조회값으로 대체한다.</p>
  */
 package com.seoulink.backend.domain.course;

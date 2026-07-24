@@ -8,6 +8,8 @@ import com.seoulink.backend.domain.course.dto.response.CoursePlaceResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseRecommendResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseRecommendationResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseSaveResponse;
+import com.seoulink.backend.domain.course.model.TransportMode;
+import com.seoulink.backend.domain.course.service.CourseDraftService;
 import com.seoulink.backend.domain.course.service.CourseOptimizationService;
 import com.seoulink.backend.domain.course.service.CourseRecommendationService;
 import com.seoulink.backend.domain.course.service.CourseSaveService;
@@ -57,6 +59,7 @@ class CourseControllerTest {
         courseService = mock(CourseService.class);
 
         mockMvc = standaloneSetup(new CourseController(
+                        mock(CourseDraftService.class),
                         optimizationService,
                         courseRecommendationService,
                         courseSaveService,
@@ -72,6 +75,7 @@ class CourseControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
+                                  "transportMode": "WALKING",
                                   "placeCandidates": [
                                     {
                                       "placeId": 3,
@@ -104,6 +108,8 @@ class CourseControllerTest {
                                 }
                                 """))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.transportMode").value("WALKING"))
+                .andExpect(jsonPath("$.estimatedTravelTimes").value(true))
                 .andExpect(jsonPath("$.optimizedPlaces.length()").value(3))
                 .andExpect(jsonPath("$.optimizedPlaces[0].placeId").value(1))
                 .andExpect(jsonPath("$.optimizedPlaces[0].visitOrder").value(1))
@@ -121,6 +127,58 @@ class CourseControllerTest {
     }
 
     @Test
+    @DisplayName("경로 상세 API는 전달된 장소 순서를 바꾸지 않는다")
+    void resolveFixedRouteDetails() throws Exception {
+        mockMvc.perform(post("/api/courses/route-details")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "transportMode": "PUBLIC_TRANSIT",
+                                  "placeCandidates": [
+                                    {
+                                      "placeId": 3,
+                                      "placeName": "경복궁",
+                                      "category": "관광지",
+                                      "recommendationScore": 80.0,
+                                      "latitude": 37.5796,
+                                      "longitude": 126.9770,
+                                      "visitDate": "2026-07-20"
+                                    },
+                                    {
+                                      "placeId": 1,
+                                      "placeName": "서울시청",
+                                      "category": "관광지",
+                                      "recommendationScore": 100.0,
+                                      "latitude": 37.5665,
+                                      "longitude": 126.9780,
+                                      "visitDate": "2026-07-20"
+                                    },
+                                    {
+                                      "placeId": 2,
+                                      "placeName": "덕수궁",
+                                      "category": "관광지",
+                                      "recommendationScore": 90.0,
+                                      "latitude": 37.5658,
+                                      "longitude": 126.9751,
+                                      "visitDate": "2026-07-20"
+                                    }
+                                  ]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.transportMode")
+                        .value("PUBLIC_TRANSIT"))
+                .andExpect(jsonPath("$.optimizedPlaces[0].placeId")
+                        .value(3))
+                .andExpect(jsonPath("$.optimizedPlaces[1].placeId")
+                        .value(1))
+                .andExpect(jsonPath("$.optimizedPlaces[2].placeId")
+                        .value(2))
+                .andExpect(jsonPath("$.optimizedPlaces[1].routeEstimated")
+                        .value(true));
+    }
+
+    @Test
     @DisplayName("HTTP 요청의 대체 후보로 먼 장소를 교체한 결과를 반환한다")
     void optimizeCourseWithAlternativeCandidates() throws Exception {
         mockMvc.perform(post("/api/courses/optimize")
@@ -129,6 +187,7 @@ class CourseControllerTest {
                                 {
                                   "resultId": 101,
                                   "travelCode": "ATLSR",
+                                  "transportMode": "WALKING",
                                   "dailyStartTime": "10:00",
                                   "placeCandidates": [
                                     {
@@ -186,6 +245,7 @@ class CourseControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
+                                  "transportMode": "WALKING",
                                   "placeCandidates": [
                                     {
                                       "placeId": 1,
@@ -204,12 +264,31 @@ class CourseControllerTest {
     }
 
     @Test
+    @DisplayName("허용되지 않은 이동수단 값은 400 응답을 반환한다")
+    void rejectUnknownTransportMode() throws Exception {
+        mockMvc.perform(post("/api/courses/optimize")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "transportMode": "BICYCLE",
+                                  "placeCandidates": []
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+                .andExpect(jsonPath("$.message").value(
+                        "요청 JSON의 값 또는 형식이 올바르지 않습니다."
+                ));
+    }
+
+    @Test
     @DisplayName("확정한 최적화 코스를 저장하고 201 응답을 반환한다")
     void saveCourse() throws Exception {
         when(courseSaveService.saveOptimizedCourse(any()))
                 .thenReturn(CourseSaveResponse.builder()
                         .courseId(10L)
                         .title("서울 궁궐 코스")
+                        .transportMode(TransportMode.WALKING)
                         .placeCount(3)
                         .dayCount(1)
                         .totalDistanceKm(2.63)
@@ -226,6 +305,7 @@ class CourseControllerTest {
                                   "title": "서울 궁궐 코스",
                                   "description": "서울 궁궐을 둘러보는 코스",
                                   "travelCode": "ATLSR",
+                                  "transportMode": "WALKING",
                                   "courseType": "SURVEY",
                                   "region": "서울 종로구",
                                   "publicCourse": false,
@@ -244,6 +324,7 @@ class CourseControllerTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.courseId").value(10))
                 .andExpect(jsonPath("$.title").value("서울 궁궐 코스"))
+                .andExpect(jsonPath("$.transportMode").value("WALKING"))
                 .andExpect(jsonPath("$.placeCount").value(3))
                 .andExpect(jsonPath("$.dayCount").value(1))
                 .andExpect(jsonPath("$.totalDistanceKm").value(2.63))
@@ -263,12 +344,14 @@ class CourseControllerTest {
                                 CourseSaveResponse.builder()
                                         .courseId(20L)
                                         .title("취향 집중 코스")
+                                        .transportMode(TransportMode.PUBLIC_TRANSIT)
                                         .placeCount(1)
                                         .dayCount(1)
                                         .build(),
                                 CourseSaveResponse.builder()
                                         .courseId(21L)
                                         .title("이동 최소 코스")
+                                        .transportMode(TransportMode.PUBLIC_TRANSIT)
                                         .placeCount(1)
                                         .dayCount(1)
                                         .build()
@@ -283,6 +366,7 @@ class CourseControllerTest {
                                     {
                                       "memberId": 1,
                                       "resultId": 101,
+                                      "transportMode": "PUBLIC_TRANSIT",
                                       "title": "취향 집중 코스",
                                       "courseType": "SURVEY",
                                       "places": [
@@ -299,6 +383,7 @@ class CourseControllerTest {
                                     {
                                       "memberId": 1,
                                       "resultId": 101,
+                                      "transportMode": "PUBLIC_TRANSIT",
                                       "title": "이동 최소 코스",
                                       "courseType": "SURVEY",
                                       "places": [
@@ -335,6 +420,7 @@ class CourseControllerTest {
                         .placeId(10L)
                         .placeName("경복궁")
                         .category("TOUR")
+                        .imageUrl("https://example.com/gyeongbokgung.jpg")
                         .recommendationScore(92.0)
                         .themePalaceCultureYn("Y")
                         .visitOrder(1)
@@ -346,10 +432,9 @@ class CourseControllerTest {
                 .thenReturn(CourseRecommendResponse.builder()
                         .resultId(101L)
                         .travelCode("ATLSR")
+                        .transportMode(TransportMode.PUBLIC_TRANSIT)
+                        .estimatedTravelTimes(true)
                         .dailyStartTime(java.time.LocalTime.of(10, 0))
-                        .weatherStatus("RAIN")
-                        .temperature(27.5)
-                        .rainProbability(80)
                         .optionCount(3)
                         .courseOptions(List.of(
                                 option(1, "PREFERENCE", "취향 집중 코스", day),
@@ -364,10 +449,8 @@ class CourseControllerTest {
                                 {
                                   "resultId": 101,
                                   "travelCode": "ATLSR",
+                                  "transportMode": "PUBLIC_TRANSIT",
                                   "dailyStartTime": "10:00",
-                                  "weatherStatus": "RAIN",
-                                  "temperature": 27.5,
-                                  "rainProbability": 80,
                                   "dailyPlans": [
                                     {
                                       "visitDate": "2026-07-20",
@@ -442,19 +525,22 @@ class CourseControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.resultId").value(101))
                 .andExpect(jsonPath("$.travelCode").value("ATLSR"))
+                .andExpect(jsonPath("$.transportMode").value("PUBLIC_TRANSIT"))
+                .andExpect(jsonPath("$.estimatedTravelTimes").value(true))
                 .andExpect(jsonPath("$.dailyStartTime").value("10:00"))
-                .andExpect(jsonPath("$.weatherStatus").value("RAIN"))
-                .andExpect(jsonPath("$.temperature").value(27.5))
-                .andExpect(jsonPath("$.rainProbability").value(80))
                 .andExpect(jsonPath("$.optionCount").value(3))
                 .andExpect(jsonPath("$.courseOptions.length()").value(3))
                 .andExpect(jsonPath("$.courseOptions[0].optionType").value("PREFERENCE"))
+                .andExpect(jsonPath("$.courseOptions[0].title").value("취향 집중 코스 제목"))
+                .andExpect(jsonPath("$.courseOptions[0].description").value("취향 집중 코스 설명"))
                 .andExpect(jsonPath("$.courseOptions[1].optionType").value("MIN_DISTANCE"))
                 .andExpect(jsonPath("$.courseOptions[2].optionType").value("BALANCED"))
                 .andExpect(jsonPath("$.courseOptions[0].days[0].visitDate")
                         .value("2026-07-20"))
                 .andExpect(jsonPath("$.courseOptions[0].days[0].places[0].placeId")
                         .value(10))
+                .andExpect(jsonPath("$.courseOptions[0].days[0].places[0].imageUrl")
+                        .value("https://example.com/gyeongbokgung.jpg"))
                 .andExpect(jsonPath("$.courseOptions[0].days[0].places[0].visitTime")
                         .value("10:00"));
     }
@@ -469,6 +555,8 @@ class CourseControllerTest {
                 .optionNo(optionNo)
                 .optionType(optionType)
                 .optionName(optionName)
+                .title(optionName + " 제목")
+                .description(optionName + " 설명")
                 .placeCount(4)
                 .dayCount(1)
                 .totalDistanceKm(1.2)
@@ -523,6 +611,33 @@ class CourseControllerTest {
     }
 
     @Test
+    @DisplayName("회원 ID와 코스 ID로 본인이 저장한 코스 상세를 조회한다")
+    void getMemberCourse() throws Exception {
+        when(courseService.getMemberCourse(10L, 1L))
+                .thenReturn(CourseDetailResponse.builder()
+                        .courseId(10L)
+                        .title("내 서울 코스")
+                        .publicCourse(false)
+                        .placeCount(1)
+                        .dayCount(1)
+                        .days(List.of(CourseDayResponse.builder()
+                                .dayNo(1)
+                                .visitDate(java.time.LocalDate.of(2026, 7, 20))
+                                .places(List.of(CoursePlaceResponse.builder()
+                                        .placeId(1L)
+                                        .visitOrder(1)
+                                        .build()))
+                                .build()))
+                        .build());
+
+        mockMvc.perform(get("/api/courses/10")
+                        .param("memberId", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.courseId").value(10))
+                .andExpect(jsonPath("$.title").value("내 서울 코스"));
+    }
+
+    @Test
     @DisplayName("존재하지 않는 코스는 코드가 포함된 404 응답을 반환한다")
     void getUnknownCourse() throws Exception {
         when(courseService.getCourse(999L))
@@ -571,5 +686,27 @@ class CourseControllerTest {
                 .andExpect(jsonPath("$[0].courseId").value(20))
                 .andExpect(jsonPath("$[0].title").value("서울 추천 코스"))
                 .andExpect(jsonPath("$[0].placeCount").value(3));
+    }
+
+    @Test
+    @DisplayName("회원의 내 코스 목록을 새 API 경로로 조회한다")
+    void getMyCourses() throws Exception {
+        when(courseService.getMemberCourses(1L))
+                .thenReturn(List.of(CourseRecommendationResponse.builder()
+                        .courseId(30L)
+                        .title("내 서울 코스")
+                        .courseType("SURVEY")
+                        .startDate(java.time.LocalDate.of(2026, 7, 20))
+                        .endDate(java.time.LocalDate.of(2026, 7, 21))
+                        .placeCount(4)
+                        .dayCount(2)
+                        .build()));
+
+        mockMvc.perform(get("/api/courses/my")
+                        .param("memberId", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].courseId").value(30))
+                .andExpect(jsonPath("$[0].startDate").value("2026-07-20"))
+                .andExpect(jsonPath("$[0].endDate").value("2026-07-21"));
     }
 }

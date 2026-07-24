@@ -13,8 +13,8 @@ import java.util.List;
 /**
  * 코스 최적화의 입력으로 전달되는 장소 후보 한 건을 표현한다.
  *
- * <p>추천 점수, 좌표, 8개 테마 여부와 함께 특정 장소를 교체할 때만 사용할
- * 대체 후보를 포함한다. {@code visitDate}는 최종 JSON에서는 날짜 그룹의 값을
+ * <p>화면 표시 정보, 추천 점수, 좌표, 8개 테마 여부와 함께 특정 장소를 교체할 때만
+ * 사용할 대체 후보를 포함한다. {@code visitDate}는 최종 JSON에서는 날짜 그룹의 값을
  * 서비스가 자동으로 채우며, 최적화 내부 DTO 호환을 위해 필드 자체는 유지한다.</p>
  */
 @Getter
@@ -28,6 +28,9 @@ public class PlaceCandidateDto {
     private Long placeId;
     private String placeName;
     private String category;
+    private String address;
+    private String roadAddress;
+    private String imageUrl;
 
     // 추천 담당자가 계산한 점수로 첫 장소와 경로 비용 동점 후보를 결정한다.
     private Double recommendationScore;

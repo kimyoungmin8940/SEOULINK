@@ -1,5 +1,6 @@
 package com.seoulink.backend.domain.course.dto.response;
 
+import com.seoulink.backend.domain.course.model.TransportMode;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -24,6 +25,7 @@ public class CourseDetailResponse {
     private String description;
     private String coverImageUrl;
     private String travelCode;
+    private TransportMode transportMode;
     private String courseType;
     private String region;
     private Boolean publicCourse;
@@ -36,6 +38,7 @@ public class CourseDetailResponse {
     private Double totalTravelTimeMinutes;
     private Integer totalVisitTimeMinutes;
     private Double totalCourseTimeMinutes;
+    private Boolean estimatedTravelTimes;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 

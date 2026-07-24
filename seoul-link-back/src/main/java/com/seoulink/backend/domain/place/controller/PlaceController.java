@@ -1,10 +1,20 @@
 package com.seoulink.backend.domain.place.controller;
 
+import com.seoulink.backend.domain.place.dto.request.PlaceCreateRequest;
+import com.seoulink.backend.domain.place.dto.response.PlaceRecommendationListResponse;
 import com.seoulink.backend.domain.place.dto.response.PlaceResponse;
+import com.seoulink.backend.domain.place.service.PlaceRecommendationService;
 import com.seoulink.backend.domain.place.service.PlaceService;
 import jakarta.validation.Valid;
-import org.springframework.web.bind.annotation.*;
-import com.seoulink.backend.domain.place.dto.request.PlaceCreateRequest;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
@@ -13,9 +23,14 @@ import java.util.List;
 public class PlaceController {
 
     private final PlaceService placeService;
+    private final PlaceRecommendationService placeRecommendationService;
 
-    public PlaceController(PlaceService placeService) {
+    public PlaceController(
+            PlaceService placeService,
+            PlaceRecommendationService placeRecommendationService
+    ) {
         this.placeService = placeService;
+        this.placeRecommendationService = placeRecommendationService;
     }
 
     @GetMapping
@@ -24,11 +39,6 @@ public class PlaceController {
             @RequestParam(required = false) String category
     ) {
         return placeService.getPlaces(region, category);
-    }
-
-    @GetMapping("/search")
-    public List<PlaceResponse> searchPlaces(@RequestParam String keyword) {
-        return placeService.searchPlaces(keyword);
     }
 
     @GetMapping("/bounds")
@@ -40,6 +50,25 @@ public class PlaceController {
             @RequestParam(required = false) String category
     ) {
         return placeService.getPlacesInBounds(minLat, maxLat, minLng, maxLng, category);
+    }
+
+    @GetMapping("/recommend")
+    public PlaceRecommendationListResponse recommendPlaces(
+            @RequestParam String travelCode,
+            @RequestParam(required = false) String region,
+            @RequestParam(required = false) String companionType,
+            @RequestParam(required = false) Integer limit,
+            @RequestParam(required = false) Integer limitPerCategory,
+            @RequestParam(required = false) Integer alternativeLimit
+    ) {
+        return placeRecommendationService.recommend(
+                travelCode,
+                region,
+                limit,
+                limitPerCategory,
+                alternativeLimit,
+                companionType
+        );
     }
 
     @PostMapping
