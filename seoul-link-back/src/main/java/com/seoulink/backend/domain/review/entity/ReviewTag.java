@@ -8,6 +8,9 @@ import lombok.NoArgsConstructor;
 @Table(name = "REVIEW_TAG")
 @Getter
 @NoArgsConstructor
+/**
+ * 데이터베이스에 저장되는 도메인 엔티티입니다.
+ */
 public class ReviewTag {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "REVIEW_TAG_ID") private Long reviewTagId;

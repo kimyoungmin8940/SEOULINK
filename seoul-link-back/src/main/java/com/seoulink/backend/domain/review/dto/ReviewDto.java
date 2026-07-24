@@ -1,5 +1,8 @@
 package com.seoulink.backend.domain.review.dto;
 
+/**
+ * 도메인 데이터를 전달하기 위한 DTO입니다.
+ */
 public class ReviewDto {
     private Long id;
     private String title;

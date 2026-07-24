@@ -11,6 +11,9 @@ import org.springframework.web.client.RestClientResponseException;
 import java.util.Map;
 
 @Service
+/**
+ * 도메인 규칙과 트랜잭션을 처리하는 서비스입니다.
+ */
 public class OpenAiChatbotService {
 
     private final RestClient restClient;
@@ -33,6 +36,7 @@ public class OpenAiChatbotService {
         this.restClient = builder.build();
     }
 
+    // 사용자의 여행 조건을 프롬프트로 구성해 OpenAI Responses API에 전달한다.
     public String generateCourseRecommendation(ChatbotRequest request) {
         if (apiKey.isBlank()) {
             throw new IllegalStateException(
@@ -70,6 +74,7 @@ public class OpenAiChatbotService {
         }
     }
 
+    // Responses API의 output 배열에서 실제 텍스트 응답만 추출한다.
     private String extractText(String responseBody) {
         try {
             JsonNode output = objectMapper.readTree(responseBody).path("output");

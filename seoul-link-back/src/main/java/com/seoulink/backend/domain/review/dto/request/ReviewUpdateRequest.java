@@ -7,6 +7,9 @@ import java.time.LocalDate;
 import java.util.List;
 
 @Getter @Setter
+/**
+ * 클라이언트 요청 값을 검증하고 전달하는 DTO입니다.
+ */
 public class ReviewUpdateRequest {
     @NotNull private Long memberId;
     @NotBlank @Size(max = 200) private String reviewTitle;

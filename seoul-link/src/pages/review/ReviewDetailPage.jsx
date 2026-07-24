@@ -4,6 +4,7 @@ import Header from '../../components/common/Header';
 import Footer from '../../components/common/Footer';
 import { createComment, getReviewComments, getReviewDetail, likeReview } from '../../api/reviewApi';
 import { authStore } from '../../store/authStore';
+import { findDemoReview } from '../../mocks/myReviewDemo';
 import '../../styles/review-pages.css';
 
 const dateText = (value) => value ? new Date(`${value}T00:00:00`).toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }) : '여행 기록';
@@ -11,12 +12,15 @@ const dateText = (value) => value ? new Date(`${value}T00:00:00`).toLocaleDateSt
 function ReviewDetailPage() {
     const reviewId = window.location.pathname.split('/').pop();
     const member = authStore.getMember();
+    const demoReview = findDemoReview(reviewId);
     const [review, setReview] = useState(null);
     const [comments, setComments] = useState([]);
     const [comment, setComment] = useState('');
     const [error, setError] = useState('');
 
-    const load = async () => {
+    // 리뷰 본문과 댓글을 동시에 조회해 상세 화면을 구성한다.
+  // 리뷰 본문과 댓글을 병렬로 요청해 상세 화면의 모든 데이터를 한 번에 갱신한다.
+const load = async () => {
         try {
             const [reviewData, commentData] = await Promise.all([
                 getReviewDetail(reviewId, member?.memberId),
@@ -26,19 +30,29 @@ function ReviewDetailPage() {
             setComments(commentData);
         } catch (err) { setError(err.message || '후기를 불러오지 못했습니다.'); }
     };
-    useEffect(() => { load(); }, [reviewId]);
-    const toggleLike = async () => {
+    useEffect(() => {
+        if (demoReview) {
+            setReview(demoReview);
+            setComments(demoReview.demoComments || []);
+            return;
+        }
+        load();
+    }, [reviewId]);
+    // 로그인한 회원만 좋아요를 토글한 뒤 최신 상태를 다시 불러온다.
+  const toggleLike = async () => {
         if (!member?.memberId) { window.location.href = '/login'; return; }
         await likeReview(reviewId, member.memberId); load();
     };
-    const submitComment = async (event) => {
+    // 댓글 등록 후 목록을 재조회해 즉시 화면에 반영한다.
+  const submitComment = async (event) => {
         event.preventDefault();
         if (!member?.memberId) { window.location.href = '/login'; return; }
         await createComment(reviewId, { memberId: member.memberId, content: comment });
         setComment(''); load();
     };
 
-    if (error) return <><Header /><p className="review-message">{error}</p></>;
+    // 데이터 로딩 전·후 상태를 분리해 빈 화면이 표시되지 않도록 한다.
+if (error) return <><Header /><p className="review-message">{error}</p></>;
     if (!review) return <><Header /><p className="review-message">후기를 불러오는 중입니다.</p></>;
     const photos = review.imageUrls?.length ? review.imageUrls : [review.placeImageUrl].filter(Boolean);
     const heroImage = photos[0] || '/review-seed/bukchon-sunrise.png';

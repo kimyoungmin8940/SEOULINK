@@ -94,7 +94,7 @@ public class MemberService {
         payment.setPaymentMethod("DEMO");
         payment.setPaymentProvider("DEMO");
         payment.setOrderId("DEMO_SIGNUP_" + member.getMemberId());
-        payment.markPaid("DEMO", 1, LocalDateTime.now().plusDays(7));
+        payment.markPaid("DEMO", LocalDateTime.now().plusDays(7));
         paymentRepository.save(payment);
     }
 

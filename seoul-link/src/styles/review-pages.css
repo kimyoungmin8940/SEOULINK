@@ -52,3 +52,29 @@ body:has(.review-write-shell){background:#f4f9ff;background-image:radial-gradien
 @media(max-width:620px){.review-hub{padding-top:90px}.review-hub .breadcrumbs{margin-bottom:16px}}
 /* Keep the Korean search label on one line in the compact review toolbar. */
 .review-controls form button{flex:none;min-width:58px;white-space:nowrap}
+
+/* 파일 선택 버튼의 문구가 줄바꿈되지 않도록 너비와 줄바꿈을 제어한다. */
+.image-url-add {
+  display: block;
+}
+
+.image-file-input {
+  display: none;
+}
+
+.image-url-add button {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.image-placeholder {
+  width: 100%;
+}
+
+.image-placeholder span {
+  white-space: nowrap;
+}

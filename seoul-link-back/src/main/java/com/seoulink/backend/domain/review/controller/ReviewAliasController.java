@@ -9,6 +9,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
+/**
+ * HTTP 요청을 도메인 서비스로 연결하는 컨트롤러입니다.
+ */
 public class ReviewAliasController {
 
     private final ReviewService reviewService;

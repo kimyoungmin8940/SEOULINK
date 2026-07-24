@@ -55,10 +55,12 @@ function PaymentPage() {
   const start = useMemo(() => new Date(), []);
   const end = useMemo(() => new Date(start.getFullYear(), start.getMonth(), start.getDate() + selected.days - 1), [start, selected.days]);
 
+  // 결제 모달이 열릴 때만 토스 결제수단·약관 위젯을 생성한다.
   useEffect(() => {
     if (!isPaymentOpen) return undefined;
     let active = true;
-    const mountWidgets = async () => {
+    // 선택한 이용권 금액으로 토스 결제수단·약관 위젯을 화면에 렌더링한다.
+const mountWidgets = async () => {
       try {
         const clientKey = import.meta.env.VITE_TOSS_CLIENT_KEY;
         if (!clientKey) throw new Error('\uD074\uB77C\uC774\uC5B8\uD2B8 \uD0A4\uB97C \uD655\uC778\uD574 \uC8FC\uC138\uC694.');
@@ -84,13 +86,17 @@ function PaymentPage() {
     };
   }, [isPaymentOpen, selected.price]);
 
-  const openPayment = () => { setError(''); setIsPaymentOpen(true); };
-  const closePayment = () => {
+  // 결제 모달을 열기 전에 이전 오류 메시지를 초기화한다.
+const openPayment = () => { setError(''); setIsPaymentOpen(true); };
+  // 결제 진행 중에는 모달을 닫지 않아 위젯 상태가 중단되지 않도록 한다.
+  // 진행 중인 결제는 유지하고, 안전한 상태에서만 위젯과 모달을 해제한다.
+const closePayment = () => {
     if (loading) return;
     setWidgets(null);
     setIsPaymentOpen(false);
   };
 
+  // 서버 주문을 먼저 생성한 후 토스 결제창으로 승인 과정을 시작한다.
   const handlePayment = async () => {
     const member = authStore.getMember();
     if (!member?.memberId) return setError('\uB85C\uADF8\uC778 \uD6C4 \uC774\uC6A9\uAD8C\uC744 \uAD6C\uB9E4\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.');

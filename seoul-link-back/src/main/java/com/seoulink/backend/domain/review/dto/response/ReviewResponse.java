@@ -7,6 +7,9 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 @Getter
+/**
+ * 클라이언트에 반환할 데이터를 표현하는 DTO입니다.
+ */
 public class ReviewResponse {
     private final Long reviewId; private final Long memberId; private final Long placeId; private final Long courseId;
     private final String reviewTitle; private final String reviewContent; private final Double rating;

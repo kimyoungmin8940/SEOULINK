@@ -33,14 +33,16 @@ async function request(path, options = {}) {
     const accessToken = typeof localStorage === "undefined"
         ? null
         : localStorage.getItem("accessToken");
-    const { headers: optionHeaders, ...fetchOptions } = options;
+const { headers: optionHeaders, ...fetchOptions } = options;
+    const isFormData =
+        typeof FormData !== 'undefined' && fetchOptions.body instanceof FormData;
 
     let response;
     try {
         response = await fetch(`${API_BASE_URL}${path}`, {
             ...fetchOptions,
             headers: {
-                "Content-Type": "application/json",
+                ...(isFormData ? {} : { "Content-Type": "application/json" }),
                 ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
                 ...optionHeaders,
             },
@@ -88,7 +90,11 @@ export const apiClient = {
         method: "POST",
         body: JSON.stringify(body),
     }),
-    put: (path, body, options = {}) => request(path, {
+    postForm: (path, formData, options = {}) => request(path, {
+        ...options,
+        method: "POST",
+        body: formData,
+    }),    put: (path, body, options = {}) => request(path, {
         ...options,
         method: "PUT",
         body: JSON.stringify(body),

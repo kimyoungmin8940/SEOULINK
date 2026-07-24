@@ -3,6 +3,9 @@ package com.seoulink.backend.domain.review.dto.response;
 import lombok.Getter;
 
 @Getter
+/**
+ * 클라이언트에 반환할 데이터를 표현하는 DTO입니다.
+ */
 public class ReviewCourseStopResponse {
     private final Integer order;
     private final String visitTime;

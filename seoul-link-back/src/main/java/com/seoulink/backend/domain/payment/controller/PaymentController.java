@@ -26,11 +26,13 @@ public class PaymentController {
         return paymentService.createPayment(request);
     }
 
+    // 외부 결제창을 열기 전에 서버에 READY 상태의 주문을 생성한다.
     @PostMapping("/ready")
     public Payment readyPayment(@Valid @RequestBody PaymentCreateRequest request) {
         return paymentService.readyPayment(request);
     }
 
+    // 결제 성공 후 토스 승인 결과를 서버에서 다시 검증한다.
     @PostMapping("/complete")
     public Payment confirmPayment(@Valid @RequestBody PaymentConfirmRequest request) {
         return paymentService.confirmPayment(request);

@@ -32,6 +32,7 @@ function ChatbotPage() {
   const bottomRef = useRef(null);
   const scrollAreaRef = useRef(null);
 
+  // 로그인 회원의 이전 대화를 불러와 최근 대화 목록에 표시한다.
   useEffect(() => {
     if (!member?.memberId) return;
     getChatbotHistory(member.memberId)
@@ -39,6 +40,7 @@ function ChatbotPage() {
       .catch(() => setHistories([]));
   }, [member?.memberId]);
 
+  // 새 메시지·응답·오류가 추가되면 대화 영역을 마지막 메시지까지 자동 스크롤한다.
   useEffect(() => {
     const scrollArea = scrollAreaRef.current;
     if (scrollArea) {
@@ -48,6 +50,7 @@ function ChatbotPage() {
 
   const historyItems = histories.slice(0, 5);
 
+  // 사용자 메시지를 즉시 표시한 뒤 AI 추천을 요청한다.
   const submit = async (value = input) => {
     const question = value.trim();
     if (!question || loading) return;
@@ -73,6 +76,7 @@ function ChatbotPage() {
     }
   };
 
+  // 새 대화를 시작할 때 입력값과 선택한 기록을 초기화한다.
   const resetConversation = () => {
     setMessages(initialMessages);
     setInput('');
@@ -80,7 +84,8 @@ function ChatbotPage() {
     setActiveHistoryIndex(null);
   };
 
-  const openHistory = (item, index) => {
+  // 선택한 이전 대화의 질문과 답변을 현재 대화창에 복원한다.
+const openHistory = (item, index) => {
     setActiveHistoryIndex(index);
     if (item?.answer || item?.courseSummary) {
       setMessages([
@@ -164,6 +169,7 @@ function ChatbotPage() {
   );
 }
 
+// 발신자 역할에 따라 서로 다른 메시지 말풍선 구조를 렌더링한다.
 function Message({ message }) {
   if (message.role === 'user') {
     return <article className="chatbot-message chatbot-message-user"><div><p>{message.text}</p><time>{message.time}</time></div></article>;

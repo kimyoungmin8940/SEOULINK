@@ -9,6 +9,9 @@ import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 
+/**
+ * 도메인 데이터를 조회하고 저장하는 리포지토리입니다.
+ */
 public interface ReviewRepository extends JpaRepository<Review, Long> {
     List<Review> findByIsDeletedOrderByCreatedAtDesc(String isDeleted);
     List<Review> findByIsDeletedOrderByViewCountDesc(String isDeleted);

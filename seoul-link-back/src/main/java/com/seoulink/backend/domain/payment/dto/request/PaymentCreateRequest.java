@@ -10,6 +10,9 @@ import lombok.Setter;
 
 @Getter
 @Setter
+/**
+ * 클라이언트 요청 값을 검증하고 전달하는 DTO입니다.
+ */
 public class PaymentCreateRequest {
     @NotNull
     private Long memberId;

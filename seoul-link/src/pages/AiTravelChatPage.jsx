@@ -72,8 +72,15 @@ export default function AiTravelChatPage() {
     }
 
     const activePayment = payments.find(
-        (payment) => payment.paymentStatus === "PAID" && payment.remainCount > 0
+        (payment) =>
+            payment.paymentStatus === "PAID" &&
+            payment.expiredAt &&
+            new Date(payment.expiredAt) > new Date()
     );
+
+    const activePassLabel = activePayment
+        ? `이용 가능 · ${new Date(activePayment.expiredAt).toLocaleDateString("ko-KR")}까지`
+        : "사용 가능한 기간권 없음";
 
     return (
         <main className="test-page">
@@ -96,9 +103,7 @@ export default function AiTravelChatPage() {
                     <div>
                         <span>이용권 상태</span>
                         <strong>
-                            {activePayment
-                                ? `사용 가능 ${activePayment.remainCount}회`
-                                : "사용 가능한 이용권 없음"}
+                            {activePassLabel}
                         </strong>
                     </div>
 
