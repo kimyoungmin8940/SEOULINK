@@ -28,12 +28,6 @@ public class ChatbotHistory {
     @Column(name = "PAYMENT_ID")
     private Long paymentId;
 
-    @Column(name = "RESULT_ID")
-    private Long resultId;
-
-    @Column(name = "COURSE_ID")
-    private Long courseId;
-
     @Lob
     @Column(name = "QUESTION", nullable = false)
     private String question;

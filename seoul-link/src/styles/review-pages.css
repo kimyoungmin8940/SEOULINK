@@ -17,6 +17,11 @@
 .review-write-shell .breadcrumbs{margin:0 4px 18px}
 @media(max-width:620px){.review-write-shell{padding-top:98px}}
 
+/* 댓글 작성자에게만 보이는 삭제 버튼 */
+.comment-content{flex:1;min-width:0}
+.comment-delete{margin-left:10px;border:0;background:transparent;color:#8a9bb2;font-size:12px;cursor:pointer}
+.comment-delete:hover{color:#e35472;text-decoration:underline}
+
 .rating-number-input{display:grid!important;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:7px 9px!important;margin-top:0!important;font-size:12px!important;color:#5d769a!important}.rating-number-input span{font-weight:700}.rating-number-input input{min-width:0;width:100%;padding:8px 10px!important;border:1px solid #cdddf0!important;border-radius:8px!important;color:#154a91!important;font-weight:800;text-align:center}.rating-number-input input:focus{outline:0;border-color:#277df0!important;box-shadow:0 0 0 3px #e7f2ff}.rating-number-input em{grid-column:1/-1;color:#8093b0;font-size:11px;font-style:normal}.rating-star-fill{transition:clip-path .18s ease}
 
 /* Shared Seoul skyline backdrop for the review list and review composer. */

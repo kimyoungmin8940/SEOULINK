@@ -85,6 +85,15 @@ public class ReviewController {
         return service.getReview(reviewId, memberId);
     }
 
+    /** 상세 페이지 최초 진입을 별도로 기록해 조회 수를 증가시킨다. */
+    @PostMapping("/{reviewId}/view")
+    public ReviewResponse recordView(
+            @PathVariable Long reviewId,
+            @RequestParam(required = false) Long memberId
+    ) {
+        return service.recordView(reviewId, memberId);
+    }
+
     /** 작성자 본인의 리뷰 내용을 수정한다. */
     @PatchMapping("/{reviewId}")
     public ReviewResponse update(
@@ -119,6 +128,16 @@ public class ReviewController {
             @Valid @RequestBody CommentCreateRequest request
     ) {
         return service.createComment(reviewId, request);
+    }
+
+    /** 댓글 작성자가 자신의 댓글을 삭제한다. */
+    @DeleteMapping("/{reviewId}/comments/{commentId}")
+    public void deleteComment(
+            @PathVariable Long reviewId,
+            @PathVariable Long commentId,
+            @RequestParam Long memberId
+    ) {
+        service.deleteComment(reviewId, commentId, memberId);
     }
 
     /** 리뷰에 등록된 삭제되지 않은 댓글을 조회한다. */

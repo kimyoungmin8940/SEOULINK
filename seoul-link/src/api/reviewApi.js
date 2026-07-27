@@ -18,6 +18,10 @@ export const getReviews = (params = {}) =>
 export const getReviewDetail = (reviewId, memberId) =>
   apiClient.get(`/reviews/${reviewId}?${query({ memberId })}`);
 
+/** 상세 페이지 최초 진입만 별도 기록해 조회 수를 증가시킨다. */
+export const recordReviewView = (reviewId, memberId) =>
+  apiClient.post(`/reviews/${reviewId}/view?${query({ memberId })}`);
+
 /** 리뷰 화면의 인기 태그를 조회한다. */
 export const getPopularTags = () => apiClient.get('/reviews/popular-tags');
 
@@ -57,3 +61,7 @@ export const likeReview = (reviewId, memberId) =>
 /** 리뷰에 새 댓글을 등록한다. */
 export const createComment = (reviewId, data) =>
   apiClient.post(`/reviews/${reviewId}/comments`, data);
+
+/** 댓글 작성자 본인의 댓글을 논리 삭제한다. */
+export const deleteReviewComment = (reviewId, commentId, memberId) =>
+  apiClient.delete(`/reviews/${reviewId}/comments/${commentId}?${query({ memberId })}`);

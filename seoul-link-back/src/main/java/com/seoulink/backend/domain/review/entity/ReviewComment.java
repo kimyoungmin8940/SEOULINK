@@ -45,4 +45,10 @@ public class ReviewComment {
         this.memberId = memberId;
         this.content = content;
     }
+
+    /** 댓글 행은 유지하고 삭제 여부만 변경한다. */
+    public void deleteComment() {
+        this.isDeleted = "Y";
+        this.updatedAt = LocalDateTime.now();
+    }
 }

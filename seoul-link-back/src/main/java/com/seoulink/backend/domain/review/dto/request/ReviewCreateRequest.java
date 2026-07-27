@@ -16,7 +16,7 @@ public class ReviewCreateRequest {
     private Long courseId;
     @NotBlank @Size(max = 200) private String reviewTitle;
     @NotBlank @Size(max = 4000) private String reviewContent;
-    @NotNull @DecimalMin("1.0") @DecimalMax("5.0") private Double rating;
+    @NotNull @DecimalMin("0.0") @DecimalMax("5.0") private Double rating;
     private LocalDate visitDate;
     @Size(max = 30) private String companion;
     @Size(max = 8) private List<@Size(max = 1000) String> imageUrls;

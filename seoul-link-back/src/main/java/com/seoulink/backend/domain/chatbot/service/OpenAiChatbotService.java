@@ -36,8 +36,11 @@ public class OpenAiChatbotService {
         this.restClient = builder.build();
     }
 
+    /** OpenAI가 반환한 상세 답변과 이력 카드용 압축 코스 요약이다. */
+    public record ChatbotRecommendation(String answer, String courseSummary) {}
+
     // 사용자의 여행 조건을 프롬프트로 구성해 OpenAI Responses API에 전달한다.
-    public String generateCourseRecommendation(ChatbotRequest request) {
+    public ChatbotRecommendation generateCourseRecommendation(ChatbotRequest request) {
         if (apiKey.isBlank()) {
             throw new IllegalStateException(
                     "OPENAI_API_KEY가 설정되지 않았습니다. 결제 기능은 사용할 수 있지만 챗봇 답변 생성에는 OpenAI API 키가 필요합니다."
@@ -56,6 +59,12 @@ public class OpenAiChatbotService {
                 - 운영시간이나 비용이 변동될 수 있음을 짧게 안내합니다.
                 - 과장하거나 존재하지 않는 장소를 만들지 않습니다.
 
+                반드시 아래 JSON 객체만 반환하세요. Markdown 코드 블록이나 객체 밖의 문장은 금지합니다.
+                {
+                  "answer": "사용자에게 보여 줄 상세 답변 전문",
+                  "courseSummary": "3~5줄의 압축 코스 요약. 장소 동선, 예상 소요 시간, 추천 대상을 포함"
+                }
+
                 여행 콘셉트: %s
                 사용자 질문: %s
                 """.formatted(request.getTravelConcept(), request.getQuestion());
@@ -68,7 +77,7 @@ public class OpenAiChatbotService {
                     .body(body)
                     .retrieve()
                     .body(String.class);
-            return extractText(responseBody);
+            return parseRecommendation(extractText(responseBody));
         } catch (RestClientResponseException e) {
             throw new IllegalStateException("OpenAI API 호출에 실패했습니다: " + e.getResponseBodyAsString(), e);
         }
@@ -87,6 +96,25 @@ public class OpenAiChatbotService {
             throw new IllegalStateException("OpenAI 응답에서 답변을 찾을 수 없습니다.");
         } catch (Exception e) {
             throw new IllegalStateException("OpenAI 응답 처리 중 오류가 발생했습니다.", e);
+        }
+    }
+
+    // 모델이 반환한 JSON에서 상세 답변과 카드용 요약을 각각 꺼낸다.
+    private ChatbotRecommendation parseRecommendation(String responseText) {
+        try {
+            String json = responseText.trim();
+            if (json.startsWith("```")) {
+                json = json.replaceFirst("^```(?:json)?\\s*", "").replaceFirst("\\s*```$", "");
+            }
+            JsonNode result = objectMapper.readTree(json);
+            String answer = result.path("answer").asText().trim();
+            String courseSummary = result.path("courseSummary").asText().trim();
+            if (answer.isBlank() || courseSummary.isBlank()) {
+                throw new IllegalStateException("OpenAI 응답에 answer 또는 courseSummary가 없습니다.");
+            }
+            return new ChatbotRecommendation(answer, courseSummary);
+        } catch (Exception e) {
+            throw new IllegalStateException("OpenAI 응답 JSON 처리 중 오류가 발생했습니다.", e);
         }
     }
 }

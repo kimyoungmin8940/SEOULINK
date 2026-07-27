@@ -2,6 +2,7 @@ package com.seoulink.backend.domain.mypage.service;
 
 import com.seoulink.backend.domain.member.dto.response.MemberLoginResponse;
 import com.seoulink.backend.domain.mypage.dto.response.MyCourseResponse;
+import com.seoulink.backend.domain.mypage.dto.response.MyCommentResponse;
 import com.seoulink.backend.domain.mypage.dto.response.MyPageResponse;
 import com.seoulink.backend.domain.mypage.dto.response.MyTravelTypeResponse;
 import com.seoulink.backend.domain.review.dto.response.ReviewResponse;
@@ -34,6 +35,8 @@ public class MyPageService {
     private final ChatbotHistoryRepository chatbotHistoryRepository;
     private final ReviewRepository reviewRepository;
     private final ReviewLikeRepository reviewLikeRepository;
+    private final ReviewCommentRepository reviewCommentRepository;
+    private final PlaceRepository placeRepository;
 
     public MyPageService(
             MemberRepository memberRepository,
@@ -41,7 +44,9 @@ public class MyPageService {
             PaymentRepository paymentRepository,
             ChatbotHistoryRepository chatbotHistoryRepository,
             ReviewRepository reviewRepository,
-            ReviewLikeRepository reviewLikeRepository
+            ReviewLikeRepository reviewLikeRepository,
+            ReviewCommentRepository reviewCommentRepository,
+            PlaceRepository placeRepository
     ) {
         this.memberRepository = memberRepository;
         this.travelCourseRepository = travelCourseRepository;
@@ -49,6 +54,8 @@ public class MyPageService {
         this.chatbotHistoryRepository = chatbotHistoryRepository;
         this.reviewRepository = reviewRepository;
         this.reviewLikeRepository = reviewLikeRepository;
+        this.reviewCommentRepository = reviewCommentRepository;
+        this.placeRepository = placeRepository;
     }
 
     public MyPageResponse getMyPage(Long memberId) {
@@ -82,5 +89,24 @@ public class MyPageService {
                         .map(review -> new ReviewResponse(review, reviewLikeRepository.countByReviewId(review.getReviewId())))
                         .toList()
         );
+    }
+
+    public List<MyCommentResponse> getMyComments(Long memberId) {
+        memberRepository.findById(memberId)
+                .orElseThrow(() -> new IllegalArgumentException("회원 정보를 찾을 수 없습니다."));
+
+        return reviewCommentRepository.findByMemberIdAndIsDeletedOrderByCreatedAtDesc(memberId, "N")
+                .stream()
+                .map(comment -> reviewRepository.findById(comment.getReviewId())
+                        .filter(review -> "N".equals(review.getIsDeleted()))
+                        .map(review -> new MyCommentResponse(
+                                comment,
+                                review,
+                                placeRepository.findById(review.getPlaceId())
+                                        .map(place -> place.getName())
+                                        .orElse("서울 여행지")
+                        )))
+                .flatMap(java.util.Optional::stream)
+                .toList();
     }
 }

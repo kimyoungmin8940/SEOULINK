@@ -20,6 +20,18 @@ const initialMessages = [{
 
 const formatTime = (value = new Date()) => new Date(value).toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' });
 
+// 질문의 핵심 키워드를 이력·통계에 쓸 짧은 여행 테마로 정리한다.
+const travelConceptFor = (question) => {
+  if (/카페|커피|성수|익선동/.test(question)) return '카페 투어';
+  if (/맛집|식당|먹|시장/.test(question)) return '맛집 여행';
+  if (/야경|밤|노을/.test(question)) return '야경 여행';
+  if (/데이트|연인/.test(question)) return '데이트 여행';
+  if (/부모님|아이|가족/.test(question)) return '가족 여행';
+  if (/혼자|힐링|산책/.test(question)) return '혼자 힐링 여행';
+  if (/비|실내|전시|박물관/.test(question)) return '실내 문화 여행';
+  return '맞춤 서울 여행';
+};
+
 function ChatbotPage() {
   const member = authStore.getMember();
   const [messages, setMessages] = useState(initialMessages);
@@ -64,7 +76,7 @@ function ChatbotPage() {
       const result = await askChatbot({
         memberId: member?.memberId,
         question,
-        travelConcept: '맞춤 서울 여행',
+        travelConcept: travelConceptFor(question),
       });
       const answer = result?.answer || result?.courseSummary || '요청하신 여행 스타일에 맞는 서울 여행 아이디어를 준비했어요.';
       setMessages((previous) => [...previous, { role: 'bot', text: answer, time: formatTime(result?.createdAt) }]);

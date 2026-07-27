@@ -93,9 +93,14 @@ public class ReviewService {
     public Page<ReviewResponse> getMemberReviews(Long memberId, int page, int size, String sort) {
         return reviews.findByMemberIdAndIsDeleted(memberId,"N",PageRequest.of(page,size,toSort(sort))).map(review -> toResponse(review, memberId));
     }
-    @Transactional
-    // 상세 조회 시 조회 수를 증가시키고, 화면에 필요한 조합 응답을 만든다.
+    // 상세 조회는 읽기 전용으로 처리한다. 조회 수 증가는 별도 API에서만 수행한다.
     public ReviewResponse getReview(Long reviewId, Long viewerId) {
+        Review review = activeReview(reviewId);
+        return toResponse(review, viewerId);
+    }
+    @Transactional
+    // 상세 페이지 진입을 기록할 때만 조회 수를 1 증가시킨다.
+    public ReviewResponse recordView(Long reviewId, Long viewerId) {
         Review review = activeReview(reviewId);
         review.increaseViewCount();
         return toResponse(review, viewerId);
@@ -105,6 +110,19 @@ public class ReviewService {
         requireMember(request.getMemberId());
         activeReview(reviewId);
         return comments.save(new ReviewComment(reviewId, request.getMemberId(), request.getContent()));
+    }
+    @Transactional
+    // 댓글 작성자만 자신의 댓글을 논리 삭제할 수 있다.
+    public void deleteComment(Long reviewId, Long commentId, Long memberId) {
+        requireMember(memberId);
+        activeReview(reviewId);
+        ReviewComment comment = comments.findById(commentId)
+                .filter(item -> reviewId.equals(item.getReviewId()) && "N".equals(item.getIsDeleted()))
+                .orElseThrow(() -> new IllegalArgumentException("Comment not found."));
+        if (!memberId.equals(comment.getMemberId())) {
+            throw new IllegalArgumentException("You can delete only your own comment.");
+        }
+        comment.deleteComment();
     }
     // 삭제되지 않은 댓글을 작성 시각 순서대로 조회한다.
     public List<ReviewComment> getComments(Long reviewId) {
@@ -129,6 +147,7 @@ public class ReviewService {
         Review review=activeReview(reviewId);
         requireOwner(review,memberId);
         review.deleteReview();
+        comments.softDeleteByReviewId(reviewId);
     }
     // 태그 집계 결과에서 화면에 노출할 상위 8개 태그만 선택한다.
     public List<String> popularTags() {
