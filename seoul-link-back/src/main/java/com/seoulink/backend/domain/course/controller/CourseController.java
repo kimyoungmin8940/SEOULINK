@@ -1,6 +1,7 @@
 package com.seoulink.backend.domain.course.controller;
 
 import com.seoulink.backend.domain.course.dto.request.CourseBatchSaveRequest;
+import com.seoulink.backend.domain.course.dto.request.CourseDraftRefreshRequest;
 import com.seoulink.backend.domain.course.dto.request.CourseOptimizeRequest;
 import com.seoulink.backend.domain.course.dto.request.CourseRecommendRequest;
 import com.seoulink.backend.domain.course.dto.request.CourseSaveRequest;
@@ -71,6 +72,25 @@ public class CourseController {
             @RequestParam Long surveyId
     ) {
         return ResponseEntity.ok(courseDraftService.createDraft(surveyId));
+    }
+
+    /**
+     * 다시 추천받기에서 직전 결과의 장소를 우선 제외하고 후보 풀을 DB에서 새로 조회한다.
+     * 이 단계에서는 외부 경로 API를 호출하지 않는다.
+     */
+    @PostMapping("/draft/recommend-again")
+    public ResponseEntity<CourseDraftResponse> refreshCourseDraft(
+            @RequestBody CourseDraftRefreshRequest request
+    ) {
+        if (request == null) {
+            throw new IllegalArgumentException("재추천 후보 요청이 필요합니다.");
+        }
+        return ResponseEntity.ok(
+                courseDraftService.createDraftForRecommendAgain(
+                        request.getSurveyId(),
+                        request.getPreviouslyRecommendedPlaceIds()
+                )
+        );
     }
 
     /**

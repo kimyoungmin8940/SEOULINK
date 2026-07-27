@@ -118,7 +118,9 @@ function readStoredRecommendedCourses() {
             previewOnly: true,
         }));
 
-        if (normalized.length > 0) return normalized;
+        if (normalized.length > 0) {
+            return normalized;
+        }
     }
 
     return [];
@@ -140,9 +142,9 @@ function formatDateText(value) {
 function normalizeTransportLabel(value) {
     const normalized = String(value || '').trim().toUpperCase();
 
-    if (normalized === 'WALKING') return '도보 이동';
-    if (normalized === 'CAR') return '자동차 이동';
-    if (normalized === 'PUBLIC_TRANSIT') return '대중교통 이동';
+    if (normalized === 'WALKING') return '도보';
+    if (normalized === 'CAR') return '자동차';
+    if (normalized === 'PUBLIC_TRANSIT') return '대중교통';
     return '이동수단 미정';
 }
 
@@ -205,7 +207,9 @@ function getCourseId(course) {
 
 function RecommendedHistoryListItem({ course }) {
     const moveToRecommendedCourseDetail = () => {
-        if (!requireLogin()) return;
+        if (!requireLogin()) {
+            return;
+        }
 
         const courseId = getCourseId(course);
         if (!courseId) {
@@ -249,63 +253,58 @@ function RecommendedHistoryListItem({ course }) {
                         alt={course.title}
                     />
                 )}
-            </div>
-
-            <div className="recommended-history-item__body">
                 <span className="recommended-history-item__badge">
                     {course.optionName || '추천 코스'}
                 </span>
+            </div>
 
-                <div className="recommended-history-item__title-group">
-                    <h3>{course.title}</h3>
-                    <p className="recommended-history-item__description">{course.description}</p>
+            <div className="recommended-history-item__body">
+                <div className="recommended-history-item__top">
+                    <div className="recommended-history-item__title-group">
+                        <p className="recommended-history-item__eyebrow">
+                            {formatDateText(course.startDate || course.endDate)}
+                        </p>
+                        <h3>{course.title}</h3>
+                    </div>
+                    <button type="button" className="recommended-history-item__cta">
+                        상세보기
+                    </button>
                 </div>
+
+                <p className="recommended-history-item__description">{course.description}</p>
 
                 <div className="recommended-history-item__meta">
                     <span>
-                        <CalendarDays size={16} aria-hidden="true" />
-                        {formatDateText(course.startDate || course.endDate)}
+                        <CalendarDays size={15} aria-hidden="true" />
+                        {course.dayCount || 1}일 코스
                     </span>
                     <span>
-                        <Clock3 size={16} aria-hidden="true" />
+                        <Clock3 size={15} aria-hidden="true" />
                         {course.duration || '일정 정보 없음'}
                     </span>
                     <span>
-                        <MapPin size={16} aria-hidden="true" />
+                        <Route size={15} aria-hidden="true" />
+                        총 {Number(course.totalDistanceKm || 0).toFixed(1)}km
+                    </span>
+                    <span>
+                        <MapPin size={15} aria-hidden="true" />
                         {course.area || '서울'}
                     </span>
                 </div>
+
+                <div className="recommended-history-item__bottom">
+                    <div className="recommended-history-item__tags tags">
+                        {(course.tags || []).slice(0, 4).map((tag) => (
+                            <span key={tag}>#{tag}</span>
+                        ))}
+                    </div>
+
+                    <div className="recommended-history-item__summary">
+                        <span>장소 {course.placeCount || 0}곳</span>
+                        <span>{normalizeTransportLabel(course.transportMode)}</span>
+                    </div>
+                </div>
             </div>
-
-            <aside className="recommended-history-item__summary-panel">
-                <div className="recommended-history-item__summary-stat">
-                    <CalendarDays size={22} aria-hidden="true" />
-                    <div>
-                        <small>일정</small>
-                        <strong>{course.dayCount || 1}일</strong>
-                    </div>
-                </div>
-
-                <div className="recommended-history-item__summary-stat">
-                    <MapPin size={22} aria-hidden="true" />
-                    <div>
-                        <small>장소</small>
-                        <strong>{course.placeCount || 0}곳</strong>
-                    </div>
-                </div>
-
-                <div className="recommended-history-item__summary-stat">
-                    <Route size={22} aria-hidden="true" />
-                    <div>
-                        <small>이동수단</small>
-                        <strong>{normalizeTransportLabel(course.transportMode).replace(' 이동', '')}</strong>
-                    </div>
-                </div>
-
-                <span className="recommended-history-item__arrow" aria-hidden="true">
-                    <ChevronRight size={20} strokeWidth={2.2} />
-                </span>
-            </aside>
         </article>
     );
 }
@@ -318,6 +317,7 @@ function RecommendedCourseHistoryPage() {
     const [reloadKey, setReloadKey] = useState(0);
     const [requestedPage, setRequestedPage] = useState(getInitialPage);
     const [sortOption, setSortOption] = useState('latest');
+    const [dataSource, setDataSource] = useState('server');
 
     useEffect(() => {
         const localPreviewCourses = readStoredRecommendedCourses();
@@ -329,6 +329,7 @@ function RecommendedCourseHistoryPage() {
             if (isTemporaryLogin()) {
                 setCourses(fallbackPreviewCourses);
                 setStatus(fallbackPreviewCourses.length > 0 ? 'success' : 'empty');
+                setDataSource('preview');
             }
             return undefined;
         }
@@ -337,11 +338,14 @@ function RecommendedCourseHistoryPage() {
 
         getRecommendedCourses(initialState.memberId, { signal: controller.signal })
             .then((response) => {
-                const normalizedCourses = normalizeRecommendedCourseList(response, { fallbackImages });
+                const normalizedCourses = normalizeRecommendedCourseList(response, {
+                    fallbackImages,
+                });
 
                 if (normalizedCourses.length > 0) {
                     setCourses(normalizedCourses);
                     setStatus('success');
+                    setDataSource('server');
                     setErrorMessage('');
                     return;
                 }
@@ -349,12 +353,14 @@ function RecommendedCourseHistoryPage() {
                 if (fallbackPreviewCourses.length > 0 && isTemporaryLogin()) {
                     setCourses(fallbackPreviewCourses);
                     setStatus('success');
+                    setDataSource('preview');
                     setErrorMessage('');
                     return;
                 }
 
                 setCourses([]);
                 setStatus('empty');
+                setDataSource('server');
                 setErrorMessage('');
             })
             .catch((error) => {
@@ -363,6 +369,7 @@ function RecommendedCourseHistoryPage() {
                 if (fallbackPreviewCourses.length > 0 && isTemporaryLogin()) {
                     setCourses(fallbackPreviewCourses);
                     setStatus('success');
+                    setDataSource('preview');
                     setErrorMessage('');
                     return;
                 }
@@ -374,12 +381,18 @@ function RecommendedCourseHistoryPage() {
         return () => controller.abort();
     }, [initialState, reloadKey]);
 
-    const sortedCourses = useMemo(() => sortCourses(courses, sortOption), [courses, sortOption]);
+    const sortedCourses = useMemo(
+        () => sortCourses(courses, sortOption),
+        [courses, sortOption],
+    );
 
     const totalPages = Math.max(1, Math.ceil(sortedCourses.length / COURSES_PER_PAGE));
     const currentPage = Math.min(requestedPage, totalPages);
     const pageStartIndex = (currentPage - 1) * COURSES_PER_PAGE;
-    const visibleCourses = sortedCourses.slice(pageStartIndex, pageStartIndex + COURSES_PER_PAGE);
+    const visibleCourses = sortedCourses.slice(
+        pageStartIndex,
+        pageStartIndex + COURSES_PER_PAGE,
+    );
 
     useEffect(() => {
         if (requestedPage > totalPages) {
@@ -420,35 +433,12 @@ function RecommendedCourseHistoryPage() {
                 </a>
 
                 <section className="recommended-history-heading">
-                    <div className="recommended-history-heading__copy">
+                    <div>
+                        <p><Sparkles size={15} aria-hidden="true" /> MY RECOMMENDATIONS</p>
                         <h1>추천받은 코스 전체보기</h1>
-                        <span>지금까지 추천받은 모든 코스를 한눈에 확인하세요.</span>
+                        <span>전체보기 페이지처럼 한눈에 보고, 원하는 기준으로 정렬해서 비교할 수 있어요.</span>
                     </div>
-
-                    {status === 'success' && (
-                        <div className="recommended-history-heading__actions">
-                            <strong>총 {sortedCourses.length}개</strong>
-                            <div className="recommended-history-heading__sort">
-                                <label htmlFor="recommended-history-sort">
-                                    <ListFilter size={16} aria-hidden="true" /> 정렬
-                                </label>
-                                <select
-                                    id="recommended-history-sort"
-                                    value={sortOption}
-                                    onChange={(event) => {
-                                        setSortOption(event.target.value);
-                                        moveToPage(1);
-                                    }}
-                                >
-                                    {SORT_OPTIONS.map((option) => (
-                                        <option key={option.value} value={option.value}>
-                                            {option.label}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                        </div>
-                    )}
+                    {status === 'success' && <strong>총 {sortedCourses.length}개</strong>}
                 </section>
 
                 {status === 'loading' && (
@@ -488,9 +478,42 @@ function RecommendedCourseHistoryPage() {
 
                 {status === 'success' && (
                     <>
+                        <section className="recommended-history-toolbar" aria-label="추천 코스 정렬 도구">
+                            <div className="recommended-history-toolbar__summary">
+                                <strong>리스트로 정리된 추천 코스</strong>
+                                <p>
+                                    코스 제목, 주요 정보, 태그를 한 줄씩 비교해보세요.
+                                    {dataSource === 'preview' && ' 현재는 임시 미리보기 데이터가 표시되고 있어요.'}
+                                </p>
+                            </div>
+
+                            <div className="recommended-history-toolbar__controls">
+                                <label htmlFor="recommended-history-sort">
+                                    <ListFilter size={16} aria-hidden="true" /> 정렬
+                                </label>
+                                <select
+                                    id="recommended-history-sort"
+                                    value={sortOption}
+                                    onChange={(event) => {
+                                        setSortOption(event.target.value);
+                                        moveToPage(1);
+                                    }}
+                                >
+                                    {SORT_OPTIONS.map((option) => (
+                                        <option key={option.value} value={option.value}>
+                                            {option.label}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        </section>
+
                         <section className="recommended-history-list" aria-label="추천받은 코스 목록">
                             {visibleCourses.map((course) => (
-                                <RecommendedHistoryListItem key={course.courseId} course={course} />
+                                <RecommendedHistoryListItem
+                                    key={course.courseId}
+                                    course={course}
+                                />
                             ))}
                         </section>
 
@@ -542,7 +565,9 @@ function RecommendedCourseHistoryPage() {
 function CourseListPage() {
     const pathname = window.location.pathname;
 
-    if (pathname === '/courses/recommendations') return <RecommendedCourseHistoryPage />;
+    if (pathname === '/courses/recommendations') {
+        return <RecommendedCourseHistoryPage />;
+    }
 
     if (pathname === '/courses/themes') {
         return (

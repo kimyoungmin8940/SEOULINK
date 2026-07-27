@@ -22,6 +22,7 @@ public class CoursePlaceResponse {
     // COURSE_DETAILS에는 중복 저장하지 않고, 상세 조회 시 placeId로 PLACES를 일괄 조회해 채운다.
     private String placeName;
     private String category;
+    private String region;
     private String address;
     private String roadAddress;
     private String imageUrl;

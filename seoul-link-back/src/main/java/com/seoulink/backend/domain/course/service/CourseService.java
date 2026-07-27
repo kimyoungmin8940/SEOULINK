@@ -102,6 +102,10 @@ public class CourseService {
                 );
         Map<Long, Place> placesById = loadPlacesById(details);
         List<CourseDayResponse> days = toDayResponses(details, placesById);
+        int excludedHotelStayMinutes = excludedHotelStayMinutes(
+                details,
+                placesById
+        );
 
         return CourseDetailResponse.builder()
                 .courseId(course.getCourseId())
@@ -118,8 +122,16 @@ public class CourseService {
                 .dayCount(days.size())
                 .totalDistanceKm(course.getTotalDistanceKm())
                 .totalTravelTimeMinutes(course.getTotalTravelTimeMinutes())
-                .totalVisitTimeMinutes(course.getTotalVisitTimeMinutes())
-                .totalCourseTimeMinutes(course.getTotalCourseTimeMinutes())
+                .totalVisitTimeMinutes(Math.max(
+                        0,
+                        valueOrZero(course.getTotalVisitTimeMinutes())
+                                - excludedHotelStayMinutes
+                ))
+                .totalCourseTimeMinutes(Math.max(
+                        0.0,
+                        valueOrZero(course.getTotalCourseTimeMinutes())
+                                - excludedHotelStayMinutes
+                ))
                 .estimatedTravelTimes(details.stream().anyMatch(detail ->
                         Boolean.TRUE.equals(detail.getRouteEstimated())
                 ))
@@ -163,6 +175,10 @@ public class CourseService {
                         course.getCourseId()
                 );
         Map<Long, Place> placesById = loadPlacesById(details);
+        int excludedHotelStayMinutes = excludedHotelStayMinutes(
+                details,
+                placesById
+        );
         int dayCount = (int) details.stream()
                 .map(CourseDetail::getDayNo)
                 .distinct()
@@ -197,8 +213,16 @@ public class CourseService {
                 .endDate(endDate)
                 .totalDistanceKm(course.getTotalDistanceKm())
                 .totalTravelTimeMinutes(course.getTotalTravelTimeMinutes())
-                .totalVisitTimeMinutes(course.getTotalVisitTimeMinutes())
-                .totalCourseTimeMinutes(course.getTotalCourseTimeMinutes())
+                .totalVisitTimeMinutes(Math.max(
+                        0,
+                        valueOrZero(course.getTotalVisitTimeMinutes())
+                                - excludedHotelStayMinutes
+                ))
+                .totalCourseTimeMinutes(Math.max(
+                        0.0,
+                        valueOrZero(course.getTotalCourseTimeMinutes())
+                                - excludedHotelStayMinutes
+                ))
                 .createdAt(course.getCreatedAt())
                 // 코스 하트 테이블 연동 전까지는 미선택 상태로 반환한다.
                 .liked(false)
@@ -264,7 +288,10 @@ public class CourseService {
                 ))
                 .sum();
         int dailyVisitTimeMinutes = dailyDetails.stream()
-                .mapToInt(detail -> valueOrZero(detail.getStayMinutes()))
+                .mapToInt(detail -> normalizedStayMinutes(
+                        detail,
+                        placesById.get(detail.getPlaceId())
+                ))
                 .sum();
 
         return CourseDayResponse.builder()
@@ -320,7 +347,7 @@ public class CourseService {
                 .visitOrder(detail.getPlaceOrder())
                 .memo(detail.getMemo())
                 .visitTime(detail.getVisitTime())
-                .expectedVisitMinutes(detail.getStayMinutes())
+                .expectedVisitMinutes(normalizedStayMinutes(detail, place))
                 .distanceFromPreviousKm(detail.getDistanceFromPreviousKm())
                 .travelTimeFromPreviousMinutes(
                         detail.getTravelTimeFromPreviousMinutes()
@@ -334,6 +361,7 @@ public class CourseService {
             response
                     .placeName(place.getName())
                     .category(place.getCategory())
+                    .region(place.getRegion())
                     .address(place.getAddress())
                     .roadAddress(place.getRoadAddress())
                     .imageUrl(place.getImageUrl())
@@ -350,6 +378,26 @@ public class CourseService {
         }
 
         return response.build();
+    }
+
+    /** 기존 저장 데이터에 값이 남아 있어도 숙소 체류시간은 조회 응답에서 제외한다. */
+    private int normalizedStayMinutes(CourseDetail detail, Place place) {
+        return isHotel(place) ? 0 : valueOrZero(detail.getStayMinutes());
+    }
+
+    private int excludedHotelStayMinutes(
+            List<CourseDetail> details,
+            Map<Long, Place> placesById
+    ) {
+        return details.stream()
+                .filter(detail -> isHotel(placesById.get(detail.getPlaceId())))
+                .mapToInt(detail -> valueOrZero(detail.getStayMinutes()))
+                .sum();
+    }
+
+    private boolean isHotel(Place place) {
+        return place != null
+                && "HOTEL".equalsIgnoreCase(place.getCategory());
     }
 
     /** 상세 행의 PLACE_ID를 중복 제거해 PLACES를 한 번에 조회한다. */

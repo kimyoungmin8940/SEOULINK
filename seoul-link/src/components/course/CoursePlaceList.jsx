@@ -18,6 +18,11 @@ const categoryMeta = {
     HOTEL: { label: '숙소', tone: 'hotel', Icon: BedDouble },
 };
 
+function isHotelCategory(category) {
+    const normalized = String(category || '').trim().toUpperCase();
+    return ['HOTEL', '숙소', '호텔', 'ACCOMMODATION', 'LODGING'].includes(normalized);
+}
+
 function formatMinutes(value) {
     const minutes = Math.max(0, Math.round(Number(value) || 0));
     const hours = Math.floor(minutes / 60);
@@ -127,11 +132,13 @@ function CoursePlaceList({ day, transportMode }) {
                                         }}
                                     />
 
-                                    <span className="course-detail-stay-time">
-                                        <Clock3 size={15} aria-hidden="true" />
-                                        <small>소요시간</small>
-                                        <strong>{formatMinutes(place.expectedVisitMinutes)}</strong>
-                                    </span>
+                                    {!isHotelCategory(place.category) && (
+                                        <span className="course-detail-stay-time">
+                                            <Clock3 size={15} aria-hidden="true" />
+                                            <small>소요시간</small>
+                                            <strong>{formatMinutes(place.expectedVisitMinutes)}</strong>
+                                        </span>
+                                    )}
                                 </div>
                             </article>
                         </li>

@@ -32,8 +32,9 @@
 - 재추천에서는 직전 결과의 장소를 `-20`, 보지 않은 후보를 `+5`로 조정한 뒤
   표시 점수를 다시 `70~95`로 정규화한다.
 - 2일 이상 일정은 일반 장소 최적화가 끝난 뒤 마지막 여행일을 제외한 DAY 끝에
-  같은 HOTEL을 붙인다. 숙소 구간은 추천 중 추정값으로 계산하고 현재 DAY 경로
-  조회 시 실제값으로 보정한다.
+  같은 HOTEL을 붙인다. 도보 일정은 모든 숙박일의 마지막 일반 장소에서 20분 이내인
+  숙소를 우선하고, 없을 때만 30분 이내까지 완화한다. 30분 이내 숙소도 없으면 숙소를
+  억지로 붙이지 않고 옵션의 `hotelIncluded=false`, `hotelNotice` 안내를 반환한다.
 - 저장 상세 조회의 장소명·카테고리·주소·이미지·좌표·테마는
   `COURSE_DETAILS.PLACE_ID`로 `PLACES`를 조회해 채운다.
 - 도보·자동차는 OpenRouteService의 `foot-walking`·`driving-car` 프로필을 사용한다.
@@ -235,6 +236,8 @@ DB에 저장하지 않고 최근접 이웃과 2-opt로 방문 순서와 이동�
       "totalVisitTimeMinutes": 600,
       "totalCourseTimeMinutes": 682.85,
       "estimatedTravelTimes": true,
+      "hotelIncluded": true,
+      "hotelNotice": null,
       "days": [
         {
           "dayNo": 1,

@@ -13,11 +13,12 @@ import java.util.Locale;
 @Service
 public class VisitDurationService {
 
-    // PLACES의 4개 기본 카테고리별 체류시간이며, 알 수 없는 값은 60분으로 처리한다.
+    // 숙소는 DAY의 마지막 도착 지점이므로 체류시간을 합산하지 않는다.
+    // 나머지 PLACES 기본 카테고리와 알 수 없는 값에는 기존 체류시간을 적용한다.
     private static final int ATTRACTION_MINUTES = 90;
     private static final int RESTAURANT_MINUTES = 60;
     private static final int CAFE_MINUTES = 60;
-    private static final int ACCOMMODATION_MINUTES = 30;
+    private static final int ACCOMMODATION_MINUTES = 0;
     private static final int DEFAULT_MINUTES = 60;
 
     /**

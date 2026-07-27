@@ -28,6 +28,7 @@ public class PlaceCandidateDto {
     private Long placeId;
     private String placeName;
     private String category;
+    private String region;
     private String address;
     private String roadAddress;
     private String imageUrl;

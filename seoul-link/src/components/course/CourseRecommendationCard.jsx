@@ -15,6 +15,7 @@ import {
     Plus,
     Route,
     Sparkles,
+    TriangleAlert,
     Utensils,
 } from 'lucide-react';
 
@@ -48,6 +49,11 @@ const optionMeta = {
         tags: ['취향·거리 균형', '대표 명소', '추천 코스'],
     },
 };
+
+function isHotelCategory(category) {
+    const normalized = String(category || '').trim().toUpperCase();
+    return ['HOTEL', '숙소', '호텔', 'ACCOMMODATION', 'LODGING'].includes(normalized);
+}
 
 function formatMinutes(value) {
     const minutes = Math.max(0, Math.round(Number(value) || 0));
@@ -124,6 +130,10 @@ function RouteStop({ place, fallbackImage, hasPrevious }) {
                         <img
                             src={imageUrl}
                             alt=""
+                            loading="lazy"
+                            decoding="async"
+                            fetchPriority="low"
+                            data-photo-filter="off"
                             onError={(event) => {
                                 if (fallbackImage && event.currentTarget.src !== fallbackImage) {
                                     event.currentTarget.src = fallbackImage;
@@ -146,9 +156,7 @@ function RouteStop({ place, fallbackImage, hasPrevious }) {
 }
 
 /** 상세보기 버튼을 눌렀을 때 현재 일차의 이동·체류 정보를 펼쳐 보여줍니다. */
-function ExpandedSchedule({ days, transportMode, isRouteDetailsLoading }) {
-    const transport = getTransportMeta(transportMode);
-
+function ExpandedSchedule({ days, transportMode }) {
     return (
         <div className="course-result-expanded">
             {days.map((day) => {
@@ -165,19 +173,13 @@ function ExpandedSchedule({ days, transportMode, isRouteDetailsLoading }) {
                         <strong>{day.visitDate || '날짜 미정'}</strong>
                     </div>
 
-                    {isRouteDetailsLoading && (
-                        <p className="course-route-detail-state loading" role="status">
-                            실제 {transport?.label || '이동'} 경로를 확인하고 있어요.
-                        </p>
-                    )}
-                    {!isRouteDetailsLoading && routeDetailsUnavailable && (
+                    {routeDetailsUnavailable && (
                         <p className="course-route-detail-state unavailable" role="status">
-                            {transport?.label || '이동'} 경로를 일시적으로 확인할 수 없습니다.
+                            이동 경로를 일시적으로 확인할 수 없습니다.
                             현재는 예상 거리와 시간으로 표시합니다.
                         </p>
                     )}
-                    {!isRouteDetailsLoading
-                        && !routeDetailsUnavailable
+                    {!routeDetailsUnavailable
                         && day.routeDetailsAttempted
                         && hasEstimatedLeg
                         && (
@@ -232,7 +234,11 @@ function ExpandedSchedule({ days, transportMode, isRouteDetailsLoading }) {
                                     </span>
                                     <span className="course-result-expanded-place">
                                         <strong>{place.placeName || '장소 정보 준비 중'}</strong>
-                                        <small>{meta.label} · 예상 체류 {formatMinutes(place.expectedVisitMinutes)}</small>
+                                        <small>
+                                            {isHotelCategory(place.category)
+                                                ? meta.label
+                                                : `${meta.label} · 예상 체류 ${formatMinutes(place.expectedVisitMinutes)}`}
+                                        </small>
                                     </span>
                                     <span className="course-result-expanded-time">
                                         {place.expectedVisitTimeHHmm || place.visitTime || '--:--'}
@@ -260,12 +266,10 @@ function CourseRecommendationCard({
     isSelectionDisabled,
     isSaving,
     isSaved,
-    isRouteDetailsLoading,
     onToggleCompare,
     onToggleSaveSelection,
     onFocusOption,
     onActiveDayChange,
-    onRequestRouteDetails,
 }) {
     const days = useMemo(
         () => (Array.isArray(option.days) ? option.days : []),
@@ -359,6 +363,13 @@ function CourseRecommendationCard({
                         {option.description || '취향 결과와 장소 간 이동 거리를 반영해 만든 맞춤 코스예요.'}
                     </p>
 
+                    {option.hotelNotice && (
+                        <p className="course-result-hotel-notice" role="status">
+                            <TriangleAlert size={14} aria-hidden="true" />
+                            <span>{option.hotelNotice}</span>
+                        </p>
+                    )}
+
                     <div className="course-result-meta">
                         <span><Clock3 size={15} aria-hidden="true" />{formatMinutes(displayCourseTime)}</span>
                         <span>
@@ -397,12 +408,6 @@ function CourseRecommendationCard({
                                     onClick={() => {
                                         onFocusOption(option);
                                         onActiveDayChange(day.dayNo);
-                                        if (isExpanded) {
-                                            onRequestRouteDetails?.(
-                                                option,
-                                                day.dayNo,
-                                            );
-                                        }
                                     }}
                                 >
                                     DAY {day.dayNo}
@@ -428,24 +433,13 @@ function CourseRecommendationCard({
                         className="course-result-detail-btn"
                         type="button"
                         aria-expanded={isExpanded}
-                        aria-busy={isRouteDetailsLoading}
                         onClick={() => {
                             const nextExpanded = !isExpanded;
                             setIsExpanded(nextExpanded);
                             onFocusOption(option);
-                            if (nextExpanded) {
-                                onRequestRouteDetails?.(
-                                    option,
-                                    activeDay.dayNo,
-                                );
-                            }
                         }}
                     >
-                        {isRouteDetailsLoading
-                            ? '교통편 확인 중'
-                            : isExpanded
-                                ? '일정 접기'
-                                : '코스 상세보기'}
+                        {isExpanded ? '일정 접기' : '코스 상세보기'}
                         {isExpanded
                             ? <ChevronUp size={16} aria-hidden="true" />
                             : <ChevronDown size={16} aria-hidden="true" />}
@@ -498,7 +492,6 @@ function CourseRecommendationCard({
                 <ExpandedSchedule
                     days={[activeDay]}
                     transportMode={transportMode}
-                    isRouteDetailsLoading={isRouteDetailsLoading}
                 />
             )}
         </article>

@@ -30,6 +30,7 @@ public record GuestSurveySubmitResponse(
                 survey.getExpiresAt(),
                 SurveyResultResponse.from(
                         surveyResult,
+                        survey,
                         travelType
                 )
         );

@@ -1,6 +1,7 @@
 package com.seoulink.backend.domain.survey.dto.response;
 
 import com.seoulink.backend.domain.survey.entity.SurveyResult;
+import com.seoulink.backend.domain.survey.entity.TravelSurvey;
 import com.seoulink.backend.domain.survey.entity.TravelTypeMaster;
 
 import java.time.LocalDateTime;
@@ -13,6 +14,7 @@ public record SurveyResultResponse(
         Long resultId,
         Long surveyId,
         String travelCode,
+        String companionType,
 
         String typeTitle,
         String typeDescription,
@@ -25,12 +27,14 @@ public record SurveyResultResponse(
     //설문 결과와 여행 유형 엔티티를 응답 DTO로 변환
     public static SurveyResultResponse from(
             SurveyResult result,
+            TravelSurvey survey,
             TravelTypeMaster travelType
     ) {
         return new SurveyResultResponse(
                 result.getResultId(),
                 result.getSurveyId(),
                 result.getTravelCode().trim(),
+                survey.getCompanionType(),
 
                 travelType.getTypeTitle(),
                 travelType.getTypeDescription(),

@@ -33,6 +33,10 @@ public class CourseRecommendRequest {
     private String travelCode;
     private String companionType;
 
+    // 취향 점수로 계산한 상위 구이며, 순위별 가산점만 적용하고 후보는 서울 전체를 유지한다.
+    @Builder.Default
+    private List<String> preferredRegions = new ArrayList<>();
+
     // 한 요청에서 생성하는 세 추천 옵션 모두에 동일하게 적용할 이동수단이다.
     private TransportMode transportMode;
 

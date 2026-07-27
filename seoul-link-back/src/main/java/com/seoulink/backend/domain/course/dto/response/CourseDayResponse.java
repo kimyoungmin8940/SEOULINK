@@ -28,6 +28,13 @@ public class CourseDayResponse {
     private Integer dailyVisitTimeMinutes;
     private Double dailyCourseTimeMinutes;
 
+    // 후보 부족으로 목표 장소 수를 줄였는지와 화면 안내에 필요한 수량 정보이다.
+    private Boolean placeCountAdjusted;
+    private String adjustmentReason;
+    private String adjustmentNotice;
+    private Integer requestedPlaceCount;
+    private Integer actualPlaceCount;
+
     // 해당 날짜 안에서 visitOrder 오름차순으로 정렬된 장소 목록이다.
     @Builder.Default
     private List<CoursePlaceResponse> places = new ArrayList<>();

@@ -106,6 +106,11 @@ function toFiniteNumber(value, fallback = 0) {
     return Number.isFinite(number) ? number : fallback;
 }
 
+function isHotelCategory(category) {
+    const normalized = String(category || '').trim().toUpperCase();
+    return ['HOTEL', '숙소', '호텔', 'ACCOMMODATION', 'LODGING'].includes(normalized);
+}
+
 /** 목록에서 상세로 이동할 때 함께 저장한 요약과 돌아갈 경로를 읽습니다. */
 function readCourseDetailEntry(courseId) {
     try {
@@ -158,6 +163,9 @@ function normalizeDays(rawDays) {
 
         const places = sortedPlaces.map((place, placeIndex) => {
             const explicitTime = extractTime(place.expectedVisitTimeHHmm || place.visitTime);
+            const expectedVisitMinutes = isHotelCategory(place.category)
+                ? 0
+                : toFiniteNumber(place.expectedVisitMinutes);
 
             // 서버가 예상 시각을 주지 않으면 10:00부터 이동·체류시간을 누적해 표시합니다.
             if (explicitTime) {
@@ -172,13 +180,13 @@ function normalizeDays(rawDays) {
             ];
 
             timeCursor = (timeToMinutes(displayVisitTime) ?? timeCursor)
-                + toFiniteNumber(place.expectedVisitMinutes);
+                + expectedVisitMinutes;
 
             // 거리·시간·경로 종류는 모두 이전 장소에서 현재 장소로 들어오는 한 구간의 값입니다.
             return {
                 ...place,
                 visitOrder: toFiniteNumber(place.visitOrder, placeIndex + 1),
-                expectedVisitMinutes: toFiniteNumber(place.expectedVisitMinutes),
+                expectedVisitMinutes,
                 distanceFromPreviousKm: toFiniteNumber(place.distanceFromPreviousKm),
                 travelTimeFromPreviousMinutes: toFiniteNumber(
                     place.travelTimeFromPreviousMinutes,
@@ -206,21 +214,19 @@ function normalizeDays(rawDays) {
             (sum, place) => sum + place.expectedVisitMinutes,
             0,
         );
+        const dailyTravelTimeMinutes = toFiniteNumber(
+            day.dailyTravelTimeMinutes,
+            derivedTravelTime,
+        );
 
         return {
             ...day,
             dayNo: toFiniteNumber(day.dayNo, dayIndex + 1),
             visitDate: day.visitDate || places[0]?.visitDate || null,
             dailyDistanceKm: toFiniteNumber(day.dailyDistanceKm, derivedDistance),
-            dailyTravelTimeMinutes: toFiniteNumber(
-                day.dailyTravelTimeMinutes,
-                derivedTravelTime,
-            ),
-            dailyVisitTimeMinutes: toFiniteNumber(day.dailyVisitTimeMinutes, derivedVisitTime),
-            dailyCourseTimeMinutes: toFiniteNumber(
-                day.dailyCourseTimeMinutes,
-                derivedTravelTime + derivedVisitTime,
-            ),
+            dailyTravelTimeMinutes,
+            dailyVisitTimeMinutes: derivedVisitTime,
+            dailyCourseTimeMinutes: dailyTravelTimeMinutes + derivedVisitTime,
             places,
         };
     });
@@ -234,6 +240,11 @@ function normalizeCourseDetail(rawCourse) {
         (sum, day) => sum + toFiniteNumber(day[field]),
         0,
     );
+    const totalTravelTimeMinutes = toFiniteNumber(
+        rawCourse?.totalTravelTimeMinutes,
+        sumDays('dailyTravelTimeMinutes'),
+    );
+    const totalVisitTimeMinutes = sumDays('dailyVisitTimeMinutes');
 
     return {
         ...rawCourse,
@@ -257,18 +268,9 @@ function normalizeCourseDetail(rawCourse) {
         placeCount: toFiniteNumber(rawCourse?.placeCount, places.length),
         dayCount: toFiniteNumber(rawCourse?.dayCount, days.length),
         totalDistanceKm: toFiniteNumber(rawCourse?.totalDistanceKm, sumDays('dailyDistanceKm')),
-        totalTravelTimeMinutes: toFiniteNumber(
-            rawCourse?.totalTravelTimeMinutes,
-            sumDays('dailyTravelTimeMinutes'),
-        ),
-        totalVisitTimeMinutes: toFiniteNumber(
-            rawCourse?.totalVisitTimeMinutes,
-            sumDays('dailyVisitTimeMinutes'),
-        ),
-        totalCourseTimeMinutes: toFiniteNumber(
-            rawCourse?.totalCourseTimeMinutes,
-            sumDays('dailyCourseTimeMinutes'),
-        ),
+        totalTravelTimeMinutes,
+        totalVisitTimeMinutes,
+        totalCourseTimeMinutes: totalTravelTimeMinutes + totalVisitTimeMinutes,
         days,
     };
 }

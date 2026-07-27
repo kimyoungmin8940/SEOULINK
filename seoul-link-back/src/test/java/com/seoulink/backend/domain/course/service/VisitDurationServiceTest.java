@@ -24,7 +24,7 @@ class VisitDurationServiceTest {
         assertEquals(90, visitDurationService.calculateExpectedVisitMinutes("TOUR"));
         assertEquals(60, visitDurationService.calculateExpectedVisitMinutes("RESTAURANT"));
         assertEquals(60, visitDurationService.calculateExpectedVisitMinutes("CAFE"));
-        assertEquals(30, visitDurationService.calculateExpectedVisitMinutes("HOTEL"));
+        assertEquals(0, visitDurationService.calculateExpectedVisitMinutes("HOTEL"));
     }
 
     @Test
@@ -33,7 +33,7 @@ class VisitDurationServiceTest {
         assertEquals(90, visitDurationService.calculateExpectedVisitMinutes("관광지"));
         assertEquals(60, visitDurationService.calculateExpectedVisitMinutes("식당"));
         assertEquals(60, visitDurationService.calculateExpectedVisitMinutes("카페"));
-        assertEquals(30, visitDurationService.calculateExpectedVisitMinutes("숙소"));
+        assertEquals(0, visitDurationService.calculateExpectedVisitMinutes("숙소"));
     }
 
     @Test

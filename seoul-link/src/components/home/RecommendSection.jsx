@@ -21,29 +21,95 @@ import walkingImage from '../../assets/images/moods/mood-walking-alley.png';
 const themeCourses = mockThemeCourseListResponse.data;
 const fallbackImages = [hanokImage, sunsetImage, rainyCafeImage, walkingImage];
 
+// 로그인 기능이 완성되기 전 콘솔 테스트와 기존 프론트 저장값을 함께 지원합니다.
+const LOCAL_RECOMMENDED_COURSE_KEYS = [
+    'recommendedCourses',
+    'recentRecommendedCourses',
+    'seoulinkRecommendedCourses',
+    'latestRecommendedCourses',
+    'myRecommendedCourses',
+];
+
+function safelyParse(value) {
+    if (!value || typeof value !== 'string') return null;
+
+    try {
+        return JSON.parse(value);
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * 브라우저에 저장된 임시/구버전 추천 코스를 읽습니다.
+ * localStorage를 우선하고, 같은 값이 sessionStorage에만 있어도 찾습니다.
+ */
+function readLocalRecommendedCourses() {
+    for (const storage of [localStorage, sessionStorage]) {
+        for (const key of LOCAL_RECOMMENDED_COURSE_KEYS) {
+            const parsed = safelyParse(storage.getItem(key));
+            const courses = normalizeRecommendedCourseList(parsed, {
+                fallbackImages,
+            });
+
+            if (courses.length > 0) {
+                return courses;
+            }
+        }
+    }
+
+    return [];
+}
+
 function RecommendSection() {
     const isLoggedIn = checkIsLoggedIn();
     const memberId = useMemo(() => getCurrentMemberId(), []);
-    const [myRecommendedCourses, setMyRecommendedCourses] = useState([]);
+    const [myRecommendedCourses, setMyRecommendedCourses] = useState(
+        () => (isLoggedIn ? readLocalRecommendedCourses() : []),
+    );
 
-    // 백엔드의 설문 기반 저장 코스 이력을 최신순으로 받아 메인에는 앞의 4개만 표시합니다.
+    // 브라우저 임시 추천 코스를 먼저 표시하고,
+    // 백엔드에 실제 저장 코스가 있으면 서버 결과로 교체합니다.
     useEffect(() => {
-        if (!isLoggedIn || !memberId) return undefined;
+        if (!isLoggedIn) {
+            setMyRecommendedCourses([]);
+            return undefined;
+        }
+
+        const localCourses = readLocalRecommendedCourses();
+
+        if (localCourses.length > 0) {
+            setMyRecommendedCourses(localCourses);
+        }
+
+        // 로그인 통합 전 memberId가 없거나 가짜 로그인만 한 경우에는
+        // 브라우저 저장 추천 코스를 그대로 유지합니다.
+        if (!memberId) return undefined;
 
         const controller = new AbortController();
 
         getRecommendedCourses(memberId, { signal: controller.signal })
             .then((response) => {
-                const courses = normalizeRecommendedCourseList(response, {
+                const serverCourses = normalizeRecommendedCourseList(response, {
                     fallbackImages,
                 });
 
-                setMyRecommendedCourses(courses);
+                // 실제 서버 데이터가 있을 때만 브라우저 임시 데이터를 교체합니다.
+                // 서버가 빈 배열을 반환하면 기존 로컬 추천 코스를 유지합니다.
+                if (serverCourses.length > 0) {
+                    setMyRecommendedCourses(serverCourses);
+                } else if (localCourses.length === 0) {
+                    setMyRecommendedCourses([]);
+                }
             })
             .catch((error) => {
                 if (error?.name === 'AbortError') return;
-                // 메인 화면 전체를 막지 않고 기본 인기 테마 카드를 유지합니다.
-                setMyRecommendedCourses([]);
+
+                // test-token처럼 실제 인증이 되지 않아 API가 실패해도
+                // 콘솔에 저장한 추천 코스를 지우지 않습니다.
+                if (localCourses.length === 0) {
+                    setMyRecommendedCourses([]);
+                }
             });
 
         return () => controller.abort();
