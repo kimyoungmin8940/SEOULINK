@@ -41,6 +41,7 @@ import {
 } from '../../utils/courseTravelCode';
 import recommendationPreview from '../../mocks/courseRecommendation.json';
 import { mockThemeCourseListResponse } from '../../mocks/homeMockData';
+import { getThemeCourseById } from '../../data/themeCourseData';
 import hanokImage from '../../assets/images/moods/mood-hanok-photo.png';
 import walkingImage from '../../assets/images/moods/mood-walking-alley.png';
 import localFoodImage from '../../assets/images/moods/mood-local-food.png';
@@ -83,7 +84,7 @@ const COURSE_DETAIL_ENTRY_KEY = 'seoulinkCourseDetailEntry';
 /** 지원하는 상세 경로 전체가 정확히 일치할 때만 조회할 courseId를 구합니다. */
 function getCourseId() {
     const match = window.location.pathname.match(
-        /^(?:\/courses\/(?:recommendations\/)?|\/mypage\/courses\/)([1-9]\d*)\/?$/,
+        /^(?:\/courses\/themes\/[^/]+\/|\/courses\/(?:recommendations\/)?|\/mypage\/courses\/)([1-9]\d*)\/?$/,
     );
     const courseId = Number(match?.[1]);
 
@@ -92,6 +93,14 @@ function getCourseId() {
 
 /** 현재 상세 경로의 종류에 맞는 안전한 목록 복귀 경로를 반환합니다. */
 function getCourseListPath() {
+    const themeMatch = window.location.pathname.match(
+        /^\/courses\/themes\/([^/]+)\/[1-9]\d*\/?$/,
+    );
+
+    if (themeMatch) {
+        return `/courses/themes/${themeMatch[1]}`;
+    }
+
     if (window.location.pathname.startsWith('/mypage/courses/')) {
         return '/mypage/courses';
     }
@@ -456,14 +465,40 @@ function CourseRouteMap({ day }) {
 function CourseDetailPage() {
     const courseId = useMemo(() => getCourseId(), []);
     const courseListPath = useMemo(() => getCourseListPath(), []);
+    const isThemeCoursePath = useMemo(
+        () => window.location.pathname.startsWith('/courses/themes/'),
+        [],
+    );
+    const themeCourse = useMemo(
+        () => (isThemeCoursePath ? getThemeCourseById(courseId) : null),
+        [courseId, isThemeCoursePath],
+    );
+    const initialThemeCourse = useMemo(
+        () => (themeCourse ? normalizeCourseDetail(themeCourse) : null),
+        [themeCourse],
+    );
     const memberId = useMemo(() => getCurrentMemberId(), []);
     const previewCourse = useMemo(() => buildPreviewCourse(courseId), [courseId]);
-    const [course, setCourse] = useState(null);
-    const [status, setStatus] = useState(courseId ? 'loading' : 'redirecting');
-    const [source, setSource] = useState('api');
-    const [errorMessage, setErrorMessage] = useState('');
+    const [course, setCourse] = useState(initialThemeCourse);
+    const [status, setStatus] = useState(
+        courseId
+            ? isThemeCoursePath
+                ? initialThemeCourse
+                    ? 'success'
+                    : 'not-found'
+                : 'loading'
+            : 'redirecting',
+    );
+    const [source, setSource] = useState(isThemeCoursePath ? 'theme' : 'api');
+    const [errorMessage, setErrorMessage] = useState(
+        isThemeCoursePath && !initialThemeCourse
+            ? '선택한 테마 코스를 찾을 수 없습니다.'
+            : '',
+    );
     const [reloadKey, setReloadKey] = useState(0);
-    const [activeDayNo, setActiveDayNo] = useState(1);
+    const [activeDayNo, setActiveDayNo] = useState(
+        initialThemeCourse?.days[0]?.dayNo ?? 1,
+    );
     // 북마크 API가 연결되기 전까지 상세 화면 안에서 선택 상태만 표시합니다.
     const [isBookmarked, setIsBookmarked] = useState(false);
     const [toast, setToast] = useState(null);
@@ -471,6 +506,10 @@ function CourseDetailPage() {
     useEffect(() => {
         if (!courseId) {
             window.location.replace(courseListPath);
+            return undefined;
+        }
+
+        if (isThemeCoursePath) {
             return undefined;
         }
 
@@ -508,7 +547,7 @@ function CourseDetailPage() {
             });
 
         return () => controller.abort();
-    }, [courseId, courseListPath, memberId, reloadKey]);
+    }, [courseId, courseListPath, isThemeCoursePath, memberId, reloadKey]);
 
     const activeDay = course?.days.find((day) => day.dayNo === activeDayNo)
         || course?.days[0]
@@ -517,9 +556,19 @@ function CourseDetailPage() {
         (day) => day.dayNo === activeDay?.dayNo,
     ) ?? -1;
     const themeTags = course ? getThemeTags(course) : [];
-    const dateRange = course ? getDateRange(course.days) : '';
+    const dateRange = course
+        ? course.courseType === 'THEME'
+            ? course.dayCount > 1
+                ? `${course.dayCount - 1}박 ${course.dayCount}일`
+                : '당일치기'
+            : getDateRange(course.days)
+        : '';
+
     const travelCodeLabels = course?.travelCode
-        ? course.travelCode.split('').map((letter) => travelTypeLabels[letter]).filter(Boolean)
+        ? course.travelCode
+            .split('')
+            .map((letter) => travelTypeLabels[letter])
+            .filter(Boolean)
         : [];
     const transport = getTransportMeta(course?.transportMode);
     const scheduleNotice = course?.estimatedTravelTimes
@@ -784,7 +833,9 @@ function CourseDetailPage() {
                                     <div>
                                         <span>
                                             {activeDay
-                                                ? `DAY ${activeDay.dayNo} · ${formatDate(activeDay.visitDate, { compact: true })}`
+                                                ? `DAY ${activeDay.dayNo}${activeDay.visitDate
+                                                    ? ` · ${formatDate(activeDay.visitDate, { compact: true })}`
+                                                    : ''}`
                                                 : '저장된 코스'}
                                         </span>
                                         <h2>상세 일정</h2>
@@ -811,7 +862,9 @@ function CourseDetailPage() {
                                                         onClick={() => setActiveDayNo(day.dayNo)}
                                                     >
                                                         DAY {day.dayNo}
-                                                        <small>{formatDate(day.visitDate, { compact: true })}</small>
+                                                        {day.visitDate && (
+                                                            <small>{formatDate(day.visitDate, { compact: true })}</small>
+                                                        )}
                                                     </button>
                                                 ))}
                                             </div>

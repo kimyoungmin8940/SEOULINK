@@ -82,6 +82,14 @@ function getAverageScore(places) {
 }
 
 function getThemeTags(option, places) {
+    const explicitTags = Array.isArray(option.tags)
+        ? [...new Set(option.tags.filter(Boolean))]
+        : [];
+
+    if (explicitTags.length > 0) {
+        return explicitTags.slice(0, 4);
+    }
+
     const themeFields = [
         ['themePalaceCultureYn', '궁궐·문화'],
         ['themeNatureHangangYn', '자연·한강'],
@@ -254,6 +262,8 @@ function CourseRecommendationCard({
     transportMode,
     fallbackImage,
     activeDayNo,
+    variant = 'recommendation',
+    detailPath = null,
     isEstimatedTravelTime,
     isCompared,
     isSelectedForSave,
@@ -280,7 +290,15 @@ function CourseRecommendationCard({
         () => days.flatMap((day) => (Array.isArray(day.places) ? day.places : [])),
         [days],
     );
-    const meta = optionMeta[option.optionType] || optionMeta.BALANCED;
+    const isThemeCourse = variant === 'theme';
+    const defaultMeta = optionMeta[option.optionType] || optionMeta.BALANCED;
+    const meta = isThemeCourse
+        ? {
+            badge: option.badge || 'THEME',
+            tone: option.tone || 'balanced',
+            shortLabel: option.optionName || '테마 추천',
+        }
+        : defaultMeta;
     const transport = getTransportMeta(transportMode);
     const coverImage = option.coverImageUrl
         || allPlaces.map(getPlaceImage).find(Boolean)
@@ -309,9 +327,9 @@ function CourseRecommendationCard({
 
     return (
         <article
-            className={`course-result-card ${meta.tone}${isExpanded ? ' expanded' : ''}`}
-            onMouseEnter={() => onFocusOption(option)}
-            onFocusCapture={() => onFocusOption(option)}
+            className={`course-result-card ${meta.tone}${isExpanded ? ' expanded' : ''}${isThemeCourse ? ' theme-course-card' : ''}`}
+            onMouseEnter={() => onFocusOption?.(option)}
+            onFocusCapture={() => onFocusOption?.(option)}
         >
             <div className="course-result-card-main">
                 <div className="course-result-cover">
@@ -376,16 +394,30 @@ function CourseRecommendationCard({
                         {tags.map((tag) => <span key={tag}>{tag}</span>)}
                     </div>
 
-                    {score != null && (
+                    {!isThemeCourse && score != null && (
                         <div className="course-result-score">
                             <Sparkles size={15} strokeWidth={2.2} aria-hidden="true" />
                             추천 점수 <strong>{score}</strong>
                         </div>
                     )}
+
+                    {isThemeCourse && (
+                        <button
+                            className="theme-course-detail-button"
+                            type="button"
+                            onClick={() => {
+                                if (detailPath) window.location.assign(detailPath);
+                            }}
+                        >
+                            코스 상세보기
+                            <ArrowRight size={16} aria-hidden="true" />
+                        </button>
+                    )}
                 </div>
             </div>
 
-            <div className="course-result-route-row">
+            {!isThemeCourse && (
+                <div className="course-result-route-row">
                 <div className="course-result-route-content">
                     {days.length > 1 && (
                         <div className="course-result-day-tabs" aria-label="일차 선택">
@@ -395,8 +427,8 @@ function CourseRecommendationCard({
                                     type="button"
                                     key={`${day.dayNo}-${day.visitDate}`}
                                     onClick={() => {
-                                        onFocusOption(option);
-                                        onActiveDayChange(day.dayNo);
+                                        onFocusOption?.(option);
+                                        onActiveDayChange?.(day.dayNo);
                                         if (isExpanded) {
                                             onRequestRouteDetails?.(
                                                 option,
@@ -423,78 +455,94 @@ function CourseRecommendationCard({
                     </ol>
                 </div>
 
-                <div className="course-result-card-actions">
-                    <button
-                        className="course-result-detail-btn"
-                        type="button"
-                        aria-expanded={isExpanded}
-                        aria-busy={isRouteDetailsLoading}
-                        onClick={() => {
-                            const nextExpanded = !isExpanded;
-                            setIsExpanded(nextExpanded);
-                            onFocusOption(option);
-                            if (nextExpanded) {
-                                onRequestRouteDetails?.(
-                                    option,
-                                    activeDay.dayNo,
-                                );
-                            }
-                        }}
-                    >
-                        {isRouteDetailsLoading
-                            ? '교통편 확인 중'
-                            : isExpanded
-                                ? '일정 접기'
-                                : '코스 상세보기'}
-                        {isExpanded
-                            ? <ChevronUp size={16} aria-hidden="true" />
-                            : <ChevronDown size={16} aria-hidden="true" />}
-                    </button>
+                <div className={`course-result-card-actions${isThemeCourse ? ' theme-only' : ''}`}>
+                    {isThemeCourse ? (
+                        <button
+                            className="course-result-detail-btn"
+                            type="button"
+                            onClick={() => {
+                                if (detailPath) window.location.assign(detailPath);
+                            }}
+                        >
+                            코스 상세보기
+                            <ArrowRight size={16} aria-hidden="true" />
+                        </button>
+                    ) : (
+                        <>
+                            <button
+                                className="course-result-detail-btn"
+                                type="button"
+                                aria-expanded={isExpanded}
+                                aria-busy={isRouteDetailsLoading}
+                                onClick={() => {
+                                    const nextExpanded = !isExpanded;
+                                    setIsExpanded(nextExpanded);
+                                    onFocusOption?.(option);
+                                    if (nextExpanded) {
+                                        onRequestRouteDetails?.(
+                                            option,
+                                            activeDay.dayNo,
+                                        );
+                                    }
+                                }}
+                            >
+                                {isRouteDetailsLoading
+                                    ? '교통편 확인 중'
+                                    : isExpanded
+                                        ? '일정 접기'
+                                        : '코스 상세보기'}
+                                {isExpanded
+                                    ? <ChevronUp size={16} aria-hidden="true" />
+                                    : <ChevronDown size={16} aria-hidden="true" />}
+                            </button>
 
-                    <button
-                        className={`course-result-compare-btn${isCompared ? ' selected' : ''}`}
-                        type="button"
-                        aria-pressed={isCompared}
-                        onClick={() => onToggleCompare(option.optionNo)}
-                    >
-                        {isCompared ? <Check size={15} aria-hidden="true" /> : <Plus size={15} aria-hidden="true" />}
-                        {isCompared ? (
-                            <span className="course-result-compare-label">
-                                비교에
-                                <br />
-                                담김
-                            </span>
-                        ) : '비교 담기'}
-                    </button>
+                            <button
+                                className={`course-result-compare-btn${isCompared ? ' selected' : ''}`}
+                                type="button"
+                                aria-pressed={isCompared}
+                                onClick={() => onToggleCompare?.(option.optionNo)}
+                            >
+                                {isCompared ? <Check size={15} aria-hidden="true" /> : <Plus size={15} aria-hidden="true" />}
+                                {isCompared ? (
+                                    <span className="course-result-compare-label">
+                                        비교에
+                                        <br />
+                                        담김
+                                    </span>
+                                ) : '비교 담기'}
+                            </button>
 
-                    <button
-                        className={`course-result-save-btn${isSelectedForSave ? ' selected' : ''}${isSaved ? ' saved' : ''}`}
-                        type="button"
-                        disabled={isSelectionDisabled || isSaving || isSaved}
-                        aria-pressed={isSelectedForSave || isSaved}
-                        onClick={() => onToggleSaveSelection(option.optionNo)}
-                    >
-                        {isSelectedForSave || isSaved
-                            ? <Check size={16} aria-hidden="true" />
-                            : <Plus size={16} aria-hidden="true" />}
-                        {isSaving && isSelectedForSave
-                            ? '저장 중...'
-                            : isSaved
-                                ? '저장 완료'
-                                : isSelectedForSave
-                                    ? (
-                                        <span className="course-result-save-label">
-                                            저장
-                                            <br />
-                                            선택됨
-                                        </span>
-                                    )
-                                    : '저장 선택'}
-                    </button>
+                            <button
+                                className={`course-result-save-btn${isSelectedForSave ? ' selected' : ''}${isSaved ? ' saved' : ''}`}
+                                type="button"
+                                disabled={isSelectionDisabled || isSaving || isSaved}
+                                aria-pressed={isSelectedForSave || isSaved}
+                                onClick={() => onToggleSaveSelection?.(option.optionNo)}
+                            >
+                                {isSelectedForSave || isSaved
+                                    ? <Check size={16} aria-hidden="true" />
+                                    : <Plus size={16} aria-hidden="true" />}
+                                {isSaving && isSelectedForSave
+                                    ? '저장 중...'
+                                    : isSaved
+                                        ? '저장 완료'
+                                        : isSelectedForSave
+                                            ? (
+                                                <span className="course-result-save-label">
+                                                    저장
+                                                    <br />
+                                                    선택됨
+                                                </span>
+                                            )
+                                            : '저장 선택'}
+                            </button>
+                        </>
+                    )}
                 </div>
-            </div>
+                </div>
+            )}
 
-            {isExpanded && (
+            {!isThemeCourse && isExpanded && (
                 <ExpandedSchedule
                     days={[activeDay]}
                     transportMode={transportMode}
