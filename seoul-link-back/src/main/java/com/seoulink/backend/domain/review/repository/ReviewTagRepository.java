@@ -11,6 +11,13 @@ import java.util.List;
 public interface ReviewTagRepository extends JpaRepository<ReviewTag, Long> {
     List<ReviewTag> findByReviewId(Long reviewId);
     void deleteByReviewId(Long reviewId);
-    @Query("select t.tagName, count(t) from ReviewTag t group by t.tagName order by count(t) desc")
+    @Query("""
+        select t.tagName, count(t)
+        from ReviewTag t, Review r
+        where r.reviewId = t.reviewId
+          and r.isDeleted = 'N'
+        group by t.tagName
+        order by count(t) desc
+    """)
     List<Object[]> findPopularTags();
 }

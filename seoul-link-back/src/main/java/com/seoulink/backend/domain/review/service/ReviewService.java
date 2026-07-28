@@ -142,7 +142,7 @@ public class ReviewService {
         return "liked";
     }
     @Transactional
-    // 실제 행을 제거하지 않고 논리 삭제한 뒤 장소의 리뷰 통계를 다시 계산한다.
+    // 실제 행을 제거하지 않고 논리 삭제한다.
     public void deleteReview(Long reviewId, Long memberId) {
         Review review=activeReview(reviewId);
         requireOwner(review,memberId);

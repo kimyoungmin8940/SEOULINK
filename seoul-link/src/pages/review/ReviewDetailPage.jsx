@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { CalendarDays, Camera, Heart, MapPin, MessageCircle, Route, Star, UsersRound } from 'lucide-react';
+import { CalendarDays, Camera, Heart, MapPin, MessageCircle, Pencil, Route, Star, Trash2, UsersRound } from 'lucide-react';
 import Header from '../../components/common/Header';
 import Footer from '../../components/common/Footer';
-import { createComment, deleteReviewComment, getReviewComments, getReviewDetail, likeReview, recordReviewView } from '../../api/reviewApi';
+import { createComment, deleteReview, deleteReviewComment, getReviewComments, getReviewDetail, likeReview, recordReviewView } from '../../api/reviewApi';
 import { authStore } from '../../store/authStore';
 import '../../styles/review-pages.css';
 const dateText = value => value ? new Date(`${value}T00:00:00`).toLocaleDateString('ko-KR', {
@@ -79,6 +79,15 @@ function ReviewDetailPage() {
       setError(err.message || '댓글을 삭제하지 못했습니다.');
     }
   };
+  const removeReview = async () => {
+    if (!member?.memberId || !window.confirm('이 후기를 삭제할까요? 삭제한 후기는 복구할 수 없습니다.')) return;
+    try {
+      await deleteReview(reviewId, member.memberId);
+      window.location.href = '/reviews';
+    } catch (err) {
+      setError(err.message || '후기 삭제에 실패했습니다.');
+    }
+  };
 
   // 데이터 로딩 전·후 상태를 분리해 빈 화면이 표시되지 않도록 한다.
   if (error) return <><Header /><p className="review-message">{error}</p></>;
@@ -109,7 +118,7 @@ function ReviewDetailPage() {
                         <div className="story-place-line"><MapPin /> <strong>{review.placeName}</strong><span>{review.visitDate && dateText(review.visitDate)}</span></div>
                         <p className="story-content">{review.reviewContent}</p>
                         {photos.length > 0 && <div className={`story-photo-wall count-${Math.min(photos.length, 5)}`}>{photos.slice(0, 5).map((photo, index) => <figure key={`${photo}-${index}`}><img src={photo} alt={`${review.reviewTitle} 사진 ${index + 1}`} />{index === 4 && photos.length > 5 && <figcaption>+{photos.length - 5}<small>더보기</small></figcaption>}</figure>)}</div>}
-                        <div className="story-reaction-bar"><button className={review.likedByMe ? 'liked' : ''} onClick={toggleLike}><Heart fill={review.likedByMe ? 'currentColor' : 'none'} /> 도움이 됐어요 <b>{review.likeCount}</b></button><span>조회 {review.viewCount}</span></div>
+                        <div className="story-reaction-bar"><button className={review.likedByMe ? 'liked' : ''} onClick={toggleLike}><Heart fill={review.likedByMe ? 'currentColor' : 'none'} /> 도움이 됐어요 <b>{review.likeCount}</b></button><span>조회 {review.viewCount}</span>{member?.memberId === review.memberId && <span className="review-owner-actions"><a href={`/reviews/${reviewId}/edit`}><Pencil size={15} /> 수정</a><button type="button" className="review-delete" onClick={removeReview}><Trash2 size={15} /> 삭제</button></span>}</div>
                     </article>
                     <section className="story-comments"><h2>댓글 <em>{comments.length}</em></h2><form onSubmit={submitComment}><div className="comment-avatar">{member?.nickname?.slice(0, 1) || '나'}</div><input required value={comment} onChange={event => setComment(event.target.value)} maxLength="500" placeholder="따뜻한 댓글을 남겨주세요 :)" /><button>등록</button></form><div className="comment-list">{comments.map(item => <article key={item.commentId}><div className="comment-avatar muted">여</div><div className="comment-content"><div><strong>서울 여행자</strong><time>{item.createdAt?.slice(0, 10)}</time>{member?.memberId === item.memberId && <button type="button" className="comment-delete" onClick={() => removeComment(item.commentId)}>삭제</button>}</div><p>{item.content}</p></div></article>)}</div></section>
                 </div>

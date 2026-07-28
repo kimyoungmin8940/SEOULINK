@@ -75,15 +75,17 @@ async function request(path, options = {}) {
     const body = await parseResponseBody(response);
 
     if (!response.ok) {
-        const hasStructuredError = body
+        const hasErrorCode = body
             && typeof body === "object"
-            && typeof body.code === "string"
+            && typeof body.code === "string";
+        const hasErrorMessage = body
+            && typeof body === "object"
             && typeof body.message === "string";
 
         throw new ApiError(
             response.status,
-            hasStructuredError ? body.code : `HTTP_${response.status}`,
-            hasStructuredError
+            hasErrorCode ? body.code : `HTTP_${response.status}`,
+            hasErrorMessage
                 ? body.message
                 : `API 요청에 실패했습니다. (${response.status})`,
             body,
