@@ -19,3 +19,11 @@ export function checkNickname(nickname) {
         `/members/check-nickname?nickname=${encodeURIComponent(nickname)}`
     );
 }
+
+export function verifyPasswordResetMember(data) {
+    return apiClient.post("/members/password-reset/verify", data);
+}
+
+export function resetPassword(data) {
+    return apiClient.post("/members/password-reset", data);
+}

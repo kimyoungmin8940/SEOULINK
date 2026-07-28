@@ -193,7 +193,7 @@ export default function MyPage() {
             return;
         }
 
-        window.location.assign("/mypage/profile-edit");
+        window.location.assign("/find-password");
     };
 
     return (
