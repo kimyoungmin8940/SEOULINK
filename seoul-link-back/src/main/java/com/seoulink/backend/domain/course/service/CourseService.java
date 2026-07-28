@@ -1,5 +1,6 @@
 package com.seoulink.backend.domain.course.service;
 
+import com.seoulink.backend.domain.course.dto.request.CourseUpdateRequest;
 import com.seoulink.backend.domain.course.dto.response.CourseDetailResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseDayResponse;
 import com.seoulink.backend.domain.course.dto.response.CoursePlaceResponse;
@@ -154,6 +155,59 @@ public class CourseService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public List<CourseRecommendationResponse> getMemberCoursesByType(
+            Long memberId,
+            String courseType
+    ) {
+        validateMemberId(memberId);
+        return travelCourseRepository
+                .findByMemberIdAndCourseTypeOrderByCreatedAtDesc(memberId, courseType)
+                .stream()
+                .map(this::toRecommendationResponse)
+                .toList();
+    }
+
+    @Transactional
+    public CourseRecommendationResponse updateMemberCustomCourse(
+            Long courseId,
+            Long memberId,
+            CourseUpdateRequest request
+    ) {
+        TravelCourse course = getOwnedCourse(courseId, memberId, "CUSTOM");
+        String title = request.getTitle() == null ? "" : request.getTitle().trim();
+        if (title.isBlank()) {
+            throw new IllegalArgumentException("코스 제목은 필수입니다.");
+        }
+
+        String publicStatus = "Y".equalsIgnoreCase(request.getIsPublic()) ? "Y" : "N";
+        course.updateBasicInfo(
+                title,
+                request.getDescription(),
+                request.getRegion(),
+                publicStatus
+        );
+        return toRecommendationResponse(course);
+    }
+
+    @Transactional
+    public void deleteMemberCourse(Long courseId, Long memberId, String courseType) {
+        TravelCourse course = getOwnedCourse(courseId, memberId, courseType);
+        courseDetailRepository.deleteByCourseId(course.getCourseId());
+        travelCourseRepository.delete(course);
+    }
+
+    private TravelCourse getOwnedCourse(Long courseId, Long memberId, String expectedType) {
+        validateCourseId(courseId);
+        validateMemberId(memberId);
+        TravelCourse course = travelCourseRepository.findByCourseIdAndMemberId(courseId, memberId)
+                .orElseThrow(() -> courseNotFound(courseId));
+        if (!expectedType.equalsIgnoreCase(course.getCourseType())) {
+            throw new IllegalArgumentException("요청한 유형의 코스가 아닙니다.");
+        }
+        return course;
+    }
+
     /** 저장 엔티티를 추천·내 코스 목록 카드에서 사용하는 요약 응답으로 변환한다. */
     private CourseRecommendationResponse toRecommendationResponse(
             TravelCourse course
@@ -188,6 +242,8 @@ public class CourseService {
                 .description(course.getDescription())
                 .coverImageUrl(findCoverImage(details, placesById))
                 .courseType(course.getCourseType())
+                .region(course.getRegion())
+                .publicStatus(course.getPublicStatus())
                 .transportMode(resolveTransportMode(course))
                 .regions(regions)
                 .tags(createThemeTags(placesById.values()))
@@ -200,6 +256,7 @@ public class CourseService {
                 .totalVisitTimeMinutes(course.getTotalVisitTimeMinutes())
                 .totalCourseTimeMinutes(course.getTotalCourseTimeMinutes())
                 .createdAt(course.getCreatedAt())
+                .updatedAt(course.getUpdatedAt())
                 // 코스 하트 테이블 연동 전까지는 미선택 상태로 반환한다.
                 .liked(false)
                 .build();

@@ -2,6 +2,8 @@ package com.seoulink.backend.domain.member.controller;
 
 import com.seoulink.backend.domain.member.dto.request.MemberLoginRequest;
 import com.seoulink.backend.domain.member.dto.request.MemberSignupRequest;
+import com.seoulink.backend.domain.member.dto.request.PasswordResetRequest;
+import com.seoulink.backend.domain.member.dto.request.PasswordResetVerifyRequest;
 import com.seoulink.backend.domain.member.dto.response.MemberLoginResponse;
 import com.seoulink.backend.domain.member.service.MemberService;
 import jakarta.validation.Valid;
@@ -39,5 +41,15 @@ public class MemberController {
     @GetMapping("/check-nickname")
     public boolean checkNickname(@RequestParam String nickname) {
         return memberService.checkNickname(nickname);
+    }
+
+    @PostMapping("/password-reset/verify")
+    public boolean verifyPasswordResetMember(@Valid @RequestBody PasswordResetVerifyRequest request) {
+        return memberService.verifyPasswordResetMember(request);
+    }
+
+    @PostMapping("/password-reset")
+    public void resetPassword(@Valid @RequestBody PasswordResetRequest request) {
+        memberService.resetPassword(request);
     }
 }

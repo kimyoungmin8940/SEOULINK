@@ -14,6 +14,9 @@ export const getReviews = (params = {}) =>
     `/reviews?${query({ page: 0, size: 9, sort: 'date', ...params })}`,
   );
 
+export const getMemberReviews = (memberId, params = {}) =>
+  apiClient.get(`/reviews/members/${encodeURIComponent(memberId)}?${query({ page: 0, size: 10, sort: 'date', ...params })}`);
+
 /** 선택한 리뷰와 로그인 회원의 좋아요 상태를 조회한다. */
 export const getReviewDetail = (reviewId, memberId) =>
   apiClient.get(`/reviews/${reviewId}?${query({ memberId })}`);

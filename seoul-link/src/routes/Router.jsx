@@ -29,6 +29,7 @@ import ReviewEditPage from '../pages/review/ReviewEditPage';
 import MyPage from '../pages/mypage/MyPage';
 import MyTravelTypePage from '../pages/mypage/MyTravelTypePage';
 import MyCoursesPage from '../pages/mypage/MyCoursesPage';
+import MyCustomCoursesPage from '../pages/mypage/MyCustomCoursesPage';
 import MyFavoritesPage from '../pages/mypage/MyFavoritesPage';
 import MyReviewsPage from '../pages/mypage/MyReviewsPage';
 import PaymentHistoryPage from '../pages/mypage/PaymentHistoryPage';
@@ -144,6 +145,7 @@ function Router() {
         '/mypage': <MyPage />,
         '/mypage/travel-type': <MyTravelTypePage />,
         '/mypage/courses': <MyCoursesPage />,
+        '/mypage/custom-courses': <MyCustomCoursesPage />,
         '/mypage/favorites': <MyFavoritesPage />,
         '/mypage/reviews': <MyReviewsPage />,
         '/mypage/payments': <PaymentHistoryPage />,

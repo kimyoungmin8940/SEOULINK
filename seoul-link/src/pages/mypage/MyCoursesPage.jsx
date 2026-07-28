@@ -33,6 +33,13 @@ function getInitialPage() {
     return Number.isInteger(page) && page > 0 ? page : 1;
 }
 
+function getSelectedCourseType() {
+    const courseType = new URLSearchParams(window.location.search).get('type');
+    return ['SURVEY', 'CUSTOM', 'CHATBOT'].includes(courseType)
+        ? courseType
+        : null;
+}
+
 function getInitialState() {
     const memberId = getCurrentMemberId();
 
@@ -163,6 +170,7 @@ function MyCoursesPage() {
     const [errorMessage, setErrorMessage] = useState('');
     const [reloadKey, setReloadKey] = useState(0);
     const [requestedPage, setRequestedPage] = useState(getInitialPage);
+    const selectedCourseType = getSelectedCourseType();
 
     useEffect(() => {
         if (!initialState.memberId) return undefined;
@@ -189,10 +197,14 @@ function MyCoursesPage() {
         return () => controller.abort();
     }, [initialState, reloadKey]);
 
-    const totalPages = Math.max(1, Math.ceil(courses.length / COURSES_PER_PAGE));
+    const filteredCourses = selectedCourseType
+        ? courses.filter((course) => course.courseType === selectedCourseType)
+        : courses;
+    const hasCourses = filteredCourses.length > 0;
+    const totalPages = Math.max(1, Math.ceil(filteredCourses.length / COURSES_PER_PAGE));
     const currentPage = Math.min(requestedPage, totalPages);
     const pageStartIndex = (currentPage - 1) * COURSES_PER_PAGE;
-    const visibleCourses = courses.slice(
+    const visibleCourses = filteredCourses.slice(
         pageStartIndex,
         pageStartIndex + COURSES_PER_PAGE,
     );
@@ -232,7 +244,7 @@ function MyCoursesPage() {
                         <h1>내 코스</h1>
                         <span>추천받아 저장한 코스와 직접 만든 코스를 한곳에서 확인해요.</span>
                     </div>
-                    {status === 'success' && <strong>총 {courses.length}개</strong>}
+                    {status === 'success' && <strong>총 {filteredCourses.length}개</strong>}
                 </section>
 
                 {status === 'loading' && (
@@ -261,7 +273,7 @@ function MyCoursesPage() {
                     </section>
                 )}
 
-                {status === 'empty' && (
+                {(status === 'empty' || (status === 'success' && !hasCourses)) && (
                     <section className="my-courses-state">
                         <Route size={31} aria-hidden="true" />
                         <h2>아직 저장한 코스가 없어요</h2>
@@ -273,7 +285,7 @@ function MyCoursesPage() {
                     </section>
                 )}
 
-                {status === 'success' && (
+                {status === 'success' && hasCourses && (
                     <>
                         <section className="my-courses-grid" aria-label="저장한 내 코스 목록">
                             {visibleCourses.map((course) => (

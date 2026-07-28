@@ -5,6 +5,8 @@ export const API_BASE_URL = (
     import.meta.env?.VITE_API_BASE_URL || "/api"
 ).replace(/\/+$/, "");
 
+export const BACKEND_ORIGIN = API_BASE_URL.replace(/\/api$/, "");
+
 /** 화면에서 HTTP 상태와 백엔드 오류 코드를 함께 구분할 수 있는 공통 오류입니다. */
 export class ApiError extends Error {
     constructor(status, code, message, details = null) {
@@ -117,6 +119,12 @@ export const apiClient = {
     patch: (path, body, options = {}) => request(path, {
         ...options,
         method: "PATCH",
+        body: JSON.stringify(body),
+    }),
+
+    put: (path, body, options = {}) => request(path, {
+        ...options,
+        method: "PUT",
         body: JSON.stringify(body),
     }),
 

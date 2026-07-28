@@ -2,6 +2,8 @@ package com.seoulink.backend.domain.member.service;
 
 import com.seoulink.backend.domain.member.dto.request.MemberLoginRequest;
 import com.seoulink.backend.domain.member.dto.request.MemberSignupRequest;
+import com.seoulink.backend.domain.member.dto.request.PasswordResetRequest;
+import com.seoulink.backend.domain.member.dto.request.PasswordResetVerifyRequest;
 import com.seoulink.backend.domain.member.dto.LoginResponseDto;
 import com.seoulink.backend.domain.member.dto.response.MemberLoginResponse;
 import com.seoulink.backend.domain.member.entity.Member;
@@ -65,6 +67,18 @@ public class MemberService {
     public boolean checkEmail(String email) { return !memberRepository.existsByEmail(email); }
     public boolean checkNickname(String nickname) { return !memberRepository.existsByNickname(nickname); }
 
+    public boolean verifyPasswordResetMember(PasswordResetVerifyRequest request) {
+        findPasswordResetMember(request.getName(), request.getEmail());
+        return true;
+    }
+
+    @Transactional
+    public void resetPassword(PasswordResetRequest request) {
+        Member member = findPasswordResetMember(request.getName(), request.getEmail());
+        member.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        member.setUpdatedAt(LocalDateTime.now());
+    }
+
     @Transactional
     public LoginResponseDto socialLogin(String provider, String email, String name) {
         if (email == null || email.isBlank()) {
@@ -96,6 +110,19 @@ public class MemberService {
         payment.setOrderId("DEMO_SIGNUP_" + member.getMemberId());
         payment.markPaid("DEMO", LocalDateTime.now().plusDays(7));
         paymentRepository.save(payment);
+    }
+
+    private Member findPasswordResetMember(String name, String email) {
+        Member member = memberRepository.findByEmailIgnoreCaseAndName(email.trim(), name.trim())
+                .orElseThrow(() -> new IllegalArgumentException("일치하는 회원 정보를 찾을 수 없습니다."));
+
+        if (!"LOCAL".equals(member.getLoginType())) {
+            throw new IllegalArgumentException("소셜 로그인 회원은 해당 소셜 계정에서 비밀번호를 관리해주세요.");
+        }
+        if (!"ACTIVE".equals(member.getStatus())) {
+            throw new IllegalArgumentException("현재 비밀번호를 변경할 수 없는 회원입니다.");
+        }
+        return member;
     }
 
     private MemberLoginResponse toLoginResponse(Member member) {

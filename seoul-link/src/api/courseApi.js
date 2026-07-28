@@ -137,6 +137,41 @@ export const getMyCourses = (memberId, options = {}) => apiClient.get(
  * @param {RequestInit} [options]
  * @returns {Promise<import('../types/course').CourseSaveResponse>}
  */
+export const getSavedRecommendedCourses = (memberId, options = {}) => apiClient.get(
+    `/courses/members/${requirePositiveId(memberId, '회원 ID')}/saved`,
+    options,
+);
+
+export const getCustomCourses = (memberId, options = {}) => apiClient.get(
+    `/courses/members/${requirePositiveId(memberId, '회원 ID')}/custom`,
+    options,
+);
+
+export const removeSavedRecommendedCourse = (courseId, memberId, options = {}) =>
+    apiClient.delete(
+        `/courses/${requirePositiveId(courseId, '코스 ID')}/saved?memberId=${requirePositiveId(memberId, '회원 ID')}`,
+        options,
+    );
+
+export const updateCourse = (courseId, data, options = {}) => {
+    const { memberId, ...requestOptions } = options;
+    const query = memberId
+        ? `?memberId=${requirePositiveId(memberId, '회원 ID')}`
+        : '';
+
+    return apiClient.put(
+        `/courses/${requirePositiveId(courseId, '코스 ID')}${query}`,
+        data,
+        requestOptions,
+    );
+};
+
+export const deleteCourse = (courseId, memberId, options = {}) =>
+    apiClient.delete(
+        `/courses/${requirePositiveId(courseId, '코스 ID')}?memberId=${requirePositiveId(memberId, '회원 ID')}`,
+        options,
+    );
+
 export const createCustomCourse = (data, options = {}) => saveCourse(
     { ...data, courseType: 'CUSTOM' },
     options,

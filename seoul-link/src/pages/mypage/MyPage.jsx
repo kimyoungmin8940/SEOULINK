@@ -1,34 +1,48 @@
+import { useEffect, useState } from "react";
 import {
     Bookmark,
     BriefcaseBusiness,
     CalendarDays,
     ChevronRight,
     Clock3,
-    Coffee,
     CreditCard,
+    Footprints,
+    Heart,
+    Landmark,
+    Leaf,
     MapPin,
     MessageCircle,
-    MoonStar,
     Pencil,
-    PersonStanding,
-    RefreshCw,
     Route,
+    ShieldCheck,
     Sparkles,
-    Store,
+    Star,
     UserRound,
-    Utensils,
-    Waves,
+    WalletCards,
 } from "lucide-react";
 
 import Header from "../../components/common/Header";
 import Footer from "../../components/common/Footer";
+import { getMyTravelType } from "../../api/mypageApi";
+import { claimGuestSurvey } from "../../api/surveyApi";
+import {
+    getCourseDraft,
+    getCustomCourses,
+    getSavedRecommendedCourses,
+    removeSavedRecommendedCourse,
+} from "../../api/courseApi";
+import { getMemberReviews } from "../../api/reviewApi";
+import { getCodeTraits } from "../../data/travelPreferenceData";
 import { authStore } from "../../store/authStore";
 
 import heroImage from "../../assets/images/hero-seoul-main.png";
 import hanokImage from "../../assets/images/moods/mood-hanok-photo.png";
 import sunsetImage from "../../assets/images/moods/mood-sunset-seoul.png";
 import cafeImage from "../../assets/images/moods/mood-rainy-cafe.png";
-
+import mapPromoImage from "../../assets/images/mypage-map-promo.png";
+import {
+    storeCourseRecommendRequest
+} from "../../utils/courseRecommendationHandoff";
 import "../../styles/mypage.css";
 
 const menuItems = [
@@ -44,7 +58,7 @@ const menuItems = [
     },
     {
         label: "직접 만든 코스",
-        path: "/mypage/courses",
+        path: "/mypage/custom-courses",
         Icon: Route,
     },
     {
@@ -59,117 +73,213 @@ const menuItems = [
     },
     {
         label: "결제 내역",
-        path: "/mypage/payments",
+        path: "/payment",
         Icon: CreditCard,
     },
 ];
 
-const summaryItems = [
+const summaryDefinitions = [
     {
+        key: "saved",
         label: "저장한 추천 코스",
-        value: 4,
         Icon: Bookmark,
         color: "blue",
         path: "/mypage/courses",
     },
     {
+        key: "custom",
         label: "직접 만든 코스",
-        value: 3,
         Icon: Pencil,
         color: "cyan",
-        path: "/mypage/courses",
+        path: "/mypage/custom-courses",
     },
     {
+        key: "reviews",
         label: "작성한 후기",
-        value: 2,
         Icon: MessageCircle,
         color: "purple",
         path: "/mypage/reviews",
     },
 ];
 
-const tasteAxes = [
-    {
-        code: "A",
-        label: "활동형",
-    },
-    {
-        code: "T",
-        label: "역사·문화",
-    },
-    {
-        code: "B",
-        label: "자연뷰",
-    },
-    {
-        code: "S",
-        label: "힐링형",
-    },
-    {
-        code: "P",
-        label: "알찬 일정",
-    },
+const traitIconMap = {
+    walk: Footprints,
+    leaf: Leaf,
+    landmark: Landmark,
+    spark: Sparkles,
+    wallet: WalletCards,
+    star: Star,
+    shield: ShieldCheck,
+    heart: Heart,
+    calendar: CalendarDays,
+    clock: Clock3,
+};
+
+const COURSE_FALLBACK_IMAGES = [
+    hanokImage,
+    sunsetImage,
+    cafeImage,
 ];
 
-const tasteThemes = [
-    {
-        label: "전통시장",
-        Icon: Store,
-    },
-    {
-        label: "한강",
-        Icon: Waves,
-    },
-    {
-        label: "야경",
-        Icon: MoonStar,
-    },
-    {
-        label: "맛집",
-        Icon: Utensils,
-    },
-    {
-        label: "카페",
-        Icon: Coffee,
-    },
-    {
-        label: "도보 여행",
-        Icon: PersonStanding,
-    },
-];
+function formatCourseDuration(totalMinutes, placeCount) {
+    const minutes = Math.round(Number(totalMinutes) || 0);
 
-const courseItems = [
-    {
-        id: 1,
-        title: "궁궐과 한옥길을 걷는 하루",
-        location: "경복궁, 북촌 한옥마을",
-        duration: "6시간",
-        savedAt: "2026.07.12 저장",
-        tag: "역사 · 문화",
-        image: hanokImage,
-    },
-    {
-        id: 2,
-        title: "한강 노을 데이트 코스",
-        location: "여의도, 반포 한강공원",
-        duration: "4시간",
-        savedAt: "2026.07.08 저장",
-        tag: "데이트",
-        image: sunsetImage,
-    },
-    {
-        id: 3,
-        title: "성수 감성 카페 투어",
-        location: "성수동 카페거리",
-        duration: "5시간",
-        savedAt: "2026.07.01 저장",
-        tag: "감성 · 카페",
-        image: cafeImage,
-    },
-];
+    if (minutes <= 0) {
+        return placeCount > 0 ? `${placeCount}개 장소` : "일정 확인";
+    }
+
+    const hours = Math.floor(minutes / 60);
+    const remainder = minutes % 60;
+
+    if (hours === 0) {
+        return `${remainder}분`;
+    }
+
+    return remainder > 0
+        ? `${hours}시간 ${remainder}분`
+        : `${hours}시간`;
+}
+
+function formatSavedDate(value) {
+    if (!value) {
+        return "저장일 없음";
+    }
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+        return String(value);
+    }
+
+    return new Intl.DateTimeFormat("ko-KR", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+    })
+        .format(date)
+        .replace(/\s/g, "");
+}
 
 export default function MyPage() {
     const member = authStore.getMember() || {};
+    const [travelType, setTravelType] = useState(null);
+    const [travelTypeLoading, setTravelTypeLoading] = useState(
+        Boolean(member.memberId)
+    );
+    const [travelTypeError, setTravelTypeError] = useState("");
+    const [savedCourses, setSavedCourses] = useState([]);
+    const [customCourseCount, setCustomCourseCount] = useState(0);
+    const [reviewCount, setReviewCount] = useState(0);
+    const [dashboardLoading, setDashboardLoading] = useState(
+        Boolean(member.memberId)
+    );
+    const [dashboardError, setDashboardError] = useState("");
+    const [removingCourseIds, setRemovingCourseIds] = useState(() => new Set());
+
+    useEffect(() => {
+        if (!member.memberId) {
+            return undefined;
+        }
+
+        let active = true;
+
+        const pendingGuestToken =
+            localStorage.getItem("guestToken");
+
+        const claimPendingSurvey = pendingGuestToken
+            ? claimGuestSurvey(
+                pendingGuestToken,
+                member.memberId
+            )
+                .then(() => {
+                    localStorage.removeItem("guestToken");
+                })
+                .catch((error) => {
+                    console.error(
+                        "이전 취향 검사 결과 연결 실패:",
+                        error
+                    );
+                })
+            : Promise.resolve();
+
+        claimPendingSurvey
+            .then(() => getMyTravelType(member.memberId))
+            .then((result) => {
+                if (active) {
+                    setTravelType(result);
+                    setTravelTypeError("");
+                }
+            })
+            .catch((error) => {
+                if (active) {
+                    setTravelTypeError(
+                        error?.message ||
+                        "여행 취향 결과를 불러오지 못했습니다."
+                    );
+                }
+            })
+            .finally(() => {
+                if (active) {
+                    setTravelTypeLoading(false);
+                }
+            });
+
+        return () => {
+            active = false;
+        };
+    }, [member.memberId]);
+
+    useEffect(() => {
+        if (!member.memberId) {
+            setDashboardLoading(false);
+            setDashboardError("로그인 후 여행 기록을 확인할 수 있습니다.");
+            return undefined;
+        }
+
+        let active = true;
+
+        Promise.all([
+            getSavedRecommendedCourses(member.memberId),
+            getCustomCourses(member.memberId),
+            getMemberReviews(member.memberId, {
+                page: 0,
+                size: 1,
+                sort: "date",
+            }),
+        ])
+            .then(([saved, custom, reviews]) => {
+                if (!active) {
+                    return;
+                }
+
+                setSavedCourses(Array.isArray(saved) ? saved : []);
+                setCustomCourseCount(Array.isArray(custom) ? custom.length : 0);
+                setReviewCount(
+                    Number(reviews?.totalElements) ||
+                    (Array.isArray(reviews?.content)
+                        ? reviews.content.length
+                        : 0)
+                );
+                setDashboardError("");
+            })
+            .catch((error) => {
+                if (active) {
+                    setDashboardError(
+                        error?.message ||
+                        "여행 기록을 불러오지 못했습니다."
+                    );
+                }
+            })
+            .finally(() => {
+                if (active) {
+                    setDashboardLoading(false);
+                }
+            });
+
+        return () => {
+            active = false;
+        };
+    }, [member.memberId]);
 
     const userName =
         member.nickname?.trim() ||
@@ -184,6 +294,36 @@ export default function MyPage() {
         member.loginType ||
         "LOCAL";
 
+    const travelCode =
+        travelType?.travelCode?.trim().toUpperCase() ||
+        "";
+
+    const tasteTraits =
+        travelCode.length === 5
+            ? getCodeTraits(travelCode)
+            : [];
+
+    const reloadTravelType = () => {
+        if (!member.memberId) {
+            return;
+        }
+
+        setTravelTypeLoading(true);
+        setTravelTypeError("");
+
+        getMyTravelType(member.memberId)
+            .then(setTravelType)
+            .catch((error) => {
+                setTravelTypeError(
+                    error?.message ||
+                    "여행 취향 결과를 불러오지 못했습니다."
+                );
+            })
+            .finally(() => {
+                setTravelTypeLoading(false);
+            });
+    };
+
     const handleProfileEdit = () => {
         if (loginType !== "LOCAL") {
             window.alert(
@@ -193,8 +333,106 @@ export default function MyPage() {
             return;
         }
 
-        window.location.assign("/mypage/profile-edit");
+        window.location.assign("/find-password");
     };
+
+    const handleRecommendCourse = async (event) => {
+        event.preventDefault();
+
+        const surveyId = Number(travelType?.surveyId);
+
+        if (!Number.isInteger(surveyId) || surveyId < 1) {
+            window.alert("최신 취향 검사 정보를 확인할 수 없습니다.");
+            return;
+        }
+
+        try {
+            const draft = await getCourseDraft(surveyId);
+
+            const transportModeMap = {
+                PUBLIC: "PUBLIC_TRANSIT",
+                PUBLIC_TRANSIT: "PUBLIC_TRANSIT",
+                WALKING: "WALKING",
+                CAR: "DRIVING",
+                DRIVING: "DRIVING",
+            };
+
+            const transportMode =
+                transportModeMap[
+                    String(draft?.transportType || "").toUpperCase()
+                    ];
+
+            if (!transportMode) {
+                throw new Error(
+                    "추천 코스의 이동수단을 확인할 수 없습니다."
+                );
+            }
+
+            storeCourseRecommendRequest({
+                ...draft,
+                transportMode,
+                excludedRecommendationKeys: [],
+            });
+
+            window.location.assign("/courses");
+        } catch (error) {
+            console.error("맞춤 코스 준비 실패:", error);
+
+            window.alert(
+                error?.message ||
+                "맞춤 코스를 준비하지 못했습니다."
+            );
+        }
+    };
+
+    const handleRemoveSavedCourse = async (course) => {
+        if (removingCourseIds.has(course.courseId)) {
+            return;
+        }
+
+        const previousCourses = savedCourses;
+
+        setRemovingCourseIds((current) => {
+            const next = new Set(current);
+            next.add(course.courseId);
+            return next;
+        });
+        setSavedCourses((current) =>
+            current.filter((item) => item.courseId !== course.courseId)
+        );
+
+        try {
+            await removeSavedRecommendedCourse(
+                course.courseId,
+                member.memberId
+            );
+        } catch (error) {
+            setSavedCourses(previousCourses);
+            setDashboardError(
+                error?.message ||
+                "저장한 코스를 해제하지 못했습니다."
+            );
+        } finally {
+            setRemovingCourseIds((current) => {
+                const next = new Set(current);
+                next.delete(course.courseId);
+                return next;
+            });
+        }
+    };
+
+    const summaryItems = summaryDefinitions.map((item) => ({
+        ...item,
+        value: dashboardLoading
+            ? "-"
+            : {
+                saved: savedCourses.length,
+                custom: customCourseCount,
+                reviews: reviewCount,
+            }[item.key],
+    }));
+
+    const recentCourses = savedCourses.slice(0, 3);
 
     return (
         <div className="mypage-v3">
@@ -220,7 +458,7 @@ export default function MyPage() {
                                 onClick={handleProfileEdit}
                             >
                                 <Pencil size={16} />
-                                프로필 수정
+                                회원 정보 수정
                             </button>
                         </section>
 
@@ -249,92 +487,210 @@ export default function MyPage() {
                             )}
                         </nav>
 
-                        <a
-                            className="mypage-retest"
-                            href="/survey"
-                        >
-                            <RefreshCw
-                                size={17}
-                                strokeWidth={2}
-                            />
-                            취향 검사 다시하기
+                        <a className="mypage-map-promo" href="/map-course">
+                            <span>새로운 여행을</span>
+                            <strong>계획해 보세요!</strong>
+                            <p>
+                                지도에서 원하는 코스를
+                                <br />
+                                직접 만들 수 있어요.
+                            </p>
+
+                            <div
+                                className="mypage-map-promo-art"
+                                aria-hidden="true"
+                            >
+                                <img src={mapPromoImage} alt="" />
+                            </div>
+
+                            <b>
+                                지도 코스 만들기
+                                <ChevronRight size={16} />
+                            </b>
                         </a>
                     </aside>
 
                     <section className="mypage-v3-content">
                         <div className="mypage-v3-top">
                             <section
-                                className="mypage-v3-welcome"
+                                className="mypage-type-hero"
                                 style={{
                                     backgroundImage: `
                                         linear-gradient(
                                             90deg,
-                                            rgba(255,255,255,0.97) 0%,
-                                            rgba(255,255,255,0.88) 34%,
-                                            rgba(255,255,255,0.16) 70%,
+                                            rgba(255,255,255,0.98) 0%,
+                                            rgba(255,255,255,0.92) 42%,
+                                            rgba(255,255,255,0.2) 72%,
                                             rgba(255,255,255,0.04) 100%
                                         ),
                                         url(${heroImage})
                                     `,
                                 }}
                             >
-                                <span>
-                                    새로운 하루, 새로운 서울
+                                <span className="mypage-type-label">
+                                    나의 여행 취향
                                 </span>
 
-                                <h1>
-                                    {userName}님,
-                                    <br />
-                                    다시 만나 반가워요!
-                                </h1>
+                                {travelTypeLoading ? (
+                                    <div className="mypage-travel-state">
+                                        <span className="mypage-travel-spinner" />
+                                        <strong>
+                                            최신 취향 결과를 불러오고 있어요
+                                        </strong>
+                                    </div>
+                                ) : travelTypeError ? (
+                                    <div className="mypage-travel-state">
+                                        <strong>
+                                            취향 결과를 불러오지 못했습니다
+                                        </strong>
+                                        <button
+                                            type="button"
+                                            onClick={reloadTravelType}
+                                        >
+                                            다시 불러오기
+                                        </button>
+                                    </div>
+                                ) : travelType && tasteTraits.length === 5 ? (
+                                    <>
+                                        <strong className="mypage-type-code">
+                                            {travelCode}
+                                        </strong>
 
-                                <p>
-                                    오늘도 특별한 여행을 계획해보세요.
-                                    <br />
-                                    서울에서의 멋진 하루를 응원합니다.
-                                </p>
+                                        <div
+                                            className="mypage-type-axes"
+                                            aria-label={`${travelCode} 여행 유형`}
+                                        >
+                                            {tasteTraits.map(
+                                                ({ code, label, dimensionKey }, index) => (
+                                                    <div key={dimensionKey}>
+                                                        <strong
+                                                            className={
+                                                                `type-axis axis-tone-${index}`
+                                                            }
+                                                        >
+                                                            {code}
+                                                        </strong>
+                                                        <span>{label}</span>
+                                                    </div>
+                                                )
+                                            )}
+                                        </div>
+
+                                        <h1>
+                                            {travelType.typeTitle ||
+                                                `${travelCode} 여행자`}
+                                        </h1>
+
+                                        <p>
+                                            {travelType.typeDescription ||
+                                                tasteTraits
+                                                    .map(({ answer }) => answer)
+                                                    .join(", ")}
+                                        </p>
+
+                                        <a href="/mypage/travel-type">
+                                            여행 코드 자세히 보기
+                                            <ChevronRight size={17} />
+                                        </a>
+                                    </>
+                                ) : (
+                                    <div className="mypage-travel-state">
+                                        <strong>
+                                            아직 저장된 취향 검사 결과가 없어요
+                                        </strong>
+                                        <p>
+                                            간단한 검사로 나에게 맞는 서울 여행
+                                            유형을 확인해보세요.
+                                        </p>
+                                        <a href="/survey">
+                                            취향 검사 시작하기
+                                            <ChevronRight size={16} />
+                                        </a>
+                                    </div>
+                                )}
                             </section>
 
-                            <section className="mypage-v3-taste">
-                                <div className="taste-heading">
-                                    <span>나의 여행 취향</span>
-                                    <strong>ATBSP</strong>
-                                </div>
+                            <section className="mypage-analysis">
+                                <h2>취향 분석 요약</h2>
 
-                                <div
-                                    className="taste-axis-grid"
-                                    aria-label="ATBSP 여행 유형"
-                                >
-                                    {tasteAxes.map(
-                                        ({ code, label }) => (
-                                            <div key={code}>
-                                                <strong
-                                                    className={
-                                                        `taste-axis axis-${code.toLowerCase()}`
-                                                    }
-                                                >
-                                                    {code}
-                                                </strong>
+                                {travelTypeLoading ? (
+                                    <div className="mypage-analysis-empty">
+                                        분석 내용을 준비하고 있어요.
+                                    </div>
+                                ) : tasteTraits.length === 5 ? (
+                                    <div className="mypage-analysis-list">
+                                        {tasteTraits.map(
+                                            (
+                                                {
+                                                    code,
+                                                    answer,
+                                                    icon,
+                                                    dimensionKey,
+                                                },
+                                                index
+                                            ) => {
+                                                const Icon =
+                                                    traitIconMap[icon] ||
+                                                    Sparkles;
 
-                                                <span>{label}</span>
-                                            </div>
-                                        )
-                                    )}
-                                </div>
+                                                return (
+                                                    <div key={dimensionKey}>
+                                                        <span
+                                                            className={
+                                                                `analysis-icon analysis-tone-${index}`
+                                                            }
+                                                        >
+                                                            <Icon
+                                                                size={17}
+                                                                strokeWidth={1.8}
+                                                            />
+                                                        </span>
 
-                                <h2>선호 테마</h2>
+                                                        <strong>
+                                                            {answer}
+                                                        </strong>
 
-                                <div className="taste-theme-grid">
-                                    {tasteThemes.map(
-                                        ({ label, Icon }) => (
-                                            <span key={label}>
-                                                <Icon
-                                                    size={17}
-                                                    strokeWidth={1.9}
-                                                />
-                                                {label}
-                                            </span>
-                                        )
+                                                        <em
+                                                            className={
+                                                                `analysis-code analysis-tone-${index}`
+                                                            }
+                                                        >
+                                                            {code}
+                                                        </em>
+                                                    </div>
+                                                );
+                                            }
+                                        )}
+                                    </div>
+                                ) : (
+                                    <div className="mypage-analysis-empty">
+                                        검사를 완료하면 다섯 가지 여행 성향을
+                                        한눈에 볼 수 있어요.
+                                    </div>
+                                )}
+
+                                <div className="mypage-analysis-actions">
+                                    {tasteTraits.length === 5 ? (
+                                        <>
+                                            <a href="/mypage/travel-type">
+                                                상세 결과 보기
+                                            </a>
+
+                                            <a
+                                                className="primary"
+                                                href="/courses"
+                                                onClick={handleRecommendCourse}
+                                            >
+                                                맞춤 코스 추천
+                                            </a>
+                                        </>
+                                    ) : (
+                                        <a
+                                            className="primary full"
+                                            href="/survey"
+                                        >
+                                            취향 검사 시작하기
+                                        </a>
                                     )}
                                 </div>
                             </section>
@@ -398,14 +754,43 @@ export default function MyPage() {
                             </div>
 
                             <div className="recent-course-grid">
-                                {courseItems.map((course) => (
+                                {dashboardLoading && (
+                                    <p className="recent-course-state">
+                                        여행 기록을 불러오고 있습니다.
+                                    </p>
+                                )}
+
+                                {!dashboardLoading && dashboardError && (
+                                    <p className="recent-course-state error">
+                                        {dashboardError}
+                                    </p>
+                                )}
+
+                                {!dashboardLoading &&
+                                !dashboardError &&
+                                recentCourses.length === 0 && (
+                                    <p className="recent-course-state">
+                                        아직 저장한 추천 코스가 없습니다.
+                                    </p>
+                                )}
+
+                                {!dashboardLoading &&
+                                !dashboardError &&
+                                recentCourses.map((course, index) => (
                                     <article
                                         className="recent-course-card"
-                                        key={course.id}
+                                        key={course.courseId}
                                     >
                                         <div className="course-image-wrap">
                                             <img
-                                                src={course.image}
+                                                src={
+                                                    course.thumbnailUrl ||
+                                                    course.coverImageUrl ||
+                                                    COURSE_FALLBACK_IMAGES[
+                                                        index %
+                                                        COURSE_FALLBACK_IMAGES.length
+                                                    ]
+                                                }
                                                 alt={course.title}
                                             />
 
@@ -418,6 +803,12 @@ export default function MyPage() {
                                                 type="button"
                                                 aria-label={
                                                     `${course.title} 저장 해제`
+                                                }
+                                                disabled={removingCourseIds.has(
+                                                    course.courseId
+                                                )}
+                                                onClick={() =>
+                                                    handleRemoveSavedCourse(course)
                                                 }
                                             >
                                                 <Bookmark
@@ -434,12 +825,18 @@ export default function MyPage() {
                                             <div className="course-meta">
                                                 <span>
                                                     <MapPin size={14} />
-                                                    {course.location}
+                                                    {course.representativePlaceName ||
+                                                        course.region ||
+                                                        course.regions?.[0] ||
+                                                        "서울"}
                                                 </span>
 
                                                 <span>
                                                     <Clock3 size={14} />
-                                                    {course.duration}
+                                                    {formatCourseDuration(
+                                                        course.totalCourseMinutes ?? course.totalCourseTimeMinutes,
+                                                        course.placeCount
+                                                    )}
                                                 </span>
                                             </div>
 
@@ -448,10 +845,14 @@ export default function MyPage() {
                                                     <CalendarDays
                                                         size={14}
                                                     />
-                                                    {course.savedAt}
+                                                    {formatSavedDate(
+                                                        course.savedAt || course.createdAt
+                                                    )} 저장
                                                 </span>
 
-                                                <em>{course.tag}</em>
+                                                <em>
+                                                    {course.travelCode || "추천 코스"}
+                                                </em>
                                             </div>
                                         </div>
                                     </article>
@@ -465,4 +866,7 @@ export default function MyPage() {
             <Footer />
         </div>
     );
+
+
+
 }
