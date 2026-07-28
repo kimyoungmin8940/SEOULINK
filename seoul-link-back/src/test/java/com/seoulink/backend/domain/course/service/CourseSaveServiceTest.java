@@ -435,7 +435,22 @@ class CourseSaveServiceTest {
 
         assertEquals(4, response.getPlaceCount());
         assertEquals(2, response.getDayCount());
-        verify(courseDetailRepository).saveAll(any());
+        assertEquals(180, response.getTotalVisitTimeMinutes());
+        assertEquals(202.0, response.getTotalCourseTimeMinutes(), 0.000001);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Iterable<CourseDetail>> detailCaptor =
+                ArgumentCaptor.forClass(Iterable.class);
+        verify(courseDetailRepository).saveAll(detailCaptor.capture());
+        List<CourseDetail> details = StreamSupport
+                .stream(detailCaptor.getValue().spliterator(), false)
+                .toList();
+        List<CourseDetail> hotelDetails = details.stream()
+                .filter(detail -> detail.getPlaceId().equals(100L))
+                .toList();
+        assertEquals(2, hotelDetails.size());
+        assertTrue(hotelDetails.stream()
+                .allMatch(detail -> detail.getStayMinutes() == 0));
     }
 
     @Test

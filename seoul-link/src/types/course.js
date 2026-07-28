@@ -11,6 +11,7 @@
  * @property {number} placeId
  * @property {string} placeName
  * @property {string} category
+ * @property {string=} region
  * @property {string=} address
  * @property {string=} roadAddress
  * @property {string=} imageUrl 추천 결과 화면에 사용할 장소 이미지
@@ -35,6 +36,7 @@
  * @property {number} placeId
  * @property {?string} placeName
  * @property {?string} category
+ * @property {?string} region
  * @property {?string} address
  * @property {?string} roadAddress
  * @property {?string} imageUrl
@@ -86,11 +88,12 @@
  * @property {number} resultId
  * @property {string=} travelCode 영문 대문자 5자리
  * @property {'SOLO'|'COUPLE'|'FRIENDS'|'FAMILY'=} companionType 동행 유형 가중치 기준
+ * @property {string[]=} preferredRegions 추천 점수로 계산한 상위 구 순서
  * @property {TransportMode} transportMode 전체 추천 옵션에 동일하게 적용할 이동수단
  * @property {string=} startDate YYYY-MM-DD
  * @property {string=} endDate YYYY-MM-DD
  * @property {number=} travelDays
- * @property {string=} dailyStartTime HH:mm, 프론트 기본 10:00
+ * @property {string=} dailyStartTime HH:mm, P형 11:00 / R형 13:00
  * @property {string[]=} excludedRecommendationKeys 다시 추천할 때 제외할 이전 코스 조합 키
  * @property {number[]=} previouslyRecommendedPlaceIds 이전 장소 감점용 장소 ID
  * @property {PlaceCandidate[]=} hotelCandidates 2일 이상 일정에서 옵션별 숙소를 고를 후보 풀
@@ -136,6 +139,7 @@
  * @property {string} optionName
  * @property {string=} title
  * @property {string=} description
+ * @property {?string=} region 실제 방문 장소가 가장 많이 속한 대표 구
  * @property {string=} recommendationKey 재추천 시 같은 코스를 제외하기 위한 서버 발급 키
  * @property {number} placeCount
  * @property {number} dayCount
@@ -144,6 +148,8 @@
  * @property {number=} totalVisitTimeMinutes
  * @property {number} totalCourseTimeMinutes
  * @property {boolean=} estimatedTravelTimes 이 옵션에 추정 이동 구간이 포함됐는지 여부
+ * @property {boolean=} hotelIncluded 다일 일정에 숙소가 포함됐는지 여부
+ * @property {string=} hotelNotice 도보 30분 이내 숙소가 없을 때 표시할 안내
  * @property {CourseDay[]} days
  */
 
@@ -152,6 +158,7 @@
  * @property {number} resultId
  * @property {string=} travelCode
  * @property {TransportMode} transportMode
+ * @property {string[]} preferredRegions 화면과 코스가 함께 사용한 상위 구 순서
  * @property {boolean} estimatedTravelTimes 세 옵션 중 추정 이동 구간 포함 여부
  * @property {string} dailyStartTime HH:mm
  * @property {number} optionCount

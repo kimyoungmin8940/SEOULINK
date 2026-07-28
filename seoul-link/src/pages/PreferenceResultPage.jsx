@@ -20,7 +20,6 @@ import RecommendationLoadingOverlay from '../components/common/RecommendationLoa
 
 import {
     getCodeTraits,
-    getPreferredRegions,
     getTravelGuideItems,
     getTravelTags,
 } from '../data/travelPreferenceData';
@@ -47,7 +46,9 @@ function PreferenceResultPage({
 }) {
     const resultPageRef = useRef(null);
     const traits = getCodeTraits(result.travelCode);
-    const regions = getPreferredRegions(result.recommendedPlaces);
+    const regions = Array.isArray(result.preferredRegions)
+        ? result.preferredRegions
+        : [];
     const tags = getTravelTags(result.travelCode);
     const guideItems = getTravelGuideItems(result.travelCode);
 

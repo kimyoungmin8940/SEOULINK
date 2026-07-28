@@ -65,6 +65,31 @@ export const getCourseDraft = (surveyId, options = {}) => apiClient.get(
 );
 
 /**
+ * 다시 추천받기에서 직전 결과의 장소를 우선 제외하고 DB 후보 풀을 새로 받습니다.
+ * 후보 조회만 수행하므로 ODsay·ORS 같은 외부 경로 API는 호출하지 않습니다.
+ */
+export const refreshCourseDraft = (
+    surveyId,
+    previouslyRecommendedPlaceIds = [],
+    options = {},
+) => {
+    const normalizedIds = Array.isArray(previouslyRecommendedPlaceIds)
+        ? [...new Set(previouslyRecommendedPlaceIds
+            .map(Number)
+            .filter((placeId) => Number.isInteger(placeId) && placeId > 0))]
+        : [];
+
+    return apiClient.post(
+        '/courses/draft/recommend-again',
+        {
+            surveyId: requirePositiveId(Number(surveyId), '설문 ID'),
+            previouslyRecommendedPlaceIds: normalizedIds,
+        },
+        options,
+    );
+};
+
+/**
  * 사용자가 확정한 최적화 코스를 저장합니다.
  * @param {import('../types/course').CourseSaveRequest} data
  * @param {RequestInit} [options]

@@ -46,9 +46,14 @@ function SurveyResultPage() {
             try {
                 const response = await getSurveyResult(surveyId);
                 let recommendedPlaces = [];
+                let preferredRegions = [];
 
                 try {
-                    const placeResponse = await getRecommendedPlaces(response.travelCode);
+                    const placeResponse = await getRecommendedPlaces(
+                        response.travelCode,
+                        response.companionType,
+                    );
+                    preferredRegions = placeResponse?.preferredRegions || [];
                     recommendedPlaces = (placeResponse?.recommendedPlaces || []).map((place) => ({
                         ...place,
                         // 결과 화면에서 공통으로 사용하는 장소명 필드도 함께 제공합니다.
@@ -63,6 +68,7 @@ function SurveyResultPage() {
                     ...response,
                     travelTitle: response.typeTitle,
                     description: response.typeDescription,
+                    preferredRegions,
                     recommendedPlaces,
                 });
             } catch (error) {
@@ -104,6 +110,10 @@ function SurveyResultPage() {
 
             storeCourseRecommendRequest({
                 ...draft,
+                // 결과 화면에 실제 표시한 백엔드 구 순위를 코스 가산점에도 그대로 사용합니다.
+                preferredRegions: result?.preferredRegions?.length
+                    ? result.preferredRegions
+                    : draft?.preferredRegions,
                 transportMode,
                 excludedRecommendationKeys: [],
             });

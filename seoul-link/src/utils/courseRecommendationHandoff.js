@@ -171,6 +171,23 @@ function normalizePreviouslyRecommendedPlaceIds(value) {
     }))];
 }
 
+/** 백엔드가 계산한 상위 구 순서를 중복 없이 유지합니다. */
+function normalizePreferredRegions(value) {
+    if (value == null) {
+        return [];
+    }
+    if (!Array.isArray(value)) {
+        requestError('preferredRegions는 배열이어야 합니다.');
+    }
+
+    return [...new Set(value
+        .map((region) => (
+            typeof region === 'string' ? region.trim() : ''
+        ))
+        .filter(Boolean))]
+        .slice(0, 5);
+}
+
 /** 숙소는 일반 후보와 분리하되 장소 DTO 자체는 같은 규칙으로 검증합니다. */
 function normalizeHotelCandidates(value) {
     if (value == null) {
@@ -227,7 +244,18 @@ export function normalizeCourseRecommendRequest(data) {
         requestError('resultId는 1 이상의 정수여야 합니다.');
     }
 
-    const dailyStartTime = data.dailyStartTime || '10:00';
+    const travelCode = typeof data.travelCode === 'string'
+        ? data.travelCode.trim().toUpperCase()
+        : '';
+    const scheduleType = String(data.scheduleType || travelCode.charAt(4) || '')
+        .trim()
+        .toUpperCase();
+    const defaultDailyStartTime = scheduleType === 'P'
+        ? '11:00'
+        : scheduleType === 'R'
+            ? '13:00'
+            : '10:00';
+    const dailyStartTime = data.dailyStartTime || defaultDailyStartTime;
     if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(dailyStartTime)) {
         requestError('dailyStartTime은 HH:mm 형식이어야 합니다.');
     }
@@ -235,9 +263,6 @@ export function normalizeCourseRecommendRequest(data) {
         requestError('dailyPlans가 한 개 이상 필요합니다.');
     }
 
-    const travelCode = typeof data.travelCode === 'string'
-        ? data.travelCode.trim().toUpperCase()
-        : '';
     if (travelCode && !/^[A-Z]{5}$/.test(travelCode)) {
         requestError('travelCode는 영문 대문자 5자리여야 합니다.');
     }
@@ -262,6 +287,7 @@ export function normalizeCourseRecommendRequest(data) {
         resultId,
         travelCode: travelCode || null,
         companionType: companionType || null,
+        preferredRegions: normalizePreferredRegions(data.preferredRegions),
         transportMode,
         dailyStartTime,
         excludedRecommendationKeys: normalizeExcludedRecommendationKeys(
@@ -310,6 +336,48 @@ export function buildCourseRecommendAgainRequest(data, courseOptions) {
             ]),
         ].slice(-MAX_PREVIOUSLY_RECOMMENDED_PLACES),
     };
+}
+
+
+/**
+ * 재추천용으로 DB에서 다시 받은 후보 초안을 기존 요청에 덮어씁니다.
+ * 이동수단과 누적 제외 키·이전 장소 ID는 유지하고, dailyPlans와 숙소 후보만
+ * 방금 조회한 최신 후보 풀로 교체합니다.
+ */
+export function applyRefreshedCourseDraft(data, refreshedDraft) {
+    const request = normalizeCourseRecommendRequest(data);
+    if (!refreshedDraft || typeof refreshedDraft !== 'object') {
+        requestError('새로 조회한 재추천 후보 초안이 필요합니다.');
+    }
+
+    const surveyId = Number(refreshedDraft.surveyId ?? request.surveyId);
+    if (!Number.isInteger(surveyId) || surveyId < 1) {
+        requestError('새 후보 초안의 surveyId가 올바르지 않습니다.');
+    }
+
+    return normalizeCourseRecommendRequest({
+        ...request,
+        surveyId,
+        resultId: refreshedDraft.resultId ?? request.resultId,
+        travelCode: refreshedDraft.travelCode ?? request.travelCode,
+        scheduleType: refreshedDraft.scheduleType ?? request.scheduleType,
+        companionType: refreshedDraft.companionType ?? request.companionType,
+        // 첫 결과 화면에서 본 구 순위를 재추천에서도 유지해 화면과 코스 기준이 갈라지지 않게 합니다.
+        preferredRegions: request.preferredRegions.length
+            ? request.preferredRegions
+            : refreshedDraft.preferredRegions,
+        transportType: refreshedDraft.transportType ?? request.transportType,
+        startDate: refreshedDraft.startDate ?? request.startDate,
+        endDate: refreshedDraft.endDate ?? request.endDate,
+        travelDays: refreshedDraft.travelDays ?? request.travelDays,
+        dailyStartTime: refreshedDraft.dailyStartTime ?? request.dailyStartTime,
+        hotelCandidates: refreshedDraft.hotelCandidates,
+        dailyPlans: refreshedDraft.dailyPlans,
+        // 현재 화면에서 실제 사용 중인 이동수단은 설문 원본 표기와 상관없이 유지합니다.
+        transportMode: request.transportMode,
+        excludedRecommendationKeys: request.excludedRecommendationKeys,
+        previouslyRecommendedPlaceIds: request.previouslyRecommendedPlaceIds,
+    });
 }
 
 /** 추천 입력을 보관해 새로고침이나 일반 링크 이동 뒤에도 결과 화면이 API를 호출하게 합니다. */

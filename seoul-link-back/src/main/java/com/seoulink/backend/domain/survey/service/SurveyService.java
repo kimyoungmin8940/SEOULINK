@@ -150,11 +150,21 @@ public class SurveyService {
                                 )
                         );
 
+        TravelSurvey survey =
+                travelSurveyRepository
+                        .findById(surveyId)
+                        .orElseThrow(
+                                () -> new IllegalArgumentException(
+                                        "설문 정보를 찾을 수 없습니다."
+                                )
+                        );
+
         TravelTypeMaster travelType =
                 findTravelType(result.getTravelCode());
 
         return SurveyResultResponse.from(
                 result,
+                survey,
                 travelType
         );
     }
@@ -206,6 +216,7 @@ public class SurveyService {
 
         return SurveyResultResponse.from(
                 result,
+                survey,
                 travelType
         );
     }

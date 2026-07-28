@@ -26,6 +26,7 @@ public class CourseDraftResponse {
     private final String scheduleType;
     private final String companionType;
     private final String transportType;
+    private final List<String> preferredRegions;
     private final LocalDate startDate;
     private final LocalDate endDate;
     private final int travelDays;
@@ -53,6 +54,7 @@ public class CourseDraftResponse {
             String scheduleType,
             String companionType,
             String transportType,
+            List<String> preferredRegions,
             LocalDate startDate,
             LocalDate endDate,
             int travelDays,
@@ -68,6 +70,7 @@ public class CourseDraftResponse {
         this.scheduleType = scheduleType;
         this.companionType = companionType;
         this.transportType = transportType;
+        this.preferredRegions = List.copyOf(preferredRegions);
         this.startDate = startDate;
         this.endDate = endDate;
         this.travelDays = travelDays;

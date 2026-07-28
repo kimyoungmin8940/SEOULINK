@@ -9,7 +9,6 @@ import {
     Bot,
     CreditCard,
     LogOut,
-    Route,
     Menu,
 } from 'lucide-react';
 
@@ -28,7 +27,6 @@ const headerMenuItems = [
 // 개인 메뉴는 모든 화면 크기에서 햄버거 메뉴에 표시합니다.
 // 주요 메뉴 4개는 화면이 좁아져 상단 메뉴가 숨겨질 때만 햄버거 메뉴에 표시합니다.
 const sideMenuItems = [
-    { href: '/mypage/courses', label: '내 코스 보기', Icon: Route, requiresLogin: true },
     { href: '/mypage', label: '마이페이지', Icon: UserRound, requiresLogin: true },
     { href: '/payment', label: '이용권 / 결제', Icon: CreditCard, requiresLogin: true },
 ];

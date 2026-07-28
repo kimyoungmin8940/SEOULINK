@@ -47,6 +47,13 @@ public class PlaceRecommendationService {
     private static final double DISPLAY_SCORE_MAX = 95.0;
     private static final double EQUAL_SCORE_DISPLAY_VALUE = 85.0;
     private static final int HOTEL_CANDIDATE_LIMIT = 6;
+    private static final int PREFERRED_REGION_LIMIT = 5;
+    private static final int REGION_SCORE_PLACE_LIMIT = 3;
+    private static final double REGION_CANDIDATE_COUNT_BONUS = 1.0;
+    private static final int MAX_COURSE_CANDIDATE_TOTAL = 90;
+    private static final int MAX_COURSE_TRAVEL_DAYS = 5;
+    private static final List<Double> PREFERRED_REGION_BONUSES =
+            List.of(8.0, 6.0, 4.0, 2.0, 1.0);
 
     private static final String TOUR = "TOUR";
     private static final String RESTAURANT = "RESTAURANT";
@@ -93,6 +100,57 @@ public class PlaceRecommendationService {
             String companionType,
             Collection<Long> excludedPlaceIds
     ) {
+        return recommendCandidatePoolInternal(
+                travelCode,
+                region,
+                scheduleType,
+                companionType,
+                excludedPlaceIds,
+                null
+        );
+    }
+
+    /**
+     * 여행 일수와 세 가지 추천 옵션에 필요한 장소 수를 기준으로 후보 풀을 확장한다.
+     *
+     * <p>하루 기준 P형 30개(15·10·5), R형 20개(10·5·5)를 여행
+     * 일수만큼 확보해 도보 20분 이내 지역 묶음을 충분히 탐색한다. 전체 후보는
+     * 최대 90개로 제한하며, 상위 구는 가산점만 적용하므로 해당 지역 후보가
+     * 부족하면 서울 전체 후보가 자동으로 채워진다.</p>
+     */
+    public PlaceCandidatePoolResponse recommendCandidatePool(
+            String travelCode,
+            String region,
+            String scheduleType,
+            String companionType,
+            Collection<Long> excludedPlaceIds,
+            int travelDays
+    ) {
+        if (travelDays < 1 || travelDays > MAX_COURSE_TRAVEL_DAYS) {
+            throw new IllegalArgumentException(
+                    "여행 기간은 1일 이상 "
+                            + MAX_COURSE_TRAVEL_DAYS
+                            + "일 이하여야 합니다."
+            );
+        }
+        return recommendCandidatePoolInternal(
+                travelCode,
+                region,
+                scheduleType,
+                companionType,
+                excludedPlaceIds,
+                travelDays
+        );
+    }
+
+    private PlaceCandidatePoolResponse recommendCandidatePoolInternal(
+            String travelCode,
+            String region,
+            String scheduleType,
+            String companionType,
+            Collection<Long> excludedPlaceIds,
+            Integer travelDays
+    ) {
         String normalizedTravelCode = normalizeTravelCode(travelCode);
         String normalizedRegion = normalizeRegion(region);
         String normalizedCompanionType =
@@ -104,17 +162,26 @@ public class PlaceRecommendationService {
         Set<Long> normalizedExcludedPlaceIds =
                 normalizeExcludedPlaceIds(excludedPlaceIds);
         CandidatePoolPolicy policy =
-                candidatePoolPolicy(normalizedScheduleType);
+                travelDays == null
+                        ? candidatePoolPolicy(normalizedScheduleType)
+                        : expandedCandidatePoolPolicy(
+                                normalizedScheduleType,
+                                travelDays
+                        );
 
         List<ScoredPlace> scoredPlaces = scoreAllPlaces(
                 normalizedRegion,
                 normalizedTravelCode,
                 normalizedCompanionType
         );
+        List<String> preferredRegions =
+                rankPreferredRegions(scoredPlaces);
+        List<ScoredPlace> courseRankedPlaces =
+                sortForCoursePool(scoredPlaces, preferredRegions);
 
         Map<String, List<PlaceRecommendationResponse>>
                 candidatesByCategory = selectCandidatePools(
-                scoredPlaces,
+                courseRankedPlaces,
                 policy.targetCounts(),
                 policy.maxLookupCounts(),
                 normalizedExcludedPlaceIds,
@@ -123,7 +190,7 @@ public class PlaceRecommendationService {
 
         Map<String, List<PlaceRecommendationResponse>>
                 fallbackCandidatesByCategory = selectCandidatePools(
-                scoredPlaces,
+                courseRankedPlaces,
                 policy.targetCounts(),
                 policy.maxLookupCounts(),
                 normalizedExcludedPlaceIds,
@@ -132,13 +199,13 @@ public class PlaceRecommendationService {
 
         List<PlaceRecommendationResponse> hotelCandidates =
                 selectHotelCandidates(
-                        scoredPlaces,
+                        courseRankedPlaces,
                         normalizedExcludedPlaceIds,
                         false
                 );
         List<PlaceRecommendationResponse> fallbackHotelCandidates =
                 selectHotelCandidates(
-                        scoredPlaces,
+                        courseRankedPlaces,
                         normalizedExcludedPlaceIds,
                         true
                 );
@@ -147,6 +214,7 @@ public class PlaceRecommendationService {
                 normalizedTravelCode,
                 normalizedScheduleType,
                 normalizedCompanionType,
+                preferredRegions,
                 policy.targetCandidateCount(),
                 policy.maxLookupCount(),
                 candidatesByCategory,
@@ -218,6 +286,8 @@ public class PlaceRecommendationService {
                 normalizedTravelCode,
                 normalizedCompanionType
         );
+        List<String> preferredRegions =
+                rankPreferredRegions(scoredPlaces);
 
         List<ScoredPlace> recommended = resolvedLimitPerCategory == null
                 ? selectCategoryBalancedPlaces(scoredPlaces, resolvedLimit)
@@ -244,7 +314,125 @@ public class PlaceRecommendationService {
         }
 
         // 최종 JSON: { "travelCode": "ATBSP", "recommendedPlaces": [...] }
-        return new PlaceRecommendationListResponse(normalizedTravelCode, recommendedPlaces);
+        return new PlaceRecommendationListResponse(
+                normalizedTravelCode,
+                preferredRegions,
+                recommendedPlaces
+        );
+    }
+
+    /**
+     * 구별 추천점수 상위 세 곳의 합을 중심으로 상위 다섯 구를 정한다.
+     *
+     * <p>숙소는 실제 관광 취향 지역을 왜곡할 수 있어 제외하고, 후보 수는 같은
+     * 점수대에서만 순서를 보조하도록 작은 가산점으로 제한한다.</p>
+     */
+    private List<String> rankPreferredRegions(
+            List<ScoredPlace> scoredPlaces
+    ) {
+        Map<String, List<Double>> scoresByRegion =
+                new LinkedHashMap<>();
+        for (ScoredPlace scoredPlace : scoredPlaces) {
+            if (sameCategory(scoredPlace.place().getCategory(), HOTEL)
+                    || !isUsableCourseCandidate(scoredPlace.place())) {
+                continue;
+            }
+            String region = normalizeDistrict(
+                    scoredPlace.place().getRegion()
+            );
+            if (region == null) {
+                continue;
+            }
+            scoresByRegion
+                    .computeIfAbsent(region, ignored -> new ArrayList<>())
+                    .add(scoredPlace.score());
+        }
+
+        return scoresByRegion.entrySet().stream()
+                .map(entry -> {
+                    List<Double> scores = entry.getValue().stream()
+                            .sorted(Comparator.reverseOrder())
+                            .toList();
+                    double topScoreSum = scores.stream()
+                            .limit(REGION_SCORE_PLACE_LIMIT)
+                            .mapToDouble(Double::doubleValue)
+                            .sum();
+                    double countBonus = Math.min(
+                            scores.size(),
+                            PREFERRED_REGION_LIMIT
+                    ) * REGION_CANDIDATE_COUNT_BONUS;
+                    return new RegionScore(
+                            entry.getKey(),
+                            topScoreSum + countBonus,
+                            scores.get(0),
+                            scores.size()
+                    );
+                })
+                .sorted(Comparator
+                        .comparingDouble(RegionScore::score)
+                        .reversed()
+                        .thenComparing(
+                                RegionScore::bestPlaceScore,
+                                Comparator.reverseOrder()
+                        )
+                        .thenComparing(
+                                RegionScore::candidateCount,
+                                Comparator.reverseOrder()
+                        )
+                        .thenComparing(
+                                RegionScore::region,
+                                Comparator.naturalOrder()
+                        ))
+                .limit(PREFERRED_REGION_LIMIT)
+                .map(RegionScore::region)
+                .toList();
+    }
+
+    /**
+     * 상위 구는 순위별 가산점만 받고, 나머지 서울 후보도 같은 목록에 그대로 남긴다.
+     * 따라서 상위 구의 카테고리 후보가 부족하면 별도 오류 없이 서울 전체 후보로
+     * 자동 완화된다.
+     */
+    private List<ScoredPlace> sortForCoursePool(
+            List<ScoredPlace> scoredPlaces,
+            List<String> preferredRegions
+    ) {
+        return scoredPlaces.stream()
+                .sorted(Comparator
+                        .comparingDouble(
+                                (ScoredPlace scoredPlace) ->
+                                        scoredPlace.score()
+                                                + preferredRegionBonus(
+                                                scoredPlace.place(),
+                                                preferredRegions
+                                        )
+                        )
+                        .reversed()
+                        .thenComparing(scoreComparator()))
+                .toList();
+    }
+
+    private double preferredRegionBonus(
+            Place place,
+            List<String> preferredRegions
+    ) {
+        String region = normalizeDistrict(place.getRegion());
+        if (region == null) {
+            return 0.0;
+        }
+        int regionIndex = preferredRegions.indexOf(region);
+        return regionIndex >= 0
+                && regionIndex < PREFERRED_REGION_BONUSES.size()
+                ? PREFERRED_REGION_BONUSES.get(regionIndex)
+                : 0.0;
+    }
+
+    private String normalizeDistrict(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        Matcher matcher = DISTRICT_PATTERN.matcher(value.trim());
+        return matcher.find() ? matcher.group(1) : null;
     }
 
     /**
@@ -850,6 +1038,67 @@ public class PlaceRecommendationService {
         );
     }
 
+    /**
+     * 하루 기본 후보 수를 여행 일수만큼 확장한다.
+     * 3일 이상 일정은 행렬·탐색 비용이 급증하지 않도록 총 90개 안에서 비율을
+     * 유지해 축소한다.
+     */
+    private CandidatePoolPolicy expandedCandidatePoolPolicy(
+            String scheduleType,
+            int travelDays
+    ) {
+        Map<String, Integer> finalDailyTargets = "P".equals(scheduleType)
+                ? Map.of(TOUR, 3, RESTAURANT, 2, CAFE, 1)
+                : Map.of(TOUR, 2, RESTAURANT, 1, CAFE, 1);
+        Map<String, Integer> baseDailyCandidateTargets =
+                "P".equals(scheduleType)
+                        ? Map.of(TOUR, 15, RESTAURANT, 10, CAFE, 5)
+                        : Map.of(TOUR, 10, RESTAURANT, 5, CAFE, 5);
+        Map<String, Integer> rawTargets = new LinkedHashMap<>();
+        for (String category : COURSE_CANDIDATE_CATEGORIES) {
+            int expandedTarget =
+                    baseDailyCandidateTargets.get(category) * travelDays;
+            rawTargets.put(category, expandedTarget);
+        }
+
+        int rawTotal = rawTargets.values().stream()
+                .mapToInt(Integer::intValue)
+                .sum();
+        double scale = rawTotal > MAX_COURSE_CANDIDATE_TOTAL
+                ? (double) MAX_COURSE_CANDIDATE_TOTAL / rawTotal
+                : 1.0;
+
+        Map<String, Integer> targetCounts = new LinkedHashMap<>();
+        for (String category : COURSE_CANDIDATE_CATEGORIES) {
+            int minimum = finalDailyTargets.get(category);
+            int scaledTarget = Math.max(
+                    minimum,
+                    (int) Math.floor(rawTargets.get(category) * scale)
+            );
+            targetCounts.put(category, scaledTarget);
+        }
+
+        Map<String, Integer> maxLookupCounts = new LinkedHashMap<>();
+        targetCounts.forEach((category, target) ->
+                maxLookupCounts.put(
+                        category,
+                        target + Math.max(3, (int) Math.ceil(target * 0.15))
+                ));
+
+        int targetCandidateCount = targetCounts.values().stream()
+                .mapToInt(Integer::intValue)
+                .sum();
+        int maxLookupCount = maxLookupCounts.values().stream()
+                .mapToInt(Integer::intValue)
+                .sum();
+        return new CandidatePoolPolicy(
+                targetCandidateCount,
+                maxLookupCount,
+                Map.copyOf(targetCounts),
+                Map.copyOf(maxLookupCounts)
+        );
+    }
+
     private String normalizeCategory(String category) {
         if (category == null) {
             return "";
@@ -939,6 +1188,14 @@ public class PlaceRecommendationService {
     // 장소와 계산된 점수를 함께 전달하기 위한 서비스 내부 전용 자료형이다.
     // DB 테이블이나 API JSON에는 ScoredPlace라는 이름으로 노출되지 않는다.
     private record ScoredPlace(Place place, Double score, Double preferenceScore) {
+    }
+
+    private record RegionScore(
+            String region,
+            Double score,
+            Double bestPlaceScore,
+            Integer candidateCount
+    ) {
     }
 
     private record CandidatePoolPolicy(
