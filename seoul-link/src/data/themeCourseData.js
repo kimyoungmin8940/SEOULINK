@@ -46,6 +46,35 @@ export const themeCourseDefinitions = {
         image: localFoodImage,
         tags: ['로컬', '맛집', '시장'],
     },
+    'sunset': {
+        themeCode: 'SUNSET',
+        slug: 'sunset',
+        title: '노을이 예쁜 서울',
+        description:
+            '한강과 서울의 전망 명소에서 붉게 물드는 노을과 야경을 즐기는 코스예요.',
+        image: sunsetImage,
+        tags: ['노을', '한강', '전망'],
+    },
+
+    'rainy-cafe': {
+        themeCode: 'RAINY_CAFE',
+        slug: 'rainy-cafe',
+        title: '비 오는 날의 카페',
+        description:
+            '빗소리와 젖은 서울의 풍경을 바라보며 전시와 카페를 여유롭게 즐기는 코스예요.',
+        image: rainyCafeImage,
+        tags: ['카페', '실내', '비 오는 날'],
+    },
+
+    'walking-alley': {
+        themeCode: 'WALKING_ALLEY',
+        slug: 'walking-alley',
+        title: '혼자 걷기 좋은 골목',
+        description:
+            '서울의 오래된 골목과 개성 있는 동네를 혼자 천천히 둘러보는 산책 코스예요.',
+        image: walkingAlleyImage,
+        tags: ['골목', '산책', '혼자 여행'],
+    },
 };
 
 const courseRecipes = [
@@ -462,6 +491,406 @@ const courseRecipes = [
             },
         ],
     },
+    {
+        courseId: 1401,
+        themeSlug: 'sunset',
+        title: '서울숲–응봉산 노을 코스',
+        description:
+            '성수 전시와 카페를 즐긴 뒤 응봉산에서 한강 노을을 감상하는 코스예요. 비교적 짧게 산책하면서 확실한 전망을 즐길 수 있어요.',
+        optionName: '서울숲 노을 코스',
+        badge: 'BEST',
+        tone: 'preference',
+        region: '성수 · 서울숲 · 응봉산',
+        tags: ['노을', '서울숲', '전망', '산책'],
+        coverImageUrl: sunsetImage,
+        days: [
+            {
+                startTime: '14:30',
+                center: [37.5480, 127.0430],
+                places: [
+                    ['서울숲', 'TOUR'],
+                    ['난포', 'RESTAURANT'],
+                    ['센터 커피', 'CAFE'],
+                    ['디뮤지엄', 'TOUR'],
+                    ['응봉산 팔각정', 'TOUR'],
+                ],
+            },
+        ],
+    },
+
+    {
+        courseId: 1402,
+        themeSlug: 'sunset',
+        title: '노들섬–동작대교 노을 코스',
+        description:
+            '국립중앙박물관을 관람한 뒤 한강을 따라 노들섬과 동작대교 전망 명소를 둘러보는 반나절 코스예요.',
+        optionName: '노들섬 노을 코스',
+        badge: 'VIEW',
+        tone: 'balanced',
+        region: '용산 · 노들섬 · 동작',
+        tags: ['한강', '노들섬', '박물관', '노을'],
+        coverImageUrl: sunsetImage,
+        days: [
+            {
+                startTime: '13:30',
+                center: [37.5140, 126.9760],
+                places: [
+                    ['첫 번째 관광지', 'TOUR'],
+                    ['식당', 'RESTAURANT'],
+                    ['두 번째 관광지', 'TOUR'],
+                    ['카페', 'CAFE'],
+                    ['세 번째 관광지', 'TOUR'],
+                ],
+            },
+        ],
+    },
+
+    {
+        courseId: 1403,
+        themeSlug: 'sunset',
+        title: '여의도 한강 노을 코스',
+        description:
+            '쇼핑과 식사를 즐긴 뒤 여의도 한강변에서 노을과 야경을 감상하는 여행다운 서울 코스예요.',
+        optionName: '여의도 한강 노을',
+        badge: 'SUNSET',
+        tone: 'distance',
+        region: '여의도 · 한강',
+        tags: ['여의도', '한강', '크루즈', '야경'],
+        coverImageUrl: sunsetImage,
+        days: [
+            {
+                startTime: '15:30',
+                center: [37.5240, 126.9300],
+                places: [
+                    ['첫 번째 관광지', 'TOUR'],
+                    ['식당', 'RESTAURANT'],
+                    ['두 번째 관광지', 'TOUR'],
+                    ['카페', 'CAFE'],
+                    ['세 번째 관광지', 'TOUR'],
+                ],
+            },
+        ],
+    },
+
+    {
+        courseId: 1404,
+        themeSlug: 'sunset',
+        title: '반포 수변 노을 코스',
+        description:
+            '실내 쇼핑으로 시작해 세빛섬과 잠수교를 거쳐 한강 노을과 반포대교 야경으로 마무리하는 코스예요.',
+        optionName: '반포 수변 노을',
+        badge: 'NIGHT',
+        tone: 'balanced',
+        region: '고속터미널 · 반포',
+        tags: ['반포', '세빛섬', '잠수교', '야경'],
+        coverImageUrl: sunsetImage,
+        days: [
+            {
+                startTime: '15:30',
+                center: [37.5060, 126.9950],
+                places: [
+                    ['첫 번째 관광지', 'TOUR'],
+                    ['식당', 'RESTAURANT'],
+                    ['두 번째 관광지', 'TOUR'],
+                    ['카페', 'CAFE'],
+                    ['세 번째 관광지', 'TOUR'],
+                ],
+            },
+        ],
+    },
+
+    {
+        courseId: 1405,
+        themeSlug: 'sunset',
+        title: '부암동–인왕산 노을 코스',
+        description:
+            '부암동의 조용한 식당과 카페를 즐기고 인왕산에서 서울 도심의 노을을 바라보는 서정적인 코스예요.',
+        optionName: '부암동 인왕산 노을',
+        badge: 'HEALING',
+        tone: 'preference',
+        region: '부암동 · 인왕산',
+        tags: ['부암동', '인왕산', '전망', '감성'],
+        coverImageUrl: sunsetImage,
+        days: [
+            {
+                startTime: '14:00',
+                center: [37.5920, 126.9650],
+                places: [
+                    ['첫 번째 관광지', 'TOUR'],
+                    ['식당', 'RESTAURANT'],
+                    ['두 번째 관광지', 'TOUR'],
+                    ['카페', 'CAFE'],
+                    ['세 번째 관광지', 'TOUR'],
+                ],
+            },
+        ],
+    },
+
+    // =========================================================
+    // 비 오는 날의 카페
+    // =========================================================
+
+    {
+        courseId: 1501,
+        themeSlug: 'rainy-cafe',
+        title: '빗소리 듣는 안국 한옥 코스',
+        description:
+            '한옥 처마와 비에 젖은 돌길의 분위기를 즐기며 공예 전시와 카페를 함께 둘러보는 실내 중심 코스예요.',
+        optionName: '안국 한옥 카페',
+        badge: 'BEST',
+        tone: 'preference',
+        region: '안국 · 삼청동 · 인사동',
+        tags: ['한옥', '카페', '전시', '빗길'],
+        coverImageUrl: rainyCafeImage,
+        days: [
+            {
+                startTime: '10:30',
+                center: [37.5770, 126.9850],
+                places: [
+                    ['서울공예박물관', 'TOUR'],
+                    ['카페 어니언 안국', 'CAFE'],
+                    ['블루보틀 삼청', 'CAFE'],
+                    ['쌈지길', 'TOUR'],
+                ],
+            },
+        ],
+    },
+
+    {
+        courseId: 1502,
+        themeSlug: 'rainy-cafe',
+        title: '을지로 레트로 우천 코스',
+        description:
+            '오래된 골목과 건물 사이로 내리는 비를 바라보며 레트로 카페와 세운상가를 둘러보는 코스예요.',
+        optionName: '을지로 레트로 카페',
+        badge: 'RETRO',
+        tone: 'balanced',
+        region: '을지로 · 세운상가',
+        tags: ['을지로', '레트로', '카페', '사진'],
+        coverImageUrl: rainyCafeImage,
+        days: [
+            {
+                startTime: '11:00',
+                center: [37.5680, 126.9930],
+                places: [
+                    ['커피한약방', 'CAFE'],
+                    ['챔프커피 제3작업실', 'CAFE'],
+                    ['세운상가 9층 전망대', 'TOUR'],
+                    ['청계천', 'TOUR'],
+                ],
+            },
+        ],
+    },
+
+    {
+        courseId: 1503,
+        themeSlug: 'rainy-cafe',
+        title: '성수 창고형 카페 코스',
+        description:
+            '전시와 대형 창고형 카페, 로스터리 카페를 연결해 비 오는 성수의 분위기를 즐기는 코스예요.',
+        optionName: '성수 창고형 카페',
+        badge: 'TREND',
+        tone: 'distance',
+        region: '성수 · 서울숲',
+        tags: ['성수', '전시', '창고형카페', '로스터리'],
+        coverImageUrl: rainyCafeImage,
+        days: [
+            {
+                startTime: '11:00',
+                center: [37.5440, 127.0440],
+                places: [
+                    ['D뮤지엄', 'TOUR'],
+                    ['대림창고 갤러리 카페', 'CAFE'],
+                    ['로우키 성수점', 'CAFE'],
+                    ['센터커피 서울숲점', 'CAFE'],
+                ],
+            },
+        ],
+    },
+
+    {
+        courseId: 1504,
+        themeSlug: 'rainy-cafe',
+        title: '코엑스 완전 실내 코스',
+        description:
+            '외부 이동을 최소화하고 카페, 쇼핑몰, 아쿠아리움과 백화점을 연결해 폭우에도 즐길 수 있는 코스예요.',
+        optionName: '코엑스 실내 코스',
+        badge: 'INDOOR',
+        tone: 'balanced',
+        region: '삼성 · 코엑스',
+        tags: ['실내', '코엑스', '아쿠아리움', '쇼핑'],
+        coverImageUrl: rainyCafeImage,
+        days: [
+            {
+                startTime: '10:30',
+                center: [37.5110, 127.0590],
+                places: [
+                    ['테라로사 포스코센터점', 'CAFE'],
+                    ['스타필드 코엑스몰', 'TOUR'],
+                    ['씨라이프 코엑스 아쿠아리움', 'TOUR'],
+                    ['현대백화점 무역센터점', 'TOUR'],
+                ],
+            },
+        ],
+    },
+
+    {
+        courseId: 1505,
+        themeSlug: 'rainy-cafe',
+        title: '은평 한옥 빗길 코스',
+        description:
+            '통창 너머 한옥과 북한산의 비 풍경을 감상하며 박물관과 카페에서 조용히 머무는 코스예요.',
+        optionName: '은평 한옥 빗길',
+        badge: 'HEALING',
+        tone: 'preference',
+        region: '은평 · 진관동',
+        tags: ['은평', '한옥', '북한산', '카페'],
+        coverImageUrl: rainyCafeImage,
+        days: [
+            {
+                startTime: '11:00',
+                center: [37.6410, 126.9380],
+                places: [
+                    ['은평역사한옥박물관', 'TOUR'],
+                    ['1인1잔', 'CAFE'],
+                    ['은평한옥마을', 'TOUR'],
+                ],
+            },
+        ],
+    },
+
+    // =========================================================
+    // 혼자 걷기 좋은 골목
+    // =========================================================
+
+    {
+        courseId: 1601,
+        themeSlug: 'walking-alley',
+        title: '북촌–익선동 한옥 골목',
+        description:
+            '공예 전시와 삼청동 골목, 한옥 카페를 차례로 경험하며 혼자 사진을 찍고 걷기 좋은 코스예요.',
+        optionName: '북촌 익선동 골목',
+        badge: 'BEST',
+        tone: 'preference',
+        region: '안국 · 북촌 · 익선동',
+        tags: ['북촌', '익선동', '한옥', '사진'],
+        coverImageUrl: walkingAlleyImage,
+        days: [
+            {
+                startTime: '09:30',
+                center: [37.5770, 126.9860],
+                places: [
+                    ['서울공예박물관', 'TOUR'],
+                    ['블루보틀 삼청', 'CAFE'],
+                    ['카페 어니언 안국', 'CAFE'],
+                    ['익선동 한옥거리', 'TOUR'],
+                ],
+            },
+        ],
+    },
+
+    {
+        courseId: 1602,
+        themeSlug: 'walking-alley',
+        title: '인사동–을지로 시간여행 골목',
+        description:
+            '전통 상권에서 오래된 도심 골목으로 이동하며 혼밥과 카페를 자연스럽게 즐기는 시간여행 코스예요.',
+        optionName: '인사동 을지로 골목',
+        badge: 'RETRO',
+        tone: 'balanced',
+        region: '인사동 · 종로 · 을지로',
+        tags: ['인사동', '을지로', '골목', '혼밥'],
+        coverImageUrl: walkingAlleyImage,
+        days: [
+            {
+                startTime: '10:30',
+                center: [37.5700, 126.9900],
+                places: [
+                    ['쌈지길', 'TOUR'],
+                    ['이문설농탕', 'RESTAURANT'],
+                    ['커피한약방', 'CAFE'],
+                    ['챔프커피 제3작업실', 'CAFE'],
+                ],
+            },
+        ],
+    },
+
+    {
+        courseId: 1603,
+        themeSlug: 'walking-alley',
+        title: '연남동–홍대–합정 골목',
+        description:
+            '연남동의 차분한 골목에서 시작해 홍대와 합정까지 걸으며 서로 다른 동네의 분위기를 경험하는 코스예요.',
+        optionName: '연남 홍대 합정 산책',
+        badge: 'WALK',
+        tone: 'distance',
+        region: '연남동 · 홍대 · 합정',
+        tags: ['연남동', '홍대', '합정', '산책'],
+        coverImageUrl: walkingAlleyImage,
+        days: [
+            {
+                startTime: '11:00',
+                center: [37.5570, 126.9230],
+                places: [
+                    ['경의선숲길 연남동 구간', 'TOUR'],
+                    ['KT&G 상상마당 홍대', 'TOUR'],
+                    ['홍대 걷고싶은거리', 'TOUR'],
+                    ['앤트러사이트 합정점', 'CAFE'],
+                ],
+            },
+        ],
+    },
+
+    {
+        courseId: 1604,
+        themeSlug: 'walking-alley',
+        title: '문래 철공소 골목',
+        description:
+            '철공소와 예술 작업실이 섞인 문래창작촌을 천천히 순환하고 타임스퀘어에서 휴식하는 코스예요.',
+        optionName: '문래 철공소 골목',
+        badge: 'ART',
+        tone: 'balanced',
+        region: '문래 · 영등포',
+        tags: ['문래', '철공소', '예술', '산업골목'],
+        coverImageUrl: walkingAlleyImage,
+        days: [
+            {
+                startTime: '13:00',
+                center: [37.5160, 126.8960],
+                places: [
+                    ['문래창작촌 골목', 'TOUR'],
+                    ['문래 예술 작업실 거리', 'TOUR'],
+                    ['문래 카페거리', 'CAFE'],
+                    ['타임스퀘어', 'TOUR'],
+                ],
+            },
+        ],
+    },
+
+    {
+        courseId: 1605,
+        themeSlug: 'walking-alley',
+        title: '해방촌–한남 취향 골목',
+        description:
+            '오래된 시장 골목에서 음악과 커피 공간으로 이어지며 혼자 기록하고 걷기 좋은 취향 산책 코스예요.',
+        optionName: '해방촌 한남 골목',
+        badge: 'MUSIC',
+        tone: 'preference',
+        region: '해방촌 · 이태원 · 한남',
+        tags: ['해방촌', '한남동', '음악', '커피'],
+        coverImageUrl: walkingAlleyImage,
+        days: [
+            {
+                startTime: '12:30',
+                center: [37.5380, 126.9950],
+                places: [
+                    ['해방촌 신흥시장', 'TOUR'],
+                    ['현대카드 뮤직 라이브러리', 'TOUR'],
+                    ['맥심플랜트', 'CAFE'],
+                ],
+            },
+        ],
+    },
 ];
 
 function parseTime(value) {
@@ -474,22 +903,65 @@ function formatTime(value) {
     return `${String(Math.floor(normalized / 60)).padStart(2, '0')}:${String(normalized % 60).padStart(2, '0')}`;
 }
 
-function getThemeFlags(themeSlug, placeName, category) {
+function getThemeFlags(
+    themeSlug,
+    placeName,
+    category
+) {
     const normalizedName = placeName.replace(/\s+/g, '');
-    const flags = {
-        themePalaceCultureYn: themeSlug === 'hanok-photo' ? 'Y' : 'N',
-        themeNatureHangangYn: /(공원|숲|산|한강|청계천|선유교)/.test(normalizedName) ? 'Y' : 'N',
-        themeDateYn: themeSlug === 'night-date' ? 'Y' : 'N',
-        themeFoodTourYn: themeSlug === 'local-food' || category === 'RESTAURANT' ? 'Y' : 'N',
-        themeCafeTourYn: category === 'CAFE' ? 'Y' : 'N',
-        themeShoppingHotplaceYn: /(시장|거리|고투몰|쌈지길|문래창작촌)/.test(normalizedName) ? 'Y' : 'N',
-        themeNightViewYn: themeSlug === 'night-date' && /(서울로|산|스카이|공원|섬|교)/.test(normalizedName) ? 'Y' : 'N',
-        themeHotelStayYn: category === 'HOTEL' ? 'Y' : 'N',
+    const isSunsetTheme = themeSlug === 'sunset';
+    const isRainyCafeTheme = themeSlug === 'rainy-cafe';
+
+    return {
+        // 한옥 테마에서만 적용
+        themePalaceCultureYn:
+            themeSlug === 'hanok-photo' ? 'Y' : 'N',
+
+        // 노을·한강·공원·산 등
+        themeNatureHangangYn:
+            isSunsetTheme ||
+            /(공원|숲|산|한강|청계천|선유교|노들섬|잠수교|세빛섬)/.test(
+                normalizedName
+            )
+                ? 'Y'
+                : 'N',
+
+        // 야간 데이트 테마
+        themeDateYn:
+            themeSlug === 'night-date' ? 'Y' : 'N',
+
+        // 음식 또는 식당
+        themeFoodTourYn:
+            themeSlug === 'local-food' || category === 'RESTAURANT' ? 'Y' : 'N',
+
+        // 비 오는 날 카페 또는 카페 장소
+        themeCafeTourYn:
+            isRainyCafeTheme || category === 'CAFE' ? 'Y' : 'N',
+
+        // 골목·시장·쇼핑·핫플레이스
+        themeShoppingHotplaceYn:
+            /(시장|거리|골목|고투몰|쌈지길|문래창작촌|더현대|코엑스|타임스퀘어|홍대)/.test(
+                normalizedName
+            )
+                ? 'Y'
+                : 'N',
+
+        // 야경과 노을 전망
+        themeNightViewYn:
+            (
+                themeSlug === 'night-date' ||
+                isSunsetTheme
+            ) &&
+            /(서울로|산|스카이|공원|섬|교|팔각정|노을|크루즈|세빛섬)/.test(
+                normalizedName
+            )
+                ? 'Y'
+                : 'N',
+
+        themeHotelStayYn:
+            category === 'HOTEL' ? 'Y' : 'N',
     };
-
-    return flags;
 }
-
 function buildDay(course, rawDay, dayIndex) {
     let timeCursor = parseTime(rawDay.startTime);
     const center = rawDay.center;

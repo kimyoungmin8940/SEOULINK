@@ -4,6 +4,7 @@ import com.seoulink.backend.domain.course.dto.response.CourseDetailResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseDayResponse;
 import com.seoulink.backend.domain.course.dto.response.CoursePlaceResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseRecommendationResponse;
+import com.seoulink.backend.domain.course.dto.response.ThemeCourseBookmarkResponse;
 import com.seoulink.backend.domain.course.entity.CourseDetail;
 import com.seoulink.backend.domain.course.entity.TravelCourse;
 import com.seoulink.backend.domain.course.model.TransportMode;
@@ -134,14 +135,15 @@ public class CourseService {
     public List<CourseRecommendationResponse> getRecommendedCourses(Long memberId) {
         validateMemberId(memberId);
         return travelCourseRepository
-                .findByMemberIdAndCourseTypeOrderByCreatedAtDesc(
+                .findByMemberIdAndCourseTypeInOrderByCreatedAtDesc(
                         memberId,
-                        "SURVEY"
+                        List.of("SURVEY", "THEME")
                 )
                 .stream()
                 .map(this::toRecommendationResponse)
                 .toList();
     }
+
 
     /** 회원이 보유한 모든 코스를 유형과 관계없이 최신순으로 반환한다. */
     @Transactional(readOnly = true)
@@ -152,6 +154,41 @@ public class CourseService {
                 .stream()
                 .map(this::toRecommendationResponse)
                 .toList();
+    }
+
+    /**
+     * 회원이 특정 테마 코스를 저장했는지 확인한다.
+     *
+     * <p>저장된 THEME 코스가 있으면 saved=true와 저장된 courseId를 반환하고,
+     * 저장되지 않았다면 saved=false와 courseId=null을 반환한다.</p>
+     */
+    @Transactional(readOnly = true)
+    public ThemeCourseBookmarkResponse getThemeCourseBookmarkStatus(
+            Long memberId,
+            String sourceCourseKey
+    ) {
+        validateMemberId(memberId);
+
+        String normalizedSourceCourseKey = validateSourceCourseKey(sourceCourseKey);
+
+        return travelCourseRepository
+                .findByMemberIdAndSourceCourseKey(memberId, normalizedSourceCourseKey)
+                // 북마크 조회 API에서 THEME 이외의 코스가 조회되지 않도록 확인
+                .filter(course -> "THEME".equalsIgnoreCase(course.getCourseType()))
+                .map(course ->
+                        ThemeCourseBookmarkResponse.builder()
+                                .saved(true)
+                                .courseId(course.getCourseId())
+                                .sourceCourseKey(normalizedSourceCourseKey)
+                                .build()
+                )
+                .orElseGet(() ->
+                        ThemeCourseBookmarkResponse.builder()
+                                .saved(false)
+                                .courseId(null)
+                                .sourceCourseKey(normalizedSourceCourseKey)
+                                .build()
+                );
     }
 
     /** 저장 엔티티를 추천·내 코스 목록 카드에서 사용하는 요약 응답으로 변환한다. */
@@ -210,6 +247,45 @@ public class CourseService {
         if (memberId == null || memberId < 1) {
             throw new IllegalArgumentException("회원 ID는 1 이상이어야 합니다.");
         }
+    }
+
+    /** 원본 테마 코스 키를 검사하고 앞뒤 공백을 제거한 값을 반환한다. */
+    private String validateSourceCourseKey(
+            String sourceCourseKey
+    ) {
+        if (sourceCourseKey == null
+                || sourceCourseKey.isBlank()) {
+            throw new IllegalArgumentException("원본 테마 코스 키가 필요합니다.");
+        }
+
+        String normalizedSourceCourseKey = sourceCourseKey.trim();
+
+        if (normalizedSourceCourseKey.length() > 50) {
+            throw new IllegalArgumentException("원본 테마 코스 키는 50자를 초과할 수 없습니다.");
+        }
+        return normalizedSourceCourseKey;
+    }
+
+    /** 회원이 저장한 테마 코스 북마크를 삭제한다. */
+    @Transactional
+    public void deleteThemeCourseBookmark(
+            Long memberId,
+            String sourceCourseKey
+    ) {
+        validateMemberId(memberId);
+
+        String normalizedSourceCourseKey = validateSourceCourseKey(sourceCourseKey);
+
+        TravelCourse course = travelCourseRepository
+                .findByMemberIdAndSourceCourseKey(memberId, normalizedSourceCourseKey)
+                .filter(savedCourse ->
+                        "THEME".equalsIgnoreCase(
+                                savedCourse.getCourseType()
+                        )
+                )
+                .orElseThrow(() -> new IllegalArgumentException("저장된 테마 코스를 찾을 수 없습니다."));
+
+        travelCourseRepository.delete(course);
     }
 
     /** 잘못된 코스 식별자가 Repository까지 전달되지 않도록 공통 검증한다. */

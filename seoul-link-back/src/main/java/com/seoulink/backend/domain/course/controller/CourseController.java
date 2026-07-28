@@ -12,6 +12,7 @@ import com.seoulink.backend.domain.course.dto.response.CourseOptimizeResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseRecommendResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseRecommendationResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseSaveResponse;
+import com.seoulink.backend.domain.course.dto.response.ThemeCourseBookmarkResponse;
 import com.seoulink.backend.domain.course.service.CourseDraftService;
 import com.seoulink.backend.domain.course.service.CourseOptimizationService;
 import com.seoulink.backend.domain.course.service.CourseRecommendationService;
@@ -31,6 +32,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.DeleteMapping;
 
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -154,6 +156,37 @@ public class CourseController {
             @RequestParam Long memberId
     ) {
         return courseService.getRecommendedCourses(memberId);
+    }
+
+    /**
+     * 회원이 특정 테마 코스를 저장했는지 확인한다.
+     *
+     * <p>로그인 연동 전에는 회원 ID를 쿼리 파라미터로 전달한다.
+     * JWT 인증이 연결되면 memberId는 로그인 정보에서 가져오도록 변경한다.</p>
+     */
+    @GetMapping("/theme-bookmarks/status")
+    public ThemeCourseBookmarkResponse
+    getThemeCourseBookmarkStatus(
+            @RequestParam Long memberId,
+            @RequestParam String sourceCourseKey
+    ) {
+        return courseService.getThemeCourseBookmarkStatus(
+                memberId,
+                sourceCourseKey
+        );
+    }
+
+    /** 회원이 저장한 테마 코스 북마크를 삭제한다. */
+    @DeleteMapping("/theme-bookmarks")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteThemeCourseBookmark(
+            @RequestParam Long memberId,
+            @RequestParam String sourceCourseKey
+    ) {
+        courseService.deleteThemeCourseBookmark(
+                memberId,
+                sourceCourseKey
+        );
     }
 
     /**

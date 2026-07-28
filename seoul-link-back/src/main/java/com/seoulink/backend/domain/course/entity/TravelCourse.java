@@ -62,6 +62,10 @@ public class TravelCourse {
     @Column(name = "COURSE_TYPE", nullable = false, length = 20)
     private String courseType = "CUSTOM";
 
+    // 프론트의 원본 테마 코스를 구분하는 키
+    @Column(name = "SOURCE_COURSE_KEY", length = 50)
+    private String sourceCourseKey;
+
     @Column(name = "REGION", length = 100)
     private String region;
 

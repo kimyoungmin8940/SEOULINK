@@ -23,4 +23,21 @@ public interface TravelCourseRepository extends JpaRepository<TravelCourse, Long
             Long memberId,
             String courseType
     );
+
+    // 새로운 기능: 여러 유형을 함께 조회
+    List<TravelCourse> findByMemberIdAndCourseTypeInOrderByCreatedAtDesc(
+            Long memberId,
+            List<String> courseTypes
+    );
+
+    Optional<TravelCourse> findByMemberIdAndSourceCourseKey(
+            Long memberId,
+            String sourceCourseKey
+    );
+
+    boolean existsByMemberIdAndSourceCourseKey(
+            Long memberId,
+            String sourceCourseKey
+    );
+
 }

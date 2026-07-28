@@ -10,9 +10,14 @@ import Header from '../../components/common/Header';
 import Footer from '../../components/common/Footer';
 import CourseRecommendationCard from '../../components/course/CourseRecommendationCard';
 import {
+    getThemeCourseBookmarkStatus,
+    saveThemeCourse,
+} from '../../api/courseApi';
+import {
     getThemeCourseDefinition,
     getThemeCourses,
 } from '../../data/themeCourseData';
+import { getCurrentMemberId } from '../../utils/courseHistory';
 import hanokImage from '../../assets/images/moods/mood-hanok-photo.png';
 import walkingImage from '../../assets/images/moods/mood-walking-alley.png';
 import nightImage from '../../assets/images/moods/mood-date-night.png';
@@ -80,7 +85,7 @@ function ThemeCourseListPage() {
 
                             <div className="theme-course-hero-meta">
                                 <span><CalendarDays size={15} aria-hidden="true" />당일치기 · 1박 2일</span>
-                                <span><MapPinned size={15} aria-hidden="true" />서울 테마 코스 5개</span>
+                                <span><MapPinned size={15} aria-hidden="true" />서울 테마 코스 {courses.length}개</span>
                             </div>
                         </div>
                     </div>
@@ -93,7 +98,7 @@ function ThemeCourseListPage() {
                 <div className="theme-course-list-heading">
                     <div>
                         <span>추천 코스</span>
-                        <h2>{theme.title} 코스 5개</h2>
+                        <h2>{theme.title} 코스 {courses.length}개</h2>
                     </div>
                     <p>원하는 코스를 선택하면 날짜별 장소와 이동 동선을 자세히 볼 수 있어요.</p>
                 </div>

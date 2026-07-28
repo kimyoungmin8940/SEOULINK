@@ -31,7 +31,7 @@ import java.util.Set;
 public class CourseSaveService {
 
     private static final Set<String> ALLOWED_COURSE_TYPES =
-            Set.of("CUSTOM", "SURVEY", "CHATBOT");
+            Set.of("CUSTOM", "SURVEY", "CHATBOT", "THEME");
     private static final int MAX_BATCH_COURSE_COUNT = 3;
 
     private final TravelCourseRepository travelCourseRepository;
@@ -89,6 +89,17 @@ public class CourseSaveService {
             CourseSaveRequest request,
             ValidatedCourse validated
     ) {
+        String sourceCourseKey = trimToNull(request.getSourceCourseKey());
+
+        if ("THEME".equals(validated.courseType())
+                && travelCourseRepository
+                .existsByMemberIdAndSourceCourseKey(
+                        request.getMemberId(),
+                        sourceCourseKey
+                )) {
+            throw new IllegalArgumentException("이미 저장한 테마 코스 입니다.");
+        }
+
         double totalDistanceKm = validated.places().stream()
                 .mapToDouble(CourseSavePlaceDto::getDistanceFromPreviousKm)
                 .sum();
@@ -115,6 +126,7 @@ public class CourseSaveService {
                         .description(trimToNull(request.getDescription()))
                         .travelCode(validated.travelCode())
                         .courseType(validated.courseType())
+                        .sourceCourseKey(sourceCourseKey)
                         .region(trimToNull(request.getRegion()))
                         .publicStatus(Boolean.TRUE.equals(request.getPublicCourse()) ? "Y" : "N")
                         .viewCount(0L)
@@ -226,6 +238,30 @@ public class CourseSaveService {
         if ("SURVEY".equals(courseType) && request.getResultId() == null) {
             throw new IllegalArgumentException(
                     "설문 추천 코스는 설문 결과 ID가 필요합니다."
+            );
+        }
+
+        String sourceCourseKey =
+                trimToNull(request.getSourceCourseKey());
+
+        if ("THEME".equals(courseType)
+                && sourceCourseKey == null) {
+            throw new IllegalArgumentException(
+                    "테마 코스는 원본 코스 키가 필요합니다."
+            );
+        }
+
+        if (!"THEME".equals(courseType)
+                && sourceCourseKey != null) {
+            throw new IllegalArgumentException(
+                    "원본 코스 키는 테마 코스에만 사용할 수 있습니다."
+            );
+        }
+
+        if (sourceCourseKey != null
+                && sourceCourseKey.length() > 50) {
+            throw new IllegalArgumentException(
+                    "원본 코스 키는 50자를 초과할 수 없습니다."
             );
         }
         String travelCode = normalizeTravelCode(request.getTravelCode());
@@ -398,7 +434,7 @@ public class CourseSaveService {
         normalized = normalized.toUpperCase(Locale.ROOT);
         if (!ALLOWED_COURSE_TYPES.contains(normalized)) {
             throw new IllegalArgumentException(
-                    "코스 유형은 CUSTOM, SURVEY, CHATBOT 중 하나여야 합니다."
+                    "코스 유형은 CUSTOM, SURVEY, CHATBOT, THEME 중 하나여야 합니다."
             );
         }
         return normalized;

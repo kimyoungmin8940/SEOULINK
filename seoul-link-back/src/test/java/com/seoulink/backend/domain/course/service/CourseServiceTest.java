@@ -256,7 +256,7 @@ class CourseServiceTest {
         );
 
         when(travelCourseRepository
-                .findByMemberIdAndCourseTypeOrderByCreatedAtDesc(1L, "SURVEY"))
+                .findByMemberIdAndCourseTypeInOrderByCreatedAtDesc(1L, List.of("SURVEY", "THEME")))
                 .thenReturn(List.of(recommended));
         when(courseDetailRepository
                 .findByCourseIdOrderByDayNoAscPlaceOrderAsc(20L))
