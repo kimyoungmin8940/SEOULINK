@@ -62,6 +62,12 @@ public class TravelSurvey {
     private LocalDate endDate;
 
     @Column(
+            name = "PEOPLE_COUNT",
+            nullable = false
+    )
+    private Integer peopleCount;
+
+    @Column(
             name = "COMPANION_TYPE",
             nullable = false,
             length = 30
@@ -105,12 +111,22 @@ public class TravelSurvey {
         survey.region = region;
         survey.startDate = startDate;
         survey.endDate = endDate;
+        survey.peopleCount = resolvePeopleCount(companionType);
         survey.companionType = companionType;
         survey.transportType = transportType;
         survey.createdAt = LocalDateTime.now();
         survey.expiresAt = expiresAt;
 
         return survey;
+    }
+
+    private static int resolvePeopleCount(String companionType) {
+        return switch (companionType == null ? "" : companionType.trim().toUpperCase()) {
+            case "COUPLE" -> 2;
+            case "FRIENDS" -> 3;
+            case "FAMILY" -> 4;
+            default -> 1;
+        };
     }
 
     //비회원 검사 결과를 가입한 회원에게 연결

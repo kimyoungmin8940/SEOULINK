@@ -21,6 +21,8 @@ import com.seoulink.backend.domain.survey.repository.SurveyAnswerRepository;
 import com.seoulink.backend.domain.survey.repository.SurveyOptionRepository;
 import com.seoulink.backend.domain.survey.repository.SurveyQuestionRepository;
 import com.seoulink.backend.domain.survey.repository.TravelSurveyRepository;
+import com.seoulink.backend.domain.survey.repository.SurveyResultRepository;
+import com.seoulink.backend.domain.survey.repository.TravelTypeMasterRepository;
 import com.seoulink.backend.domain.traveltype.repository.TravelTypePlaceRepository;
 import org.springframework.stereotype.Service;
 
@@ -37,6 +39,9 @@ public class MyPageService {
     private final ReviewLikeRepository reviewLikeRepository;
     private final ReviewCommentRepository reviewCommentRepository;
     private final PlaceRepository placeRepository;
+    private final TravelSurveyRepository travelSurveyRepository;
+    private final SurveyResultRepository surveyResultRepository;
+    private final TravelTypeMasterRepository travelTypeMasterRepository;
 
     public MyPageService(
             MemberRepository memberRepository,
@@ -46,7 +51,10 @@ public class MyPageService {
             ReviewRepository reviewRepository,
             ReviewLikeRepository reviewLikeRepository,
             ReviewCommentRepository reviewCommentRepository,
-            PlaceRepository placeRepository
+            PlaceRepository placeRepository,
+            TravelSurveyRepository travelSurveyRepository,
+            SurveyResultRepository surveyResultRepository,
+            TravelTypeMasterRepository travelTypeMasterRepository
     ) {
         this.memberRepository = memberRepository;
         this.travelCourseRepository = travelCourseRepository;
@@ -56,6 +64,9 @@ public class MyPageService {
         this.reviewLikeRepository = reviewLikeRepository;
         this.reviewCommentRepository = reviewCommentRepository;
         this.placeRepository = placeRepository;
+        this.travelSurveyRepository = travelSurveyRepository;
+        this.surveyResultRepository = surveyResultRepository;
+        this.travelTypeMasterRepository = travelTypeMasterRepository;
     }
 
     public MyPageResponse getMyPage(Long memberId) {
@@ -68,7 +79,25 @@ public class MyPageService {
                 member.getName(),
                 member.getNickname()
         );
-        MyTravelTypeResponse travelTypeResponse = null;
+        MyTravelTypeResponse travelTypeResponse = travelSurveyRepository
+                .findFirstByMemberIdOrderByCreatedAtDesc(memberId)
+                .flatMap(survey -> surveyResultRepository
+                        .findBySurveyId(survey.getSurveyId())
+                        .map(result -> {
+                            var travelType = travelTypeMasterRepository
+                                    .findByTravelCode(result.getTravelCode())
+                                    .orElse(null);
+
+                            return new MyTravelTypeResponse(
+                                    survey.getSurveyId(),
+                                    result.getResultId(),
+                                    result.getTravelCode(),
+                                    travelType == null ? null : travelType.getTypeTitle(),
+                                    travelType == null ? null : travelType.getTypeDescription(),
+                                    travelType == null ? null : travelType.getImageUrl()
+                            );
+                        }))
+                .orElse(null);
 
         List<MyCourseResponse> courses = travelCourseRepository.findByMemberIdOrderByCreatedAtDesc(memberId)
                 .stream()

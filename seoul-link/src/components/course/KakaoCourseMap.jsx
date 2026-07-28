@@ -4,27 +4,8 @@ import { getMappableCoursePlaces } from '../../utils/courseMap';
 const KAKAO_MAP_SCRIPT_ID = 'kakao-map-sdk';
 const DEFAULT_CENTER = { latitude: 37.5665, longitude: 126.978 };
 const ZOOM_CONTROL_HIDE_DELAY_MS = 3000;
-const MAP_UPDATE_IDLE_TIMEOUT_MS = 350;
 
 let kakaoMapsLoaderPromise = null;
-
-/** 마커·선 교체는 긴급한 카드 렌더가 끝난 뒤 브라우저 유휴 시간에 처리합니다. */
-function scheduleMapUpdate(callback) {
-    if (typeof window.requestIdleCallback === 'function') {
-        const idleCallbackId = window.requestIdleCallback(callback, {
-            timeout: MAP_UPDATE_IDLE_TIMEOUT_MS,
-        });
-
-        return () => {
-            if (typeof window.cancelIdleCallback === 'function') {
-                window.cancelIdleCallback(idleCallbackId);
-            }
-        };
-    }
-
-    const timeoutId = window.setTimeout(callback, 0);
-    return () => window.clearTimeout(timeoutId);
-}
 
 function loadKakaoMaps(appKey) {
     if (typeof window === 'undefined') {
@@ -133,13 +114,8 @@ function KakaoCourseMap({
 }) {
     const containerRef = useRef(null);
     const mapRef = useRef(null);
-    const mapsApiRef = useRef(null);
-    const overlaysRef = useRef([]);
-    const polylinesRef = useRef([]);
-    const resizeObserverRef = useRef(null);
-    const mapClickHandlerRef = useRef(null);
     const zoomControlTimerRef = useRef(null);
-    const [mapStatus, setMapStatus] = useState('loading');
+    const [loadResult, setLoadResult] = useState({ key: null, status: 'loading' });
     const [isZoomControlVisible, setIsZoomControlVisible] = useState(false);
     const mappablePlaces = useMemo(() => getMappableCoursePlaces(places), [places]);
     const placesSignature = useMemo(() => mappablePlaces
@@ -151,6 +127,7 @@ function KakaoCourseMap({
         ].join(':'))
         .join('|'), [mappablePlaces]);
     const appKey = import.meta.env.VITE_KAKAO_MAP_KEY?.trim();
+    const requestKey = `${placesSignature}:${showZoomControl}`;
 
     const showZoomControlTemporarily = useCallback(() => {
         setIsZoomControlVisible(true);
@@ -174,125 +151,61 @@ function KakaoCourseMap({
     useEffect(() => {
         const container = containerRef.current;
         let cancelled = false;
+        let resizeObserver = null;
+        let mapsApi = null;
+        let map = null;
+        let mapClickHandler = null;
+        const overlays = [];
+        const polylines = [];
 
         if (!container) return undefined;
+
+        if (mappablePlaces.length === 0) {
+            container.replaceChildren();
+            return undefined;
+        }
 
         if (!appKey) {
             container.replaceChildren();
             return undefined;
         }
 
-        setMapStatus('loading');
         loadKakaoMaps(appKey)
             .then((maps) => {
                 if (cancelled || !containerRef.current) return;
 
-                const map = new maps.Map(container, {
-                    center: new maps.LatLng(
-                        DEFAULT_CENTER.latitude,
-                        DEFAULT_CENTER.longitude,
-                    ),
+                mapsApi = maps;
+                const positions = mappablePlaces.map((place) => (
+                    new maps.LatLng(place.latitude, place.longitude)
+                ));
+                const center = positions[0]
+                    || new maps.LatLng(DEFAULT_CENTER.latitude, DEFAULT_CENTER.longitude);
+                map = new maps.Map(container, {
+                    center,
                     level: 5,
                     scrollwheel: false,
                 });
-                mapsApiRef.current = maps;
                 mapRef.current = map;
 
                 if (showZoomControl) {
-                    mapClickHandlerRef.current = showZoomControlTemporarily;
-                    maps.event.addListener(
+                    mapClickHandler = showZoomControlTemporarily;
+                    maps.event.addListener(map, 'click', mapClickHandler);
+                }
+
+                positions.forEach((position, index) => {
+                    const overlay = new maps.CustomOverlay({
                         map,
-                        'click',
-                        mapClickHandlerRef.current,
-                    );
-                }
+                        position,
+                        content: createNumberMarker(mappablePlaces[index], index),
+                        xAnchor: 0.5,
+                        yAnchor: 0.5,
+                        zIndex: 4,
+                    });
+                    overlays.push(overlay);
+                });
 
-                const relayoutMap = () => {
-                    map.relayout();
-                };
-
-                if (typeof ResizeObserver !== 'undefined') {
-                    resizeObserverRef.current = new ResizeObserver(relayoutMap);
-                    resizeObserverRef.current.observe(container);
-                }
-
-                window.requestAnimationFrame(relayoutMap);
-                setMapStatus('ready');
-            })
-            .catch(() => {
-                if (!cancelled) setMapStatus('error');
-            });
-
-        return () => {
-            cancelled = true;
-            resizeObserverRef.current?.disconnect();
-            resizeObserverRef.current = null;
-            if (
-                mapsApiRef.current
-                && mapRef.current
-                && mapClickHandlerRef.current
-            ) {
-                mapsApiRef.current.event.removeListener(
-                    mapRef.current,
-                    'click',
-                    mapClickHandlerRef.current,
-                );
-            }
-            mapClickHandlerRef.current = null;
-            overlaysRef.current.forEach((overlay) => overlay.setMap(null));
-            polylinesRef.current.forEach((polyline) => polyline.setMap(null));
-            overlaysRef.current = [];
-            polylinesRef.current = [];
-            mapRef.current = null;
-            mapsApiRef.current = null;
-            container.replaceChildren();
-        };
-    }, [appKey, showZoomControl, showZoomControlTemporarily]);
-
-    useEffect(() => {
-        const maps = mapsApiRef.current;
-        const map = mapRef.current;
-
-        if (!maps || !map || mapStatus !== 'ready') {
-            return undefined;
-        }
-
-        let frameId = null;
-        const cancelScheduledUpdate = scheduleMapUpdate(() => {
-            if (
-                mapsApiRef.current !== maps
-                || mapRef.current !== map
-            ) {
-                return;
-            }
-
-            overlaysRef.current.forEach((overlay) => overlay.setMap(null));
-            polylinesRef.current.forEach((polyline) => polyline.setMap(null));
-            overlaysRef.current = [];
-            polylinesRef.current = [];
-
-            if (mappablePlaces.length === 0) {
-                return;
-            }
-
-            const positions = mappablePlaces.map((place) => (
-                new maps.LatLng(place.latitude, place.longitude)
-            ));
-
-            overlaysRef.current = positions.map((position, index) => (
-                new maps.CustomOverlay({
-                    map,
-                    position,
-                    content: createNumberMarker(mappablePlaces[index], index),
-                    xAnchor: 0.5,
-                    yAnchor: 0.5,
-                    zIndex: 4,
-                })
-            ));
-
-            if (positions.length > 1) {
-                polylinesRef.current = [
-                    new maps.Polyline({
+                if (positions.length > 1) {
+                    polylines.push(new maps.Polyline({
                         map,
                         path: positions,
                         strokeWeight: 8,
@@ -300,8 +213,8 @@ function KakaoCourseMap({
                         strokeOpacity: 0.92,
                         strokeStyle: 'solid',
                         zIndex: 1,
-                    }),
-                    new maps.Polyline({
+                    }));
+                    polylines.push(new maps.Polyline({
                         map,
                         path: positions,
                         strokeWeight: 4,
@@ -309,14 +222,8 @@ function KakaoCourseMap({
                         strokeOpacity: 0.95,
                         strokeStyle: 'shortdash',
                         zIndex: 2,
-                    }),
-                ];
-            }
+                    }));
 
-            frameId = window.requestAnimationFrame(() => {
-                map.relayout();
-
-                if (positions.length > 1) {
                     const bounds = new maps.LatLngBounds();
                     positions.forEach((position) => bounds.extend(position));
                     map.setBounds(bounds, 48, 48, 48, 48);
@@ -324,24 +231,46 @@ function KakaoCourseMap({
                     map.setCenter(positions[0]);
                     map.setLevel(4);
                 }
+
+                const relayoutMap = () => {
+                    map.relayout();
+                    if (positions.length === 1) map.setCenter(positions[0]);
+                };
+
+                if (typeof ResizeObserver !== 'undefined') {
+                    resizeObserver = new ResizeObserver(relayoutMap);
+                    resizeObserver.observe(container);
+                }
+
+                window.requestAnimationFrame(relayoutMap);
+                setLoadResult({ key: requestKey, status: 'ready' });
+            })
+            .catch(() => {
+                if (!cancelled) setLoadResult({ key: requestKey, status: 'error' });
             });
-        });
 
         return () => {
-            cancelScheduledUpdate();
-            if (frameId !== null) {
-                window.cancelAnimationFrame(frameId);
+            cancelled = true;
+            resizeObserver?.disconnect();
+            if (mapsApi && map && mapClickHandler) {
+                mapsApi.event.removeListener(map, 'click', mapClickHandler);
             }
+            if (mapRef.current === map) mapRef.current = null;
+            overlays.forEach((overlay) => overlay.setMap(null));
+            polylines.forEach((polyline) => polyline.setMap(null));
+            container.replaceChildren();
         };
-    // placesSignature가 바뀔 때 지도 인스턴스는 유지하고 마커와 선만 교체합니다.
+    // placesSignature는 좌표·이름이 실제로 바뀐 경우에만 지도를 다시 생성하게 합니다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [mapStatus, placesSignature]);
+    }, [placesSignature, showZoomControl, showZoomControlTemporarily]);
 
     const status = mappablePlaces.length === 0
         ? 'empty'
         : !appKey
             ? 'missing-key'
-            : mapStatus;
+            : loadResult.key === requestKey
+                ? loadResult.status
+                : 'loading';
     const statusMessage = getStatusMessage(status);
 
     const changeZoomLevel = (levelChange) => {
@@ -399,3 +328,4 @@ function KakaoCourseMap({
 }
 
 export default KakaoCourseMap;
+

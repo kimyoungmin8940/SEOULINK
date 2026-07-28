@@ -854,6 +854,12 @@
     border: 1px solid #deebf6;
     border-radius: 8px;
     background: #fff;
+    cursor: pointer;
+}
+
+.recent-course-card:focus-visible {
+    outline: 3px solid rgba(20, 121, 230, 0.42);
+    outline-offset: 3px;
 }
 
 .course-image-wrap {

@@ -10,7 +10,7 @@ import '../../styles/my-reviews.css';
 const menuItems = [
   { label: '여행 정보', path: '/mypage', Icon: BriefcaseBusiness },
   { label: '저장한 추천 코스', path: '/mypage/courses', Icon: Bookmark },
-  { label: '직접 만든 코스', path: '/mypage/courses', Icon: Route },
+  { label: '직접 만든 코스', path: '/mypage/custom-courses', Icon: Route },
   { label: '내가 쓴 후기와 댓글', path: '/mypage/reviews', Icon: MessageCircle },
   { label: '취향 검사 결과', path: '/mypage/travel-type', Icon: Sparkles },
   { label: '결제 내역', path: '/mypage/payments', Icon: CreditCard },

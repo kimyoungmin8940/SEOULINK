@@ -1,7 +1,6 @@
 import Header from '../../components/common/Header';
 import Footer from '../../components/common/Footer';
 import CourseBuilderPage from '../../features/courseBuilder/CourseBuilderPage';
-import backgroundImage from '../../assets/background.png';
 import './MapCourseBuilderPage.css';
 
 const THEME_BY_CATEGORY = {
@@ -24,10 +23,7 @@ function MapCourseBuilderPage() {
         <div className="map-course-page">
             <Header variant="simple" />
 
-            <main
-                className="map-course-content"
-                style={{ backgroundImage: `url(${backgroundImage})` }}
-            >
+            <main className="map-course-content">
                 <CourseBuilderPage initialTheme={initialTheme} />
             </main>
 

@@ -266,6 +266,7 @@ public class CourseBuilderService {
         RouteSummary drivingRoute = null;
         String walkingError = null;
         String drivingError = null;
+        boolean drivingRouteEstimated = false;
 
         if (includeWalkingRoute) {
             try {
@@ -291,12 +292,24 @@ public class CourseBuilderService {
             drivingError = e.getMessage();
         }
 
+        if (drivingRoute == null && isUnroutablePointError(drivingError)) {
+            drivingRoute = estimateDrivingRoute(fromPlace, toPlace);
+            drivingError = null;
+            drivingRouteEstimated = true;
+        }
+
         List<CourseRouteResponse.RoutePointResponse> drivingRoutePoints =
                 drivingRoute == null || drivingRoute.routePoints().isEmpty()
                         ? buildStraightLineRoutePoints(fromPlace, toPlace)
                         : drivingRoute.routePoints();
 
         String statusMessage = buildRouteStatusMessage(walkingError, drivingError);
+        if (drivingRouteEstimated) {
+            statusMessage = appendRouteNotice(
+                    statusMessage,
+                    "차량 도로와 연결되지 않은 좌표라 직선 거리 기준 예상 시간으로 표시합니다."
+            );
+        }
 
         return new CourseRouteResponse.RouteSegmentResponse(
                 fromPlace.clientPlaceId(),
@@ -331,6 +344,49 @@ public class CourseBuilderService {
         }
 
         return "차량 계산 실패: " + drivingError;
+    }
+
+    private boolean isUnroutablePointError(String errorMessage) {
+        if (errorMessage == null) {
+            return false;
+        }
+
+        return errorMessage.toLowerCase(Locale.ROOT)
+                .contains("could not find routable point");
+    }
+
+    private RouteSummary estimateDrivingRoute(
+            CourseRouteRequest.RoutePlaceRequest fromPlace,
+            CourseRouteRequest.RoutePlaceRequest toPlace
+    ) {
+        double latitudeDistance = Math.toRadians(toPlace.latitude() - fromPlace.latitude());
+        double longitudeDistance = Math.toRadians(toPlace.longitude() - fromPlace.longitude());
+        double fromLatitude = Math.toRadians(fromPlace.latitude());
+        double toLatitude = Math.toRadians(toPlace.latitude());
+        double haversine = Math.sin(latitudeDistance / 2) * Math.sin(latitudeDistance / 2)
+                + Math.cos(fromLatitude) * Math.cos(toLatitude)
+                * Math.sin(longitudeDistance / 2) * Math.sin(longitudeDistance / 2);
+        double straightDistanceMeter = 6_371_008.8 * 2 * Math.atan2(
+                Math.sqrt(haversine),
+                Math.sqrt(1 - haversine)
+        );
+        int estimatedDistanceMeter = (int) Math.round(straightDistanceMeter * 1.25);
+        int estimatedDurationSecond = Math.max(
+                60,
+                (int) Math.ceil((estimatedDistanceMeter / 1_000.0) / 25.0 * 3_600 + 180)
+        );
+
+        return new RouteSummary(
+                estimatedDistanceMeter,
+                estimatedDurationSecond,
+                buildStraightLineRoutePoints(fromPlace, toPlace)
+        );
+    }
+
+    private String appendRouteNotice(String currentMessage, String notice) {
+        return currentMessage == null || currentMessage.isBlank()
+                ? notice
+                : currentMessage + " / " + notice;
     }
 
     private RouteSummary requestOpenRouteServiceRoute(

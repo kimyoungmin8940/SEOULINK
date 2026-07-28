@@ -8,15 +8,13 @@
     width: 100%;
     min-width: 0;
     height: 100%;
-    min-height: 650px;
-    max-height: 760px;
+    min-height: 0;
+    max-height: none;
     padding: 18px;
     border: 1px solid rgba(255, 255, 255, 0.78);
     border-radius: 24px;
-    background: rgba(255, 255, 255, 0.94);
+    background: #fff;
     box-shadow: 0 24px 64px rgba(31, 69, 105, 0.18);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
     display: flex;
     flex-direction: column;
     color: var(--course-text);
@@ -67,7 +65,7 @@
 .course-builder-title-bar h1 {
     margin: 0;
     color: var(--course-navy);
-    font-size: clamp(25px, 2vw, 32px);
+    font-size: 37px;
     font-weight: 850;
     line-height: 1.12;
     letter-spacing: -0.8px;
@@ -115,7 +113,7 @@
     flex: 1 1 auto;
     min-height: 0;
     display: grid;
-    grid-template-columns: 304px minmax(480px, 1fr) 340px;
+    grid-template-columns: 324px minmax(440px, 1fr) 360px;
     gap: 12px;
 }
 
@@ -135,7 +133,7 @@
     padding: 13px 13px;
     display: flex;
     flex-direction: column;
-    gap: 11px;
+    gap: 13px;
     overflow-y: auto;
     scrollbar-width: thin;
     scrollbar-color: #c6d9ea transparent;
@@ -208,8 +206,8 @@
 }
 
 .course-builder-trip-days-section {
-    padding-top: 10px;
-    border-top: 1px solid #e7eef5;
+    padding-top: 1px;
+    border-top: 0;
 }
 
 .course-builder-category-buttons {
@@ -382,6 +380,11 @@
     background: #e5edf3;
 }
 
+/* 전역 사진 색상 필터가 카카오 지도 타일에 적용되지 않도록 제외한다. */
+.course-builder-map img {
+    filter: none !important;
+}
+
 .course-builder-map-toolbar {
     position: absolute;
     top: 13px;
@@ -516,14 +519,14 @@
     bottom: 14px;
     left: 68px;
     z-index: 11;
-    max-height: 270px;
+    max-height: 360px;
     padding: 9px;
     border: 1px solid rgba(200, 215, 229, 0.92);
     border-radius: 14px;
-    background: rgba(249, 252, 255, 0.95);
+    background: #f9fcff;
     box-shadow: 0 12px 32px rgba(27, 55, 82, 0.16);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+    display: flex;
+    flex-direction: column;
 }
 
 .course-builder-map-selection-header {
@@ -536,27 +539,61 @@
 
 .course-builder-map-selection-header strong {
     color: var(--course-navy);
-    font-size: 11px;
+    font-size: 14px;
 }
 
-.course-builder-map-selection-header button {
+.course-builder-map-selection-actions {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.course-builder-map-selection-clear {
     padding: 2px 4px;
     border: 0;
     background: transparent;
     color: #7890a6;
-    font-size: 9.5px;
+    font-size: 11.5px;
     font-weight: 750;
 }
 
+.course-builder-map-selection-toggle {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 0;
+    border-radius: 8px;
+    background: #edf6ff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #4e80ad;
+}
+
+.course-builder-map-selection-toggle:hover {
+    background: #dceeff;
+    color: var(--course-blue);
+}
+
+.course-builder-map-selection.is-collapsed {
+    max-height: none;
+}
+
+.course-builder-map-selection.is-collapsed .course-builder-map-selection-header {
+    margin-bottom: 0;
+}
+
 .course-builder-map-selection-list {
-    max-height: 86px;
+    flex: 0 1 auto;
+    min-height: 0;
+    max-height: 304px;
     padding-right: 3px;
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     grid-auto-flow: row;
-    grid-auto-rows: 86px;
+    grid-auto-rows: 96px;
     align-items: stretch;
-    gap: 7px;
+    gap: 8px;
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior: contain;
@@ -568,7 +605,7 @@
 .course-builder-place-card {
     position: relative;
     width: 100%;
-    height: 86px;
+    height: 96px;
     min-width: 0;
     padding: 9px 31px 9px 10px;
     border: 1px solid #dce7f0;
@@ -580,7 +617,7 @@
     margin: 3px 0 7px;
     overflow: hidden;
     color: #788b9d;
-    font-size: 9.5px;
+    font-size: 11px;
     line-height: 1.35;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -590,7 +627,7 @@
     display: block;
     overflow: hidden;
     color: #253d57;
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 850;
     line-height: 1.3;
     text-overflow: ellipsis;
@@ -628,8 +665,8 @@
 }
 
 .course-builder-add-course-button {
-    height: 26px;
-    padding: 0 8px;
+    height: 28px;
+    padding: 0 9px;
     border: 0;
     border-radius: 7px;
     background: var(--course-blue);
@@ -637,7 +674,7 @@
     align-items: center;
     gap: 3px;
     color: #fff;
-    font-size: 9.5px;
+    font-size: 11px;
     font-weight: 800;
 }
 
@@ -665,7 +702,7 @@
 
 /* 오른쪽 날짜별 코스 */
 .course-builder-selected-area {
-    padding: 15px 13px 13px;
+    padding: 13px;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -673,34 +710,38 @@
 
 .course-builder-course-header {
     flex: 0 0 auto;
-    margin-bottom: 11px;
+    margin-bottom: 13px;
     display: flex;
-    align-items: flex-start;
+    align-items: flex-end;
     justify-content: space-between;
     gap: 10px;
 }
 
 .course-builder-course-header h2 {
-    margin: 0 0 4px;
+    margin: 0;
     color: var(--course-navy);
-    font-size: 18px;
+    font-size: 23px;
     font-weight: 900;
+    line-height: 1;
     letter-spacing: -0.45px;
 }
 
-.course-builder-course-header p {
-    margin: 0;
+.course-builder-current-day {
     color: #72869b;
-    font-size: 10px;
-    font-weight: 750;
+    font-size: 15px;
+    font-weight: 400;
+    line-height: 1;
 }
 
-.course-builder-day-navigation {
+.course-builder-day-buttons {
+    flex: 0 0 auto;
+    margin-bottom: 13px;
     display: flex;
-    gap: 5px;
+    flex-wrap: wrap;
+    gap: 7px;
 }
 
-.course-builder-day-navigation button {
+.course-builder-day-buttons button {
     width: 32px;
     height: 32px;
     padding: 0;
@@ -711,17 +752,21 @@
     align-items: center;
     justify-content: center;
     color: #4c657e;
+    font-size: 13px;
+    font-weight: 750;
 }
 
-.course-builder-day-navigation button:hover:not(:disabled) {
+.course-builder-day-buttons button:hover {
     border-color: #9bc7ee;
     background: #f1f8ff;
     color: var(--course-blue);
 }
 
-.course-builder-day-navigation button:disabled {
-    opacity: 0.32;
-    cursor: not-allowed;
+.course-builder-day-buttons button.active {
+    border-color: var(--course-blue);
+    background: var(--course-blue);
+    color: #fff;
+    box-shadow: 0 5px 12px rgba(8, 117, 225, 0.2);
 }
 
 .course-builder-course-meta-fields {
@@ -1022,7 +1067,7 @@
 
 @media (max-width: 1360px) {
     .course-builder-layout {
-        grid-template-columns: 286px minmax(400px, 1fr) 320px;
+        grid-template-columns: 306px minmax(360px, 1fr) 340px;
     }
 
     .course-builder-page {
@@ -1049,7 +1094,7 @@
     }
 
     .course-builder-layout {
-        grid-template-columns: 286px minmax(0, 1fr);
+        grid-template-columns: 306px minmax(0, 1fr);
         grid-template-rows: minmax(560px, 65vh) auto;
     }
 
@@ -1068,6 +1113,10 @@
     .course-builder-title-bar {
         align-items: flex-start;
         flex-direction: column;
+    }
+
+    .course-builder-title-bar h1 {
+        font-size: 32px;
     }
 
     .course-builder-total-time {
@@ -1113,6 +1162,9 @@
         left: 62px;
     }
 
+    .course-builder-course-header {
+        align-items: flex-end;
+    }
 }
 
 @media (max-width: 430px) {

@@ -73,7 +73,7 @@ const menuItems = [
     },
     {
         label: "결제 내역",
-        path: "/payment",
+        path: "/mypage/payments",
         Icon: CreditCard,
     },
 ];
@@ -418,6 +418,21 @@ export default function MyPage() {
                 next.delete(course.courseId);
                 return next;
             });
+        }
+    };
+
+    const openSavedCourseDetail = (course) => {
+        if (!Number.isInteger(Number(course?.courseId))) {
+            return;
+        }
+
+        window.location.assign(`/mypage/courses/${course.courseId}`);
+    };
+
+    const handleSavedCourseKeyDown = (event, course) => {
+        if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            openSavedCourseDetail(course);
         }
     };
 
@@ -780,6 +795,13 @@ export default function MyPage() {
                                     <article
                                         className="recent-course-card"
                                         key={course.courseId}
+                                        role="link"
+                                        tabIndex={0}
+                                        aria-label={`${course.title} 상세 일정 보기`}
+                                        onClick={() => openSavedCourseDetail(course)}
+                                        onKeyDown={(event) =>
+                                            handleSavedCourseKeyDown(event, course)
+                                        }
                                     >
                                         <div className="course-image-wrap">
                                             <img
@@ -807,9 +829,10 @@ export default function MyPage() {
                                                 disabled={removingCourseIds.has(
                                                     course.courseId
                                                 )}
-                                                onClick={() =>
-                                                    handleRemoveSavedCourse(course)
-                                                }
+                                                onClick={(event) => {
+                                                    event.stopPropagation();
+                                                    handleRemoveSavedCourse(course);
+                                                }}
                                             >
                                                 <Bookmark
                                                     size={22}

@@ -46,6 +46,7 @@ import walkingImage from '../../assets/images/moods/mood-walking-alley.png';
 import localFoodImage from '../../assets/images/moods/mood-local-food.png';
 import rainyCafeImage from '../../assets/images/moods/mood-rainy-cafe.png';
 import sunsetImage from '../../assets/images/moods/mood-sunset-seoul.png';
+import '../../styles/course-detail.css';
 
 const placeFallbackImages = [
     hanokImage,
@@ -106,11 +107,6 @@ function toFiniteNumber(value, fallback = 0) {
     return Number.isFinite(number) ? number : fallback;
 }
 
-function isHotelCategory(category) {
-    const normalized = String(category || '').trim().toUpperCase();
-    return ['HOTEL', '숙소', '호텔', 'ACCOMMODATION', 'LODGING'].includes(normalized);
-}
-
 /** 목록에서 상세로 이동할 때 함께 저장한 요약과 돌아갈 경로를 읽습니다. */
 function readCourseDetailEntry(courseId) {
     try {
@@ -163,9 +159,6 @@ function normalizeDays(rawDays) {
 
         const places = sortedPlaces.map((place, placeIndex) => {
             const explicitTime = extractTime(place.expectedVisitTimeHHmm || place.visitTime);
-            const expectedVisitMinutes = isHotelCategory(place.category)
-                ? 0
-                : toFiniteNumber(place.expectedVisitMinutes);
 
             // 서버가 예상 시각을 주지 않으면 10:00부터 이동·체류시간을 누적해 표시합니다.
             if (explicitTime) {
@@ -180,13 +173,13 @@ function normalizeDays(rawDays) {
             ];
 
             timeCursor = (timeToMinutes(displayVisitTime) ?? timeCursor)
-                + expectedVisitMinutes;
+                + toFiniteNumber(place.expectedVisitMinutes);
 
             // 거리·시간·경로 종류는 모두 이전 장소에서 현재 장소로 들어오는 한 구간의 값입니다.
             return {
                 ...place,
                 visitOrder: toFiniteNumber(place.visitOrder, placeIndex + 1),
-                expectedVisitMinutes,
+                expectedVisitMinutes: toFiniteNumber(place.expectedVisitMinutes),
                 distanceFromPreviousKm: toFiniteNumber(place.distanceFromPreviousKm),
                 travelTimeFromPreviousMinutes: toFiniteNumber(
                     place.travelTimeFromPreviousMinutes,
@@ -214,19 +207,21 @@ function normalizeDays(rawDays) {
             (sum, place) => sum + place.expectedVisitMinutes,
             0,
         );
-        const dailyTravelTimeMinutes = toFiniteNumber(
-            day.dailyTravelTimeMinutes,
-            derivedTravelTime,
-        );
 
         return {
             ...day,
             dayNo: toFiniteNumber(day.dayNo, dayIndex + 1),
             visitDate: day.visitDate || places[0]?.visitDate || null,
             dailyDistanceKm: toFiniteNumber(day.dailyDistanceKm, derivedDistance),
-            dailyTravelTimeMinutes,
-            dailyVisitTimeMinutes: derivedVisitTime,
-            dailyCourseTimeMinutes: dailyTravelTimeMinutes + derivedVisitTime,
+            dailyTravelTimeMinutes: toFiniteNumber(
+                day.dailyTravelTimeMinutes,
+                derivedTravelTime,
+            ),
+            dailyVisitTimeMinutes: toFiniteNumber(day.dailyVisitTimeMinutes, derivedVisitTime),
+            dailyCourseTimeMinutes: toFiniteNumber(
+                day.dailyCourseTimeMinutes,
+                derivedTravelTime + derivedVisitTime,
+            ),
             places,
         };
     });
@@ -240,11 +235,6 @@ function normalizeCourseDetail(rawCourse) {
         (sum, day) => sum + toFiniteNumber(day[field]),
         0,
     );
-    const totalTravelTimeMinutes = toFiniteNumber(
-        rawCourse?.totalTravelTimeMinutes,
-        sumDays('dailyTravelTimeMinutes'),
-    );
-    const totalVisitTimeMinutes = sumDays('dailyVisitTimeMinutes');
 
     return {
         ...rawCourse,
@@ -268,9 +258,86 @@ function normalizeCourseDetail(rawCourse) {
         placeCount: toFiniteNumber(rawCourse?.placeCount, places.length),
         dayCount: toFiniteNumber(rawCourse?.dayCount, days.length),
         totalDistanceKm: toFiniteNumber(rawCourse?.totalDistanceKm, sumDays('dailyDistanceKm')),
-        totalTravelTimeMinutes,
-        totalVisitTimeMinutes,
-        totalCourseTimeMinutes: totalTravelTimeMinutes + totalVisitTimeMinutes,
+        totalTravelTimeMinutes: toFiniteNumber(
+            rawCourse?.totalTravelTimeMinutes,
+            sumDays('dailyTravelTimeMinutes'),
+        ),
+        totalVisitTimeMinutes: toFiniteNumber(
+            rawCourse?.totalVisitTimeMinutes,
+            sumDays('dailyVisitTimeMinutes'),
+        ),
+        totalCourseTimeMinutes: toFiniteNumber(
+            rawCourse?.totalCourseTimeMinutes,
+            sumDays('dailyCourseTimeMinutes'),
+        ),
+        days,
+    };
+}
+
+/**
+ * 현재 백엔드의 평면 details 응답을 상세 화면이 사용하는 날짜별 days 구조로 변환합니다.
+ * 이미 days 구조로 내려오는 응답은 그대로 사용합니다.
+ */
+function adaptCurrentCourseResponse(response) {
+    if (Array.isArray(response?.days)) {
+        return response;
+    }
+
+    const details = Array.isArray(response?.details)
+        ? response.details
+        : [];
+    const groupedDays = new Map();
+
+    details.forEach((detail) => {
+        const dayNo = toFiniteNumber(detail?.dayNo, 1);
+
+        if (!groupedDays.has(dayNo)) {
+            groupedDays.set(dayNo, []);
+        }
+
+        groupedDays.get(dayNo).push({
+            ...detail,
+            visitOrder:
+                detail?.visitOrder ?? detail?.placeOrder,
+            expectedVisitMinutes:
+                detail?.expectedVisitMinutes ?? detail?.stayMinutes,
+            distanceFromPreviousKm:
+                detail?.distanceFromPreviousKm ??
+                detail?.distanceFromPrevKm,
+            travelTimeFromPreviousMinutes:
+                detail?.travelTimeFromPreviousMinutes ??
+                detail?.travelMinutesFromPrev,
+        });
+    });
+
+    const days = [...groupedDays.entries()]
+        .sort(([firstDayNo], [secondDayNo]) => firstDayNo - secondDayNo)
+        .map(([dayNo, places]) => ({
+            dayNo,
+            visitDate: places[0]?.visitDate?.slice?.(0, 10) || null,
+            places,
+        }));
+
+    return {
+        ...response,
+        coverImageUrl:
+            response?.coverImageUrl ||
+            details.find((detail) => detail?.imageUrl)?.imageUrl ||
+            null,
+        publicCourse:
+            response?.publicCourse ??
+            response?.isPublic === 'Y',
+        placeCount: response?.placeCount ?? details.length,
+        dayCount: response?.dayCount ?? days.length,
+        totalTravelTimeMinutes:
+            response?.totalTravelTimeMinutes ??
+            response?.totalTravelMinutes,
+        totalVisitTimeMinutes:
+            response?.totalVisitTimeMinutes ??
+            response?.totalVisitMinutes,
+        totalCourseTimeMinutes:
+            response?.totalCourseTimeMinutes ??
+            response?.totalCourseMinutes,
         days,
     };
 }
@@ -484,7 +551,10 @@ function CourseDetailPage() {
             signal: controller.signal,
         })
             .then((response) => {
-                const normalizedCourse = normalizeApiCourseDetail(response, courseId);
+                const normalizedCourse = normalizeApiCourseDetail(
+                    adaptCurrentCourseResponse(response),
+                    courseId,
+                );
 
                 if (!normalizedCourse.days.some((day) => day.places.length > 0)) {
                     setCourse(null);
@@ -918,3 +988,4 @@ function CourseDetailPage() {
 }
 
 export default CourseDetailPage;
+

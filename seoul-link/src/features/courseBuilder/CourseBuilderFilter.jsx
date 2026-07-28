@@ -162,3 +162,4 @@ CourseBuilderFilter.defaultProps = {
 };
 
 export default CourseBuilderFilter;
+
