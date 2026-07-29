@@ -150,11 +150,21 @@ public class SurveyService {
                                 )
                         );
 
+        TravelSurvey survey =
+                travelSurveyRepository
+                        .findById(surveyId)
+                        .orElseThrow(
+                                () -> new IllegalArgumentException(
+                                        "설문 정보를 찾을 수 없습니다."
+                                )
+                        );
+
         TravelTypeMaster travelType =
                 findTravelType(result.getTravelCode());
 
         return SurveyResultResponse.from(
                 result,
+                survey,
                 travelType
         );
     }
@@ -206,6 +216,7 @@ public class SurveyService {
 
         return SurveyResultResponse.from(
                 result,
+                survey,
                 travelType
         );
     }
@@ -338,14 +349,9 @@ public class SurveyService {
         int secondScore =
                 scores.getOrDefault(secondCode, 0);
 
-        if (firstScore == secondScore) {
-            throw new IllegalStateException(
-                    firstCode + "/" + secondCode
-                            + " 성향 점수가 동점입니다."
-            );
-        }
-
-        return firstScore > secondScore
+        // 두 질문에서 상반된 선택을 하면 동점이 될 수 있다.
+        // 이는 정상적인 균형 취향이므로 저장 실패가 아닌 기준 코드로 처리한다.
+        return firstScore >= secondScore
                 ? firstCode
                 : secondCode;
     }

@@ -2,16 +2,16 @@
 // VITE_API_BASE_URL은 기존 프로젝트 규칙대로 `/api`까지 포함합니다.
 
 export const API_BASE_URL = (
-    // 개발 환경에서는 Vite가 /api를 Spring Boot(8080)로 프록시합니다.
-    // 프론트와 백을 서로 다른 포트로 실행해도 브라우저 CORS 오류 없이 호출됩니다.
-    import.meta.env?.VITE_API_BASE_URL || '/api'
-).replace(/\/+$/, '');
+    import.meta.env?.VITE_API_BASE_URL || "/api"
+).replace(/\/+$/, "");
+
+export const BACKEND_ORIGIN = API_BASE_URL.replace(/\/api$/, "");
 
 /** 화면에서 HTTP 상태와 백엔드 오류 코드를 함께 구분할 수 있는 공통 오류입니다. */
 export class ApiError extends Error {
     constructor(status, code, message, details = null) {
         super(message);
-        this.name = 'ApiError';
+        this.name = "ApiError";
         this.status = status;
         this.code = code;
         this.details = details;
@@ -24,6 +24,7 @@ async function parseResponseBody(response) {
     }
 
     const text = await response.text();
+
     if (!text) {
         return null;
     }
@@ -36,45 +37,57 @@ async function parseResponseBody(response) {
 }
 
 async function request(path, options = {}) {
-    const accessToken = typeof localStorage === 'undefined'
+    const accessToken = typeof localStorage === "undefined"
         ? null
-        : localStorage.getItem('accessToken');
+        : localStorage.getItem("accessToken");
+
     const { headers: optionHeaders, ...fetchOptions } = options;
 
+    const isFormData = typeof FormData !== "undefined"
+        && fetchOptions.body instanceof FormData;
+
     let response;
+
     try {
         response = await fetch(`${API_BASE_URL}${path}`, {
             ...fetchOptions,
             headers: {
-                'Content-Type': 'application/json',
-                ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+                ...(isFormData
+                    ? {}
+                    : { "Content-Type": "application/json" }),
+                ...(accessToken
+                    ? { Authorization: `Bearer ${accessToken}` }
+                    : {}),
                 ...optionHeaders,
             },
         });
     } catch (error) {
-        if (error instanceof Error && error.name === 'AbortError') {
+        if (error instanceof Error && error.name === "AbortError") {
             throw error;
         }
 
         throw new ApiError(
             0,
-            'NETWORK_ERROR',
-            '서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.',
+            "NETWORK_ERROR",
+            "서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.",
             error,
         );
     }
 
     const body = await parseResponseBody(response);
+
     if (!response.ok) {
-        const hasStructuredError = body
-            && typeof body === 'object'
-            && typeof body.code === 'string'
-            && typeof body.message === 'string';
+        const hasErrorCode = body
+            && typeof body === "object"
+            && typeof body.code === "string";
+        const hasErrorMessage = body
+            && typeof body === "object"
+            && typeof body.message === "string";
 
         throw new ApiError(
             response.status,
-            hasStructuredError ? body.code : `HTTP_${response.status}`,
-            hasStructuredError
+            hasErrorCode ? body.code : `HTTP_${response.status}`,
+            hasErrorMessage
                 ? body.message
                 : `API 요청에 실패했습니다. (${response.status})`,
             body,
@@ -87,20 +100,36 @@ async function request(path, options = {}) {
 export const apiClient = {
     get: (path, options = {}) => request(path, {
         ...options,
-        method: 'GET',
+        method: "GET",
     }),
+
     post: (path, body, options = {}) => request(path, {
         ...options,
-        method: 'POST',
+        method: "POST",
         body: JSON.stringify(body),
     }),
+
+    // 사진 파일처럼 FormData를 보내는 요청에 사용합니다.
+    postForm: (path, formData, options = {}) => request(path, {
+        ...options,
+        method: "POST",
+        body: formData,
+    }),
+
     patch: (path, body, options = {}) => request(path, {
         ...options,
-        method: 'PATCH',
+        method: "PATCH",
         body: JSON.stringify(body),
     }),
+
+    put: (path, body, options = {}) => request(path, {
+        ...options,
+        method: "PUT",
+        body: JSON.stringify(body),
+    }),
+
     delete: (path, options = {}) => request(path, {
         ...options,
-        method: 'DELETE',
+        method: "DELETE",
     }),
 };

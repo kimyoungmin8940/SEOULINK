@@ -241,6 +241,88 @@ class PlaceRecommendationServiceTest {
     }
 
     @Test
+    void expandsTwoDayRelaxedPoolForThreeWalkingOptions() {
+        List<Place> places = new ArrayList<>();
+        places.addAll(places(1L, 30, "TOUR"));
+        places.addAll(places(101L, 20, "RESTAURANT"));
+        places.addAll(places(201L, 20, "CAFE"));
+        when(placeRepository.findByIsActive("Y")).thenReturn(places);
+
+        PlaceCandidatePoolResponse response =
+                placeRecommendationService.recommendCandidatePool(
+                        "ATBSR",
+                        "서울",
+                        "R",
+                        "FRIENDS",
+                        Set.of(),
+                        2
+                );
+
+        assertEquals(40, response.getTargetCandidateCount());
+        assertEquals(20, response.getCandidatesForCategory("TOUR").size());
+        assertEquals(
+                10,
+                response.getCandidatesForCategory("RESTAURANT").size()
+        );
+        assertEquals(10, response.getCandidatesForCategory("CAFE").size());
+    }
+
+    @Test
+    void sharesScoreBasedPreferredRegionsAndKeepsSeoulWideFallbackCandidates() {
+        List<Place> places = new ArrayList<>();
+        for (long id = 1; id <= 3; id++) {
+            Place highScorePlace = place(
+                    id,
+                    "종로 관광지 " + id,
+                    "TOUR",
+                    true
+            );
+            highScorePlace.setRegion("서울특별시 종로구");
+            highScorePlace.setRating(5.0 - id * 0.1);
+            places.add(highScorePlace);
+        }
+        for (long id = 11; id <= 18; id++) {
+            Place lowScorePlace = place(
+                    id,
+                    "중구 관광지 " + id,
+                    "TOUR",
+                    true
+            );
+            lowScorePlace.setRegion("서울특별시 중구");
+            lowScorePlace.setRating(0.0);
+            places.add(lowScorePlace);
+        }
+        when(placeRepository.findByIsActive("Y")).thenReturn(places);
+
+        PlaceRecommendationListResponse screenResponse =
+                placeRecommendationService.recommend(
+                        "ATBSP",
+                        null,
+                        20,
+                        null,
+                        1,
+                        null
+                );
+        PlaceCandidatePoolResponse coursePool =
+                placeRecommendationService.recommendCandidatePool(
+                        "ATBSP",
+                        null,
+                        "P",
+                        null,
+                        Set.of()
+                );
+
+        assertEquals("종로구", screenResponse.getPreferredRegions().get(0));
+        assertEquals(
+                screenResponse.getPreferredRegions(),
+                coursePool.getPreferredRegions()
+        );
+        assertTrue(coursePool.getCandidatesForCategory("TOUR").stream()
+                .anyMatch(candidate ->
+                        "서울특별시 중구".equals(candidate.getRegion())));
+    }
+
+    @Test
     void rejectsScheduleTypeThatDoesNotMatchTravelCode() {
         assertThrows(
                 IllegalArgumentException.class,

@@ -23,6 +23,7 @@ public class CourseOptionResponse {
     private String optionName;
     private String title;
     private String description;
+    private String region;
 
     // 같은 취향으로 다시 추천할 때 이 코스 조합을 제외하는 데 사용하는 키이다.
     private String recommendationKey;
@@ -35,6 +36,10 @@ public class CourseOptionResponse {
     private Integer totalVisitTimeMinutes;
     private Double totalCourseTimeMinutes;
     private Boolean estimatedTravelTimes;
+
+    // 다일 일정의 숙소 적용 여부와, 숙소를 붙이지 못했을 때 화면에 표시할 안내이다.
+    private Boolean hotelIncluded;
+    private String hotelNotice;
 
     // 날짜별 방문 순서와 날짜별 합계이다.
     @Builder.Default

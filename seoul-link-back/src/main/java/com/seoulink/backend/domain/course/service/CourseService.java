@@ -5,6 +5,7 @@ import com.seoulink.backend.domain.course.dto.response.CourseDayResponse;
 import com.seoulink.backend.domain.course.dto.response.CoursePlaceResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseRecommendationResponse;
 import com.seoulink.backend.domain.course.dto.response.ThemeCourseBookmarkResponse;
+import com.seoulink.backend.domain.course.dto.request.CourseUpdateRequest;
 import com.seoulink.backend.domain.course.entity.CourseDetail;
 import com.seoulink.backend.domain.course.entity.TravelCourse;
 import com.seoulink.backend.domain.course.model.TransportMode;
@@ -104,6 +105,11 @@ public class CourseService {
         Map<Long, Place> placesById = loadPlacesById(details);
         List<CourseDayResponse> days = toDayResponses(details, placesById);
 
+        int excludedHotelStayMinutes = excludedHotelStayMinutes(
+                details,
+                placesById
+        );
+
         return CourseDetailResponse.builder()
                 .courseId(course.getCourseId())
                 .title(course.getTitle())
@@ -119,8 +125,16 @@ public class CourseService {
                 .dayCount(days.size())
                 .totalDistanceKm(course.getTotalDistanceKm())
                 .totalTravelTimeMinutes(course.getTotalTravelTimeMinutes())
-                .totalVisitTimeMinutes(course.getTotalVisitTimeMinutes())
-                .totalCourseTimeMinutes(course.getTotalCourseTimeMinutes())
+                .totalVisitTimeMinutes(Math.max(
+                        0,
+                        valueOrZero(course.getTotalVisitTimeMinutes())
+                                - excludedHotelStayMinutes
+                ))
+                .totalCourseTimeMinutes(Math.max(
+                        0.0,
+                        valueOrZero(course.getTotalCourseTimeMinutes())
+                                - excludedHotelStayMinutes
+                ))
                 .estimatedTravelTimes(details.stream().anyMatch(detail ->
                         Boolean.TRUE.equals(detail.getRouteEstimated())
                 ))
@@ -189,6 +203,107 @@ public class CourseService {
                                 .sourceCourseKey(normalizedSourceCourseKey)
                                 .build()
                 );
+    }
+
+    @Transactional(readOnly = true)
+    public List<CourseRecommendationResponse> getMemberCoursesByType(
+            Long memberId,
+            String courseType
+    ) {
+        validateMemberId(memberId);
+
+        return travelCourseRepository
+                .findByMemberIdAndCourseTypeOrderByCreatedAtDesc(
+                        memberId,
+                        courseType
+                )
+                .stream()
+                .map(this::toRecommendationResponse)
+                .toList();
+    }
+
+    @Transactional
+    public CourseRecommendationResponse updateMemberCustomCourse(
+            Long courseId,
+            Long memberId,
+            CourseUpdateRequest request
+    ) {
+        TravelCourse course =
+                getOwnedCourse(courseId, memberId, "CUSTOM");
+
+        String title =
+                request.getTitle() == null
+                        ? ""
+                        : request.getTitle().trim();
+
+        if (title.isBlank()) {
+            throw new IllegalArgumentException(
+                    "코스 제목은 필수입니다."
+            );
+        }
+
+        String publicStatus =
+                "Y".equalsIgnoreCase(request.getIsPublic())
+                        ? "Y"
+                        : "N";
+
+        course.updateBasicInfo(
+                title,
+                request.getDescription(),
+                request.getRegion(),
+                publicStatus
+        );
+
+        return toRecommendationResponse(course);
+    }
+
+    @Transactional
+    public void deleteMemberCourse(
+            Long courseId,
+            Long memberId,
+            String courseType
+    ) {
+        TravelCourse course =
+                getOwnedCourse(
+                        courseId,
+                        memberId,
+                        courseType
+                );
+
+        courseDetailRepository.deleteByCourseId(
+                course.getCourseId()
+        );
+
+        travelCourseRepository.delete(course);
+    }
+
+    private TravelCourse getOwnedCourse(
+            Long courseId,
+            Long memberId,
+            String expectedType
+    ) {
+        validateCourseId(courseId);
+        validateMemberId(memberId);
+
+        TravelCourse course =
+                travelCourseRepository
+                        .findByCourseIdAndMemberId(
+                                courseId,
+                                memberId
+                        )
+                        .orElseThrow(
+                                () -> courseNotFound(courseId)
+                        );
+
+        if (!expectedType.equalsIgnoreCase(
+                course.getCourseType()
+        )) {
+            throw new IllegalArgumentException(
+                    "요청한 유형의 코스가 아닙니다."
+            );
+        }
+
+        return course;
     }
 
     /** 저장 엔티티를 추천·내 코스 목록 카드에서 사용하는 요약 응답으로 변환한다. */
@@ -340,7 +455,10 @@ public class CourseService {
                 ))
                 .sum();
         int dailyVisitTimeMinutes = dailyDetails.stream()
-                .mapToInt(detail -> valueOrZero(detail.getStayMinutes()))
+                .mapToInt(detail -> normalizedStayMinutes(
+                        detail,
+                        placesById.get(detail.getPlaceId())
+                ))
                 .sum();
 
         return CourseDayResponse.builder()
@@ -396,7 +514,7 @@ public class CourseService {
                 .visitOrder(detail.getPlaceOrder())
                 .memo(detail.getMemo())
                 .visitTime(detail.getVisitTime())
-                .expectedVisitMinutes(detail.getStayMinutes())
+                .expectedVisitMinutes(normalizedStayMinutes(detail, place))
                 .distanceFromPreviousKm(detail.getDistanceFromPreviousKm())
                 .travelTimeFromPreviousMinutes(
                         detail.getTravelTimeFromPreviousMinutes()
@@ -426,6 +544,35 @@ public class CourseService {
         }
 
         return response.build();
+    }
+
+    /** 숙소는 방문 장소가 아니라 숙박 지점이므로 체류시간 합계에서 제외한다. */
+    private int normalizedStayMinutes(
+            CourseDetail detail,
+            Place place
+    ) {
+        return isHotel(place)
+                ? 0
+                : valueOrZero(detail.getStayMinutes());
+    }
+
+    private int excludedHotelStayMinutes(
+            List<CourseDetail> details,
+            Map<Long, Place> placesById
+    ) {
+        return details.stream()
+                .filter(detail -> isHotel(
+                        placesById.get(detail.getPlaceId())
+                ))
+                .mapToInt(detail ->
+                        valueOrZero(detail.getStayMinutes())
+                )
+                .sum();
+    }
+
+    private boolean isHotel(Place place) {
+        return place != null
+                && "HOTEL".equalsIgnoreCase(place.getCategory());
     }
 
     /** 상세 행의 PLACE_ID를 중복 제거해 PLACES를 한 번에 조회한다. */

@@ -174,6 +174,49 @@ class CourseServiceTest {
     }
 
     @Test
+    @DisplayName("기존 저장값에 숙소 30분이 있어도 상세 응답과 합계에서는 제외한다")
+    void excludeStoredHotelStayMinutes() {
+        LocalDate visitDate = LocalDate.of(2026, 7, 20);
+        TravelCourse course = TravelCourse.builder()
+                .courseId(12L)
+                .resultId(6L)
+                .title("숙소 포함 코스")
+                .publicStatus("Y")
+                .totalDistanceKm(1.0)
+                .totalTravelTimeMinutes(10.0)
+                .totalVisitTimeMinutes(120)
+                .totalCourseTimeMinutes(130.0)
+                .build();
+        List<CourseDetail> details = List.of(
+                detail(120L, 12L, 1L, 1, 1,
+                        visitDate, 90, 0.0, 0.0),
+                detail(121L, 12L, 100L, 1, 2,
+                        visitDate, 30, 1.0, 10.0)
+        );
+
+        when(travelCourseRepository.findById(12L))
+                .thenReturn(Optional.of(course));
+        when(courseDetailRepository
+                .findByCourseIdOrderByDayNoAscPlaceOrderAsc(12L))
+                .thenReturn(details);
+        when(placeRepository.findAllById(any())).thenReturn(List.of(
+                place(1L, "관광지", "TOUR", "서울", null, false),
+                place(100L, "숙소", "HOTEL", "서울", null, false)
+        ));
+        mockTransportMode(6L, 60L, "WALKING");
+
+        CourseDetailResponse response = courseService.getCourse(12L);
+
+        assertEquals(0, response.getDays().get(0).getPlaces().get(1)
+                .getExpectedVisitMinutes());
+        assertEquals(90, response.getDays().get(0).getDailyVisitTimeMinutes());
+        assertEquals(100.0, response.getDays().get(0)
+                .getDailyCourseTimeMinutes(), 0.000001);
+        assertEquals(90, response.getTotalVisitTimeMinutes());
+        assertEquals(100.0, response.getTotalCourseTimeMinutes(), 0.000001);
+    }
+
+    @Test
     @DisplayName("존재하지 않는 코스를 조회하면 예외를 반환한다")
     void rejectUnknownCourse() {
         when(travelCourseRepository.findById(999L))

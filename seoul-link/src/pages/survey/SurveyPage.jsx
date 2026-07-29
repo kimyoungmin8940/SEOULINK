@@ -358,7 +358,10 @@ function SurveyPage() {
                 window.location.assign('/survey/result');
             } catch (error) {
                 console.error('설문 제출 실패:', error);
-                setSelectionError('검사 결과를 저장하는 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
+                setSelectionError(
+                    error?.message ||
+                    '검사 결과를 저장하는 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.'
+                );
             } finally {
                 setIsSubmitting(false);
             }

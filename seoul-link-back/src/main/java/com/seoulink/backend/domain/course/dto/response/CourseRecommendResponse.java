@@ -25,6 +25,9 @@ public class CourseRecommendResponse {
     private String travelCode;
     private TransportMode transportMode;
 
+    @Builder.Default
+    private List<String> preferredRegions = new ArrayList<>();
+
     // true이면 외부 경로 API가 아닌 임시 추정 이동시간이 하나 이상 포함되었다.
     private Boolean estimatedTravelTimes;
 

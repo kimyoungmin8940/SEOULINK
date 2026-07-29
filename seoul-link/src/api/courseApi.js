@@ -65,6 +65,31 @@ export const getCourseDraft = (surveyId, options = {}) => apiClient.get(
 );
 
 /**
+ * 다시 추천받기에서 직전 결과의 장소를 우선 제외하고 DB 후보 풀을 새로 받습니다.
+ * 후보 조회만 수행하므로 ODsay·ORS 같은 외부 경로 API는 호출하지 않습니다.
+ */
+export const refreshCourseDraft = (
+    surveyId,
+    previouslyRecommendedPlaceIds = [],
+    options = {},
+) => {
+    const normalizedIds = Array.isArray(previouslyRecommendedPlaceIds)
+        ? [...new Set(previouslyRecommendedPlaceIds
+            .map(Number)
+            .filter((placeId) => Number.isInteger(placeId) && placeId > 0))]
+        : [];
+
+    return apiClient.post(
+        '/courses/draft/recommend-again',
+        {
+            surveyId: requirePositiveId(Number(surveyId), '설문 ID'),
+            previouslyRecommendedPlaceIds: normalizedIds,
+        },
+        options,
+    );
+};
+
+/**
  * 사용자가 확정한 최적화 코스를 저장합니다.
  * @param {import('../types/course').CourseSaveRequest} data
  * @param {RequestInit} [options]
@@ -137,6 +162,41 @@ export const getMyCourses = (memberId, options = {}) => apiClient.get(
  * @param {RequestInit} [options]
  * @returns {Promise<import('../types/course').CourseSaveResponse>}
  */
+export const getSavedRecommendedCourses = (memberId, options = {}) => apiClient.get(
+    `/courses/members/${requirePositiveId(memberId, '회원 ID')}/saved`,
+    options,
+);
+
+export const getCustomCourses = (memberId, options = {}) => apiClient.get(
+    `/courses/members/${requirePositiveId(memberId, '회원 ID')}/custom`,
+    options,
+);
+
+export const removeSavedRecommendedCourse = (courseId, memberId, options = {}) =>
+    apiClient.delete(
+        `/courses/${requirePositiveId(courseId, '코스 ID')}/saved?memberId=${requirePositiveId(memberId, '회원 ID')}`,
+        options,
+    );
+
+export const updateCourse = (courseId, data, options = {}) => {
+    const { memberId, ...requestOptions } = options;
+    const query = memberId
+        ? `?memberId=${requirePositiveId(memberId, '회원 ID')}`
+        : '';
+
+    return apiClient.put(
+        `/courses/${requirePositiveId(courseId, '코스 ID')}${query}`,
+        data,
+        requestOptions,
+    );
+};
+
+export const deleteCourse = (courseId, memberId, options = {}) =>
+    apiClient.delete(
+        `/courses/${requirePositiveId(courseId, '코스 ID')}?memberId=${requirePositiveId(memberId, '회원 ID')}`,
+        options,
+    );
+
 export const createCustomCourse = (data, options = {}) => saveCourse(
     { ...data, courseType: 'CUSTOM' },
     options,

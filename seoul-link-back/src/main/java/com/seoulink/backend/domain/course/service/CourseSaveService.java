@@ -107,7 +107,7 @@ public class CourseSaveService {
                 .mapToDouble(CourseSavePlaceDto::getTravelTimeFromPreviousMinutes)
                 .sum();
         int totalVisitTimeMinutes = validated.places().stream()
-                .mapToInt(CourseSavePlaceDto::getExpectedVisitMinutes)
+                .mapToInt(this::normalizedStayMinutes)
                 .sum();
 
         double storedTotalDistanceKm = round(totalDistanceKm, 3);
@@ -151,7 +151,7 @@ public class CourseSaveService {
                         .dayNo(dayNumbers.get(place.getVisitDate()))
                         .placeOrder(place.getVisitOrder())
                         .visitTime(trimToNull(place.getVisitTime()))
-                        .stayMinutes(place.getExpectedVisitMinutes())
+                        .stayMinutes(normalizedStayMinutes(place))
                         .visitDate(place.getVisitDate())
                         .distanceFromPreviousKm(round(
                                 place.getDistanceFromPreviousKm(),
@@ -333,6 +333,13 @@ public class CourseSaveService {
                 || normalized.equals("호텔")
                 || normalized.equals("ACCOMMODATION")
                 || normalized.equals("LODGING");
+    }
+
+    /** 숙소는 DAY의 마지막 도착 지점이므로 전달값과 관계없이 체류시간을 저장하지 않는다. */
+    private int normalizedStayMinutes(CourseSavePlaceDto place) {
+        return isHotel(place.getCategory())
+                ? 0
+                : place.getExpectedVisitMinutes();
     }
 
     /** 상세 장소 한 건의 필수값과 음수가 될 수 없는 계산값을 검증한다. */

@@ -560,8 +560,6 @@ CREATE TABLE PAYMENT (
                          PAYMENT_KEY VARCHAR2(200),
 
                          PAYMENT_STATUS VARCHAR2(20) DEFAULT 'READY' NOT NULL,
-
-                         REMAIN_COUNT NUMBER DEFAULT 0 NOT NULL,
                          EXPIRED_AT DATE,
 
                          PAID_AT DATE,
@@ -579,9 +577,6 @@ CREATE TABLE PAYMENT (
 
                          CONSTRAINT CK_PAYMENT_AMOUNT
                              CHECK (AMOUNT >= 0),
-
-                         CONSTRAINT CK_PAYMENT_REMAIN
-                             CHECK (REMAIN_COUNT >= 0),
 
                          CONSTRAINT CK_PAYMENT_STATUS
                              CHECK (PAYMENT_STATUS IN ('READY', 'PAID', 'CANCELED', 'FAILED'))
@@ -601,6 +596,7 @@ CREATE TABLE TRAVEL_SURVEY (
                                REGION VARCHAR2(50) NOT NULL,
                                START_DATE DATE NOT NULL,
                                END_DATE DATE NOT NULL,
+                               PEOPLE_COUNT NUMBER NOT NULL,
                                COMPANION_TYPE VARCHAR2(30) NOT NULL,
                                TRANSPORT_TYPE VARCHAR2(30) NOT NULL,
                                CREATED_AT DATE DEFAULT SYSDATE NOT NULL,
@@ -1189,17 +1185,16 @@ COMMENT ON COLUMN PLACES.UPDATED_AT IS '장소 데이터 마지막 수정 일시
 /* =========================
    PAYMENT: 결제 정보
    ========================= */
-COMMENT ON TABLE PAYMENT IS '유료 챗봇 이용권 결제 내역과 남은 이용 횟수를 관리하는 테이블';
+COMMENT ON TABLE PAYMENT IS '유료 챗봇 기간권 결제 내역과 이용 가능 기간을 관리하는 테이블';
 COMMENT ON COLUMN PAYMENT.PAYMENT_ID IS '결제 고유 번호, 자동 증가 기본키';
 COMMENT ON COLUMN PAYMENT.MEMBER_ID IS '결제한 회원 번호, MEMBER 참조';
-COMMENT ON COLUMN PAYMENT.PRODUCT_NAME IS '결제 상품명, 예: 유료 챗봇 1회권/30일권';
+COMMENT ON COLUMN PAYMENT.PRODUCT_NAME IS '결제 상품명, 예: 하루 패스/위클리 패스/트래블 패스';
 COMMENT ON COLUMN PAYMENT.AMOUNT IS '결제 금액';
 COMMENT ON COLUMN PAYMENT.PAYMENT_METHOD IS '결제 수단, 예: 카드/카카오페이/토스페이';
 COMMENT ON COLUMN PAYMENT.PAYMENT_PROVIDER IS '결제 API 제공사, 예: TOSS/KAKAO/DANAL';
 COMMENT ON COLUMN PAYMENT.ORDER_ID IS '서비스 내부 주문 번호, 중복 불가';
 COMMENT ON COLUMN PAYMENT.PAYMENT_KEY IS '결제 승인 후 PG사에서 제공하는 결제 키';
 COMMENT ON COLUMN PAYMENT.PAYMENT_STATUS IS '결제 상태, READY/PAID/CANCELED/FAILED 중 하나';
-COMMENT ON COLUMN PAYMENT.REMAIN_COUNT IS '결제 상품으로 사용할 수 있는 남은 챗봇 이용 횟수';
 COMMENT ON COLUMN PAYMENT.EXPIRED_AT IS '이용권 만료 일시';
 COMMENT ON COLUMN PAYMENT.PAID_AT IS '결제 승인 일시';
 COMMENT ON COLUMN PAYMENT.CANCELED_AT IS '결제 취소 일시';

@@ -224,6 +224,7 @@ public class CourseOptimizationService {
                 .placeId(source.getPlaceId())
                 .placeName(source.getPlaceName())
                 .category(source.getCategory())
+                .region(source.getRegion())
                 .address(source.getAddress())
                 .roadAddress(source.getRoadAddress())
                 .imageUrl(source.getImageUrl())
@@ -248,6 +249,7 @@ public class CourseOptimizationService {
                 .placeId(source.getPlaceId())
                 .placeName(source.getPlaceName())
                 .category(source.getCategory())
+                .region(source.getRegion())
                 .address(source.getAddress())
                 .roadAddress(source.getRoadAddress())
                 .imageUrl(source.getImageUrl())
@@ -395,6 +397,24 @@ public class CourseOptimizationService {
     public CourseOptimizeResponse resolveFixedRouteDetails(
             CourseOptimizeRequest request
     ) {
+        return resolveFixedRoute(request, true);
+    }
+
+    /**
+     * 큰 후보 풀에서 여러 코스 조합을 비교할 때 방문 순서를 유지한 추정 경로를 만든다.
+     * 최종 선택된 코스만 {@link #resolveFixedRouteDetails(CourseOptimizeRequest)}로
+     * 실제 인접 구간을 조회한다.
+     */
+    CourseOptimizeResponse resolveFixedRouteEstimates(
+            CourseOptimizeRequest request
+    ) {
+        return resolveFixedRoute(request, false);
+    }
+
+    private CourseOptimizeResponse resolveFixedRoute(
+            CourseOptimizeRequest request,
+            boolean resolveActualRouteLegs
+    ) {
         if (request == null) {
             throw new IllegalArgumentException("경로 상세 요청은 null일 수 없습니다.");
         }
@@ -447,11 +467,15 @@ public class CourseOptimizationService {
             List<Integer> routeIndexes = createIndexes(
                     dailyCandidates.size()
             );
-            RouteMatrix routeMatrix =
-                    distanceService.calculateRouteLegMatrix(
+            RouteMatrix routeMatrix = resolveActualRouteLegs
+                    ? distanceService.calculateRouteLegMatrix(
                             dailyCandidates,
                             transportMode,
                             routeIndexes
+                    )
+                    : distanceService.calculateCandidatePoolMatrix(
+                            dailyCandidates,
+                            transportMode
                     );
 
             for (int index = 0; index < dailyCandidates.size(); index++) {
@@ -1090,6 +1114,7 @@ public class CourseOptimizationService {
                 .placeId(alternative.getPlaceId())
                 .placeName(alternative.getPlaceName())
                 .category(alternative.getCategory())
+                .region(alternative.getRegion())
                 .address(alternative.getAddress())
                 .roadAddress(alternative.getRoadAddress())
                 .imageUrl(alternative.getImageUrl())
@@ -1254,6 +1279,7 @@ public class CourseOptimizationService {
                 .placeId(candidate.getPlaceId())
                 .placeName(candidate.getPlaceName())
                 .category(candidate.getCategory())
+                .region(candidate.getRegion())
                 .address(candidate.getAddress())
                 .roadAddress(candidate.getRoadAddress())
                 .imageUrl(candidate.getImageUrl())

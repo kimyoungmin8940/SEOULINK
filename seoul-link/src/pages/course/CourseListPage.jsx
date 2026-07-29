@@ -1,9 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
     ArrowLeft,
+    CalendarDays,
     ChevronLeft,
     ChevronRight,
+    Clock3,
     Info,
+    ListFilter,
+    MapPin,
     RefreshCw,
     Route,
     Sparkles,
@@ -12,22 +16,32 @@ import {
 import Header from '../../components/common/Header';
 import Footer from '../../components/common/Footer';
 import PagePlaceholder from '../../components/common/PagePlaceholder';
-import CourseCard from '../../components/course/CourseCard';
 import { getRecommendedCourses } from '../../api/courseApi';
 import {
     getCurrentMemberId,
     normalizeRecommendedCourseList,
 } from '../../utils/courseHistory';
+import { requireLogin } from '../../utils/authGuard';
+import {
+    isTemporaryLogin,
+    recommendedCourseHistoryPreview,
+} from '../../mocks/recommendedCourseHistory';
 import rainyCafeImage from '../../assets/images/moods/mood-rainy-cafe.png';
 import sunsetImage from '../../assets/images/moods/mood-sunset-seoul.png';
 import hanokImage from '../../assets/images/moods/mood-hanok-photo.png';
 import walkingImage from '../../assets/images/moods/mood-walking-alley.png';
 
 const fallbackImages = [hanokImage, sunsetImage, rainyCafeImage, walkingImage];
-// 추천받은 코스는 한 페이지에 8개씩 보여주며, 9번째 코스부터 다음 페이지를 만듭니다.
 const COURSES_PER_PAGE = 8;
+const COURSE_DETAIL_ENTRY_KEY = 'seoulinkCourseDetailEntry';
+const SORT_OPTIONS = [
+    { value: 'latest', label: '최신순' },
+    { value: 'oldest', label: '오래된순' },
+    { value: 'duration-asc', label: '짧은 일정순' },
+    { value: 'distance-asc', label: '짧은 동선순' },
+    { value: 'places-desc', label: '장소 많은순' },
+];
 
-/** URL의 page 쿼리를 읽고 잘못된 값은 첫 페이지로 보정합니다. */
 function getInitialPage() {
     const page = Number(new URLSearchParams(window.location.search).get('page'));
     return Number.isInteger(page) && page > 0 ? page : 1;
@@ -66,18 +80,236 @@ const themeInfo = {
     },
 };
 
-/** 로그인 회원 ID가 있으면 서버의 추천 코스 목록을 바로 조회할 초기 상태를 만듭니다. */
 function getInitialHistoryState() {
     const memberId = getCurrentMemberId();
 
     return {
         memberId,
         courses: [],
-        status: memberId ? 'loading' : 'member-error',
+        status: memberId || isTemporaryLogin() ? 'loading' : 'member-error',
     };
 }
 
-/** 회원의 SURVEY 코스를 최신순으로 조회해 8개 단위로 보여주는 전체보기 화면입니다. */
+function safelyParse(value) {
+    if (!value || typeof value !== 'string') return null;
+
+    try {
+        return JSON.parse(value);
+    } catch {
+        return null;
+    }
+}
+
+function readStoredRecommendedCourses() {
+    const keys = [
+        'recommendedCourses',
+        'recentRecommendedCourses',
+        'seoulinkRecommendedCourses',
+        'latestRecommendedCourses',
+        'myRecommendedCourses',
+    ];
+
+    for (const key of keys) {
+        const parsed = safelyParse(localStorage.getItem(key)) || safelyParse(sessionStorage.getItem(key));
+        if (!Array.isArray(parsed) || parsed.length === 0) continue;
+
+        const normalized = normalizeRecommendedCourseList(parsed, { fallbackImages }).map((course) => ({
+            ...course,
+            previewOnly: true,
+        }));
+
+        if (normalized.length > 0) return normalized;
+    }
+
+    return [];
+}
+
+function formatDateText(value) {
+    if (!value) return '날짜 미정';
+
+    const date = new Date(`${value}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return '날짜 미정';
+
+    return new Intl.DateTimeFormat('ko-KR', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+    }).format(date);
+}
+
+function normalizeTransportLabel(value) {
+    const normalized = String(value || '').trim().toUpperCase();
+
+    if (normalized === 'WALKING') return '도보 이동';
+    if (normalized === 'CAR') return '자동차 이동';
+    if (normalized === 'PUBLIC_TRANSIT') return '대중교통 이동';
+    return '이동수단 미정';
+}
+
+function sortCourses(list, sortOption) {
+    const copied = [...list];
+    const getDateValue = (course) => {
+        const raw = course?.createdAt
+            || course?.updatedAt
+            || course?.startDate
+            || course?.travelStartDate
+            || course?.endDate
+            || null;
+        if (!raw) return 0;
+        const value = new Date(raw).getTime();
+        return Number.isFinite(value) ? value : 0;
+    };
+
+    if (sortOption === 'oldest') {
+        copied.sort((a, b) => getDateValue(a) - getDateValue(b));
+        return copied;
+    }
+
+    if (sortOption === 'duration-asc') {
+        copied.sort(
+            (a, b) => (Number(a?.totalCourseTimeMinutes) || Number.MAX_SAFE_INTEGER)
+                - (Number(b?.totalCourseTimeMinutes) || Number.MAX_SAFE_INTEGER),
+        );
+        return copied;
+    }
+
+    if (sortOption === 'distance-asc') {
+        copied.sort(
+            (a, b) => (Number(a?.totalDistanceKm) || Number.MAX_SAFE_INTEGER)
+                - (Number(b?.totalDistanceKm) || Number.MAX_SAFE_INTEGER),
+        );
+        return copied;
+    }
+
+    if (sortOption === 'places-desc') {
+        copied.sort(
+            (a, b) => (Number(b?.placeCount) || 0) - (Number(a?.placeCount) || 0),
+        );
+        return copied;
+    }
+
+    copied.sort((a, b) => getDateValue(b) - getDateValue(a));
+    return copied;
+}
+
+function getCourseId(course) {
+    const courseId = Number(
+        course?.courseId
+        ?? course?.savedCourseId
+        ?? course?.recommendationId
+        ?? course?.id,
+    );
+
+    return Number.isInteger(courseId) && courseId > 0 ? courseId : null;
+}
+
+function RecommendedHistoryListItem({ course }) {
+    const moveToRecommendedCourseDetail = () => {
+        if (!requireLogin()) return;
+
+        const courseId = getCourseId(course);
+        if (!courseId) {
+            window.alert('코스 정보를 확인할 수 없습니다. 목록을 새로고침해 주세요.');
+            return;
+        }
+
+        sessionStorage.setItem(COURSE_DETAIL_ENTRY_KEY, JSON.stringify({
+            detailId: courseId,
+            returnPath: `${window.location.pathname}${window.location.search}`,
+            summary: {
+                ...course,
+                coverImageUrl: course.coverImageUrl || course.imageUrl || null,
+            },
+        }));
+
+        window.location.href = `/courses/recommendations/${courseId}`;
+    };
+
+    const handleKeyDown = (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            moveToRecommendedCourseDetail();
+        }
+    };
+
+    return (
+        <article
+            className="recommended-history-item"
+            role="link"
+            tabIndex={0}
+            onClick={moveToRecommendedCourseDetail}
+            onKeyDown={handleKeyDown}
+            aria-label={`${course.title} 추천 코스 상세보기`}
+        >
+            <div className="recommended-history-item__image-wrap">
+                {course.imageUrl && (
+                    <img
+                        className="recommended-history-item__image"
+                        src={course.imageUrl}
+                        alt={course.title}
+                    />
+                )}
+            </div>
+
+            <div className="recommended-history-item__body">
+                <span className="recommended-history-item__badge">
+                    {course.optionName || '추천 코스'}
+                </span>
+
+                <div className="recommended-history-item__title-group">
+                    <h3>{course.title}</h3>
+                    <p className="recommended-history-item__description">{course.description}</p>
+                </div>
+
+                <div className="recommended-history-item__meta">
+                    <span>
+                        <CalendarDays size={16} aria-hidden="true" />
+                        {formatDateText(course.startDate || course.endDate)}
+                    </span>
+                    <span>
+                        <Clock3 size={16} aria-hidden="true" />
+                        {course.duration || '일정 정보 없음'}
+                    </span>
+                    <span>
+                        <MapPin size={16} aria-hidden="true" />
+                        {course.area || '서울'}
+                    </span>
+                </div>
+            </div>
+
+            <aside className="recommended-history-item__summary-panel">
+                <div className="recommended-history-item__summary-stat">
+                    <CalendarDays size={22} aria-hidden="true" />
+                    <div>
+                        <small>일정</small>
+                        <strong>{course.dayCount || 1}일</strong>
+                    </div>
+                </div>
+
+                <div className="recommended-history-item__summary-stat">
+                    <MapPin size={22} aria-hidden="true" />
+                    <div>
+                        <small>장소</small>
+                        <strong>{course.placeCount || 0}곳</strong>
+                    </div>
+                </div>
+
+                <div className="recommended-history-item__summary-stat">
+                    <Route size={22} aria-hidden="true" />
+                    <div>
+                        <small>이동수단</small>
+                        <strong>{normalizeTransportLabel(course.transportMode).replace(' 이동', '')}</strong>
+                    </div>
+                </div>
+
+                <span className="recommended-history-item__arrow" aria-hidden="true">
+                    <ChevronRight size={20} strokeWidth={2.2} />
+                </span>
+            </aside>
+        </article>
+    );
+}
+
 function RecommendedCourseHistoryPage() {
     const [initialState] = useState(getInitialHistoryState);
     const [courses, setCourses] = useState(initialState.courses);
@@ -85,24 +317,55 @@ function RecommendedCourseHistoryPage() {
     const [errorMessage, setErrorMessage] = useState('');
     const [reloadKey, setReloadKey] = useState(0);
     const [requestedPage, setRequestedPage] = useState(getInitialPage);
+    const [sortOption, setSortOption] = useState('latest');
 
     useEffect(() => {
-        if (!initialState.memberId) return undefined;
+        const localPreviewCourses = readStoredRecommendedCourses();
+        const fallbackPreviewCourses = localPreviewCourses.length > 0
+            ? localPreviewCourses
+            : recommendedCourseHistoryPreview;
+
+        if (!initialState.memberId) {
+            if (isTemporaryLogin()) {
+                setCourses(fallbackPreviewCourses);
+                setStatus(fallbackPreviewCourses.length > 0 ? 'success' : 'empty');
+            }
+            return undefined;
+        }
 
         const controller = new AbortController();
 
-        // 추천받아 저장한 SURVEY 코스를 DB 기준으로 조회합니다.
         getRecommendedCourses(initialState.memberId, { signal: controller.signal })
             .then((response) => {
-                const normalizedCourses = normalizeRecommendedCourseList(response, {
-                    fallbackImages,
-                });
-                setCourses(normalizedCourses);
-                setStatus(normalizedCourses.length > 0 ? 'success' : 'empty');
+                const normalizedCourses = normalizeRecommendedCourseList(response, { fallbackImages });
+
+                if (normalizedCourses.length > 0) {
+                    setCourses(normalizedCourses);
+                    setStatus('success');
+                    setErrorMessage('');
+                    return;
+                }
+
+                if (fallbackPreviewCourses.length > 0 && isTemporaryLogin()) {
+                    setCourses(fallbackPreviewCourses);
+                    setStatus('success');
+                    setErrorMessage('');
+                    return;
+                }
+
+                setCourses([]);
+                setStatus('empty');
                 setErrorMessage('');
             })
             .catch((error) => {
                 if (error?.name === 'AbortError') return;
+
+                if (fallbackPreviewCourses.length > 0 && isTemporaryLogin()) {
+                    setCourses(fallbackPreviewCourses);
+                    setStatus('success');
+                    setErrorMessage('');
+                    return;
+                }
 
                 setErrorMessage(error?.message || '추천받은 코스 목록을 불러오지 못했습니다.');
                 setStatus('error');
@@ -111,22 +374,26 @@ function RecommendedCourseHistoryPage() {
         return () => controller.abort();
     }, [initialState, reloadKey]);
 
+    const sortedCourses = useMemo(() => sortCourses(courses, sortOption), [courses, sortOption]);
+
+    const totalPages = Math.max(1, Math.ceil(sortedCourses.length / COURSES_PER_PAGE));
+    const currentPage = Math.min(requestedPage, totalPages);
+    const pageStartIndex = (currentPage - 1) * COURSES_PER_PAGE;
+    const visibleCourses = sortedCourses.slice(pageStartIndex, pageStartIndex + COURSES_PER_PAGE);
+
+    useEffect(() => {
+        if (requestedPage > totalPages) {
+            setRequestedPage(totalPages);
+        }
+    }, [requestedPage, totalPages]);
+
     const retry = () => {
         setStatus('loading');
         setErrorMessage('');
         setReloadKey((value) => value + 1);
     };
 
-    const totalPages = Math.max(1, Math.ceil(courses.length / COURSES_PER_PAGE));
-    const currentPage = Math.min(requestedPage, totalPages);
-    const pageStartIndex = (currentPage - 1) * COURSES_PER_PAGE;
-    const visibleCourses = courses.slice(
-        pageStartIndex,
-        pageStartIndex + COURSES_PER_PAGE,
-    );
-
     const moveToPage = (page) => {
-        // 새로고침·주소 공유에도 현재 페이지가 유지되도록 URL 쿼리도 함께 갱신합니다.
         const nextPage = Math.min(Math.max(page, 1), totalPages);
         setRequestedPage(nextPage);
 
@@ -153,12 +420,35 @@ function RecommendedCourseHistoryPage() {
                 </a>
 
                 <section className="recommended-history-heading">
-                    <div>
-                        <p><Sparkles size={15} aria-hidden="true" /> MY RECOMMENDATIONS</p>
+                    <div className="recommended-history-heading__copy">
                         <h1>추천받은 코스 전체보기</h1>
-                        <span>취향 검사 후 선택해 담은 코스를 최신순으로 모아볼 수 있어요.</span>
+                        <span>지금까지 추천받은 모든 코스를 한눈에 확인하세요.</span>
                     </div>
-                    {status === 'success' && <strong>총 {courses.length}개</strong>}
+
+                    {status === 'success' && (
+                        <div className="recommended-history-heading__actions">
+                            <strong>총 {sortedCourses.length}개</strong>
+                            <div className="recommended-history-heading__sort">
+                                <label htmlFor="recommended-history-sort">
+                                    <ListFilter size={16} aria-hidden="true" /> 정렬
+                                </label>
+                                <select
+                                    id="recommended-history-sort"
+                                    value={sortOption}
+                                    onChange={(event) => {
+                                        setSortOption(event.target.value);
+                                        moveToPage(1);
+                                    }}
+                                >
+                                    {SORT_OPTIONS.map((option) => (
+                                        <option key={option.value} value={option.value}>
+                                            {option.label}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+                    )}
                 </section>
 
                 {status === 'loading' && (
@@ -198,14 +488,9 @@ function RecommendedCourseHistoryPage() {
 
                 {status === 'success' && (
                     <>
-                        <section className="recommended-history-grid" aria-label="추천받은 코스 목록">
+                        <section className="recommended-history-list" aria-label="추천받은 코스 목록">
                             {visibleCourses.map((course) => (
-                                <CourseCard
-                                    key={course.courseId}
-                                    course={course}
-                                    detailPath={`/courses/recommendations/${course.courseId}`}
-                                    requiresLogin
-                                />
+                                <RecommendedHistoryListItem key={course.courseId} course={course} />
                             ))}
                         </section>
 
@@ -254,13 +539,10 @@ function RecommendedCourseHistoryPage() {
     );
 }
 
-/** 현재 경로에 맞춰 추천 이력, 테마 목록, 일반 목록 화면을 분기합니다. */
 function CourseListPage() {
     const pathname = window.location.pathname;
 
-    if (pathname === '/courses/recommendations') {
-        return <RecommendedCourseHistoryPage />;
-    }
+    if (pathname === '/courses/recommendations') return <RecommendedCourseHistoryPage />;
 
     if (pathname === '/courses/themes') {
         return (

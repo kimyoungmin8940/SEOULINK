@@ -1,11 +1,120 @@
 package com.seoulink.backend.domain.chatbot.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.seoulink.backend.domain.chatbot.dto.request.ChatbotRequest;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
+
+import java.util.Map;
+
+@Service
 /**
- * 외부 OpenAI API와 통신하는 역할을 담당할 서비스이다.
- *
- * <p>프롬프트 작성, 요청 전송, 응답 파싱, 타임아웃 및 API 오류 처리를 캡슐화한다.
- * API 키는 소스 코드에 직접 작성하지 않고 환경 변수나 별도 보안 설정으로 관리한다.</p>
+ * 도메인 규칙과 트랜잭션을 처리하는 서비스입니다.
  */
 public class OpenAiChatbotService {
-    // TODO: 담당 기능의 요구사항과 API 명세가 확정되면 구현한다.
+
+    private final RestClient restClient;
+    private final String apiKey;
+    private final String model;
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
+    public OpenAiChatbotService(
+            @Value("${openai.api-key}") String apiKey,
+            @Value("${openai.model}") String model
+    ) {
+        this.apiKey = apiKey == null ? "" : apiKey.trim();
+        this.model = model;
+        RestClient.Builder builder = RestClient.builder()
+                .baseUrl("https://api.openai.com/v1")
+                .defaultHeader("Content-Type", "application/json");
+        if (!this.apiKey.isBlank()) {
+            builder.defaultHeader("Authorization", "Bearer " + this.apiKey);
+        }
+        this.restClient = builder.build();
+    }
+
+    /** OpenAI가 반환한 상세 답변과 이력 카드용 압축 코스 요약이다. */
+    public record ChatbotRecommendation(String answer, String courseSummary) {}
+
+    // 사용자의 여행 조건을 프롬프트로 구성해 OpenAI Responses API에 전달한다.
+    public ChatbotRecommendation generateCourseRecommendation(ChatbotRequest request) {
+        if (apiKey.isBlank()) {
+            throw new IllegalStateException(
+                    "OPENAI_API_KEY가 설정되지 않았습니다. 결제 기능은 사용할 수 있지만 챗봇 답변 생성에는 OpenAI API 키가 필요합니다."
+            );
+        }
+        String prompt = """
+                당신은 서울 여행 전문 AI 플래너입니다.
+                사용자의 질문에 맞춰 실제로 이동 가능한 서울 여행 코스를 한국어로 제안하세요.
+
+                답변 지침:
+                - 먼저 사용자의 조건을 이해했다는 짧고 친근한 안내를 작성합니다.
+                - 3~5개의 장소를 시간순으로 추천합니다.
+                - 각 장소는 방문 시간, 장소명, 추천 이유, 지역을 포함합니다.
+                - 장소 사이의 이동 순서가 자연스러워야 합니다.
+                - 예상 소요 시간과 대략적인 1인 비용을 마지막에 정리합니다.
+                - 운영시간이나 비용이 변동될 수 있음을 짧게 안내합니다.
+                - 과장하거나 존재하지 않는 장소를 만들지 않습니다.
+
+                반드시 아래 JSON 객체만 반환하세요. Markdown 코드 블록이나 객체 밖의 문장은 금지합니다.
+                {
+                  "answer": "사용자에게 보여 줄 상세 답변 전문",
+                  "courseSummary": "3~5줄의 압축 코스 요약. 장소 동선, 예상 소요 시간, 추천 대상을 포함"
+                }
+
+                여행 콘셉트: %s
+                사용자 질문: %s
+                """.formatted(request.getTravelConcept(), request.getQuestion());
+
+        Map<String, Object> body = Map.of("model", model, "input", prompt);
+
+        try {
+            String responseBody = restClient.post()
+                    .uri("/responses")
+                    .body(body)
+                    .retrieve()
+                    .body(String.class);
+            return parseRecommendation(extractText(responseBody));
+        } catch (RestClientResponseException e) {
+            throw new IllegalStateException("OpenAI API 호출에 실패했습니다: " + e.getResponseBodyAsString(), e);
+        }
+    }
+
+    // Responses API의 output 배열에서 실제 텍스트 응답만 추출한다.
+    private String extractText(String responseBody) {
+        try {
+            JsonNode output = objectMapper.readTree(responseBody).path("output");
+            for (JsonNode outputItem : output) {
+                for (JsonNode contentItem : outputItem.path("content")) {
+                    String text = contentItem.path("text").asText();
+                    if (!text.isBlank()) return text;
+                }
+            }
+            throw new IllegalStateException("OpenAI 응답에서 답변을 찾을 수 없습니다.");
+        } catch (Exception e) {
+            throw new IllegalStateException("OpenAI 응답 처리 중 오류가 발생했습니다.", e);
+        }
+    }
+
+    // 모델이 반환한 JSON에서 상세 답변과 카드용 요약을 각각 꺼낸다.
+    private ChatbotRecommendation parseRecommendation(String responseText) {
+        try {
+            String json = responseText.trim();
+            if (json.startsWith("```")) {
+                json = json.replaceFirst("^```(?:json)?\\s*", "").replaceFirst("\\s*```$", "");
+            }
+            JsonNode result = objectMapper.readTree(json);
+            String answer = result.path("answer").asText().trim();
+            String courseSummary = result.path("courseSummary").asText().trim();
+            if (answer.isBlank() || courseSummary.isBlank()) {
+                throw new IllegalStateException("OpenAI 응답에 answer 또는 courseSummary가 없습니다.");
+            }
+            return new ChatbotRecommendation(answer, courseSummary);
+        } catch (Exception e) {
+            throw new IllegalStateException("OpenAI 응답 JSON 처리 중 오류가 발생했습니다.", e);
+        }
+    }
 }

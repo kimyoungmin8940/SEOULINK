@@ -19,6 +19,7 @@ public class PlaceCandidatePoolResponse {
     private final String travelCode;
     private final String scheduleType;
     private final String companionType;
+    private final List<String> preferredRegions;
     private final int targetCandidateCount;
     private final int maxLookupCount;
     private final Map<String, List<PlaceRecommendationResponse>> candidatesByCategory;
@@ -30,6 +31,7 @@ public class PlaceCandidatePoolResponse {
             String travelCode,
             String scheduleType,
             String companionType,
+            List<String> preferredRegions,
             int targetCandidateCount,
             int maxLookupCount,
             Map<String, List<PlaceRecommendationResponse>> candidatesByCategory,
@@ -40,12 +42,39 @@ public class PlaceCandidatePoolResponse {
         this.travelCode = travelCode;
         this.scheduleType = scheduleType;
         this.companionType = companionType;
+        this.preferredRegions = List.copyOf(preferredRegions);
         this.targetCandidateCount = targetCandidateCount;
         this.maxLookupCount = maxLookupCount;
         this.candidatesByCategory = immutableCopy(candidatesByCategory);
         this.fallbackCandidatesByCategory = immutableCopy(fallbackCandidatesByCategory);
         this.hotelCandidates = List.copyOf(hotelCandidates);
         this.fallbackHotelCandidates = List.copyOf(fallbackHotelCandidates);
+    }
+
+    /** 기존 직접 생성 코드와의 호환을 유지한다. */
+    public PlaceCandidatePoolResponse(
+            String travelCode,
+            String scheduleType,
+            String companionType,
+            int targetCandidateCount,
+            int maxLookupCount,
+            Map<String, List<PlaceRecommendationResponse>> candidatesByCategory,
+            Map<String, List<PlaceRecommendationResponse>> fallbackCandidatesByCategory,
+            List<PlaceRecommendationResponse> hotelCandidates,
+            List<PlaceRecommendationResponse> fallbackHotelCandidates
+    ) {
+        this(
+                travelCode,
+                scheduleType,
+                companionType,
+                List.of(),
+                targetCandidateCount,
+                maxLookupCount,
+                candidatesByCategory,
+                fallbackCandidatesByCategory,
+                hotelCandidates,
+                fallbackHotelCandidates
+        );
     }
 
     /**

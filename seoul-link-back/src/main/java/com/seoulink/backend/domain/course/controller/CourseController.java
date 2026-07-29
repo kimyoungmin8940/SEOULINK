@@ -1,9 +1,11 @@
 package com.seoulink.backend.domain.course.controller;
 
 import com.seoulink.backend.domain.course.dto.request.CourseBatchSaveRequest;
+import com.seoulink.backend.domain.course.dto.request.CourseDraftRefreshRequest;
 import com.seoulink.backend.domain.course.dto.request.CourseOptimizeRequest;
 import com.seoulink.backend.domain.course.dto.request.CourseRecommendRequest;
 import com.seoulink.backend.domain.course.dto.request.CourseSaveRequest;
+import com.seoulink.backend.domain.course.dto.request.CourseUpdateRequest;
 import com.seoulink.backend.domain.course.dto.response.CourseBatchSaveResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseDetailResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseDraftResponse;
@@ -25,8 +27,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -73,6 +77,25 @@ public class CourseController {
             @RequestParam Long surveyId
     ) {
         return ResponseEntity.ok(courseDraftService.createDraft(surveyId));
+    }
+
+    /**
+     * 다시 추천받기에서 직전 결과의 장소를 우선 제외하고 후보 풀을 DB에서 새로 조회한다.
+     * 이 단계에서는 외부 경로 API를 호출하지 않는다.
+     */
+    @PostMapping("/draft/recommend-again")
+    public ResponseEntity<CourseDraftResponse> refreshCourseDraft(
+            @RequestBody CourseDraftRefreshRequest request
+    ) {
+        if (request == null) {
+            throw new IllegalArgumentException("재추천 후보 요청이 필요합니다.");
+        }
+        return ResponseEntity.ok(
+                courseDraftService.createDraftForRecommendAgain(
+                        request.getSurveyId(),
+                        request.getPreviouslyRecommendedPlaceIds()
+                )
+        );
     }
 
     /**
@@ -156,6 +179,47 @@ public class CourseController {
             @RequestParam Long memberId
     ) {
         return courseService.getRecommendedCourses(memberId);
+    }
+
+    @GetMapping("/members/{memberId}/saved")
+    public List<CourseRecommendationResponse> getSavedRecommendedCourses(
+            @PathVariable Long memberId
+    ) {
+        return courseService.getMemberCoursesByType(memberId, "SURVEY");
+    }
+
+    @GetMapping("/members/{memberId}/custom")
+    public List<CourseRecommendationResponse> getCustomCourses(
+            @PathVariable Long memberId
+    ) {
+        return courseService.getMemberCoursesByType(memberId, "CUSTOM");
+    }
+
+    @PutMapping("/{courseId}")
+    public CourseRecommendationResponse updateCustomCourse(
+            @PathVariable Long courseId,
+            @RequestParam Long memberId,
+            @RequestBody CourseUpdateRequest request
+    ) {
+        return courseService.updateMemberCustomCourse(courseId, memberId, request);
+    }
+
+    @DeleteMapping("/{courseId}")
+    public ResponseEntity<Void> deleteCustomCourse(
+            @PathVariable Long courseId,
+            @RequestParam Long memberId
+    ) {
+        courseService.deleteMemberCourse(courseId, memberId, "CUSTOM");
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/{courseId}/saved")
+    public ResponseEntity<Void> removeSavedRecommendedCourse(
+            @PathVariable Long courseId,
+            @RequestParam Long memberId
+    ) {
+        courseService.deleteMemberCourse(courseId, memberId, "SURVEY");
+        return ResponseEntity.noContent().build();
     }
 
     /**

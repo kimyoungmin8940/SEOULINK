@@ -1,13 +1,7 @@
-import PagePlaceholder from '../../components/common/PagePlaceholder';
+import { useState } from 'react';
+import { signup } from '../../api/authApi';
+import { authStore } from '../../store/authStore';
+import '../../styles/member-pages.css';
 
-function SignupPage() {
-    return (
-        <PagePlaceholder
-            title="회원가입"
-            description="아이디 중복 확인, 이메일 인증, 비밀번호 암호화 흐름을 연결할 자리입니다."
-            links={[{ href: '/login', label: '로그인으로 이동' }]}
-        />
-    );
-}
-
-export default SignupPage;
+const empty = { loginId:'', password:'', passwordConfirm:'', name:'', nickname:'', email:'', phone:'' };
+export default function SignupPage() { const [form,setForm]=useState(empty); const [error,setError]=useState(''); const [loading,setLoading]=useState(false); const change=(e)=>setForm({...form,[e.target.name]:e.target.value}); const submit=async(e)=>{e.preventDefault(); if(form.password!==form.passwordConfirm)return setError('비밀번호가 일치하지 않습니다.'); setLoading(true);setError('');try{const member=await signup(form);authStore.setMember(member);window.location.assign('/');}catch(err){setError(err.message||'회원가입에 실패했습니다.');}finally{setLoading(false);}}; return <main className="member-page"><section className="member-card signup"><p className="member-kicker">회원가입</p><h1>서울 여행을 함께할<br />계정을 만들어 보세요</h1><form onSubmit={submit}><label>아이디<input name="loginId" value={form.loginId} onChange={change} required /></label><div className="member-grid"><label>이름<input name="name" value={form.name} onChange={change} required /></label><label>닉네임<input name="nickname" value={form.nickname} onChange={change} /></label></div><label>이메일<input name="email" type="email" value={form.email} onChange={change} required /></label><label>전화번호<input name="phone" value={form.phone} onChange={change} placeholder="010-0000-0000" /></label><div className="member-grid"><label>비밀번호<input name="password" type="password" value={form.password} onChange={change} required /></label><label>비밀번호 확인<input name="passwordConfirm" type="password" value={form.passwordConfirm} onChange={change} required /></label></div>{error&&<p className="member-error">{error}</p>}<button disabled={loading}>{loading?'계정 생성 중...':'회원가입'}</button></form><p className="member-link">이미 계정이 있으신가요? <a href="/login">로그인</a></p></section></main>; }

@@ -1,0 +1,41 @@
+.connected-page { min-height: 100vh; background: #eef4f9; color: #17345f; }
+.connected-shell { width: min(1120px, calc(100% - 32px)); margin: 0 auto; padding: 44px 0 70px; }
+.connected-heading { margin-bottom: 28px; }
+.connected-heading > p { margin: 0 0 8px; color: #2f72d6; font-size: 13px; font-weight: 800; letter-spacing: .12em; }
+.connected-heading h1 { margin: 0; font-size: clamp(30px, 4vw, 48px); line-height: 1.15; }
+.connected-heading > span { display: block; margin-top: 12px; color: #61728c; line-height: 1.7; }
+.connected-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.connected-button, .connected-actions a, .connected-actions button { display: inline-flex; align-items: center; justify-content: center; min-height: 42px; padding: 0 17px; border: 0; border-radius: 12px; background: #205fc1; color: white; font-weight: 750; text-decoration: none; cursor: pointer; }
+.connected-button.secondary, .connected-actions .secondary { background: white; color: #205fc1; border: 1px solid #cbd8ea; }
+.connected-panel { background: white; border: 1px solid #dce6f2; border-radius: 20px; padding: 24px; box-shadow: 0 12px 30px rgba(36, 74, 124, .08); }
+.connected-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.connected-card { display: block; padding: 20px; border: 1px solid #dbe5f1; border-radius: 17px; background: #fff; color: inherit; text-decoration: none; }
+.connected-card h2, .connected-card h3 { margin: 0 0 8px; }
+.connected-card p { margin: 0; color: #64748b; line-height: 1.6; }
+.connected-card small { display: block; margin-top: 12px; color: #2f72d6; font-weight: 700; }
+.connected-state { padding: 36px; border-radius: 18px; background: white; border: 1px solid #dce6f2; text-align: center; color: #64748b; }
+.connected-state.error { color: #b42318; background: #fff7f6; border-color: #fecaca; }
+.connected-form { display: grid; gap: 18px; }
+.connected-form label { display: grid; gap: 8px; font-weight: 750; }
+.connected-form input, .connected-form select, .connected-form textarea { width: 100%; border: 1px solid #cbd8e6; border-radius: 12px; padding: 12px 14px; background: #fff; color: #17345f; }
+.connected-form textarea { min-height: 150px; resize: vertical; }
+.connected-form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; }
+.connected-question { padding: 20px; border: 1px solid #dce6f2; border-radius: 16px; background: #fff; }
+.connected-question h3 { margin: 0 0 14px; font-size: 18px; }
+.connected-options { display: grid; gap: 9px; }
+.connected-option { display: flex !important; grid-template-columns: none !important; align-items: center; gap: 10px !important; padding: 11px 13px; border: 1px solid #dce6f2; border-radius: 11px; font-weight: 600 !important; cursor: pointer; }
+.connected-option input { width: auto; }
+.connected-code { display: inline-block; padding: 10px 16px; border-radius: 14px; background: #17345f; color: white; font-size: 26px; font-weight: 900; letter-spacing: .12em; }
+.connected-list { display: grid; gap: 12px; }
+.connected-list-item { padding: 17px 19px; border: 1px solid #dce6f2; border-radius: 15px; background: #fff; }
+.connected-list-item header { display: flex; justify-content: space-between; gap: 15px; align-items: start; }
+.connected-list-item h3 { margin: 0; }
+.connected-list-item p { margin: 7px 0 0; color: #64748b; line-height: 1.55; }
+.connected-meta { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 10px; color: #62738c; font-size: 14px; }
+.connected-day { margin-top: 20px; }
+.connected-day > h2 { margin: 0 0 12px; }
+.connected-review-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.connected-review-actions button, .connected-review-actions a { border: 0; border-radius: 10px; padding: 9px 13px; background: #eaf2fd; color: #205fc1; font-weight: 700; text-decoration: none; cursor: pointer; }
+.connected-table { width: 100%; border-collapse: collapse; }
+.connected-table th, .connected-table td { padding: 13px; border-bottom: 1px solid #e3eaf3; text-align: left; }
+@media (max-width: 680px) { .connected-shell { width: min(100% - 20px, 1120px); padding-top: 26px; } .connected-panel { padding: 17px; } }

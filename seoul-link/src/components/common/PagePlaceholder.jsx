@@ -9,7 +9,7 @@ import Footer from './Footer';
 function PagePlaceholder({ title, description, links = [] }) {
     return (
         <div className="page">
-            <Header variant="default" />
+            <Header />
 
             <main className="page-shell">
                 <section className="page-card">

@@ -1,11 +1,66 @@
 package com.seoulink.backend.domain.payment.controller;
 
-/**
- * 결제 및 유료 챗봇 이용권 관련 HTTP 요청을 처리하는 컨트롤러이다.
- *
- * <p>결제 요청, 결제 결과 저장, 결제 내역 조회 등의 API를 제공하고
- * 검증과 상태 변경은 {@code PaymentService}에 위임한다.</p>
- */
+import com.seoulink.backend.domain.payment.dto.request.PaymentConfirmRequest;
+import com.seoulink.backend.domain.payment.dto.request.PaymentCreateRequest;
+import com.seoulink.backend.domain.payment.dto.response.PaymentHistoryResponse;
+import com.seoulink.backend.domain.payment.entity.Payment;
+import com.seoulink.backend.domain.payment.service.PaymentService;
+import jakarta.validation.Valid;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/payments")
 public class PaymentController {
-    // TODO: 담당 기능의 요구사항과 API 명세가 확정되면 구현한다.
+
+    private final PaymentService paymentService;
+
+    public PaymentController(PaymentService paymentService) {
+        this.paymentService = paymentService;
+    }
+
+    @PostMapping
+    public Payment createPayment(@Valid @RequestBody PaymentCreateRequest request) {
+        return paymentService.createPayment(request);
+    }
+
+    // 외부 결제창을 열기 전에 서버에 READY 상태의 주문을 생성한다.
+    @PostMapping("/ready")
+    public Payment readyPayment(@Valid @RequestBody PaymentCreateRequest request) {
+        return paymentService.readyPayment(request);
+    }
+
+    // 결제 성공 후 토스 승인 결과를 서버에서 다시 검증한다.
+    @PostMapping("/complete")
+    public Payment confirmPayment(@Valid @RequestBody PaymentConfirmRequest request) {
+        return paymentService.confirmPayment(request);
+    }
+
+    @GetMapping
+    public List<PaymentHistoryResponse> getPayments(@RequestParam Long memberId) {
+        return paymentService.getPayments(memberId)
+                .stream()
+                .map(PaymentHistoryResponse::from)
+                .toList();
+    }
+
+    /** 토스 환불이 아닌, 프로젝트에 저장된 결제내역을 삭제한다. */
+    @DeleteMapping("/{paymentId}")
+    public ResponseEntity<Void> deletePayment(
+            @PathVariable Long paymentId,
+            @RequestParam Long memberId
+    ) {
+        paymentService.deletePayment(paymentId, memberId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/{paymentId}/cancel")
+    public Payment cancelPayment(
+            @PathVariable Long paymentId,
+            @RequestParam(defaultValue = "사용자 요청") String reason
+    ) {
+        return paymentService.cancelPayment(paymentId, reason);
+    }
 }

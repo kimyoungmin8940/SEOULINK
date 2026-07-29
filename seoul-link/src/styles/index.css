@@ -38,3 +38,11 @@
 @import './review.css';
 @import './cta.css';
 @import './footer.css';
+
+
+
+@import './payment-chat.css';
+@import './payment-history.css';
+@import './member-pages.css';
+
+@import './connected-pages.css';

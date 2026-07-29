@@ -47,6 +47,7 @@ import walkingImage from '../../assets/images/moods/mood-walking-alley.png';
 import localFoodImage from '../../assets/images/moods/mood-local-food.png';
 import rainyCafeImage from '../../assets/images/moods/mood-rainy-cafe.png';
 import sunsetImage from '../../assets/images/moods/mood-sunset-seoul.png';
+import '../../styles/course-detail.css';
 
 const placeFallbackImages = [
     hanokImage,
@@ -278,6 +279,74 @@ function normalizeCourseDetail(rawCourse) {
             rawCourse?.totalCourseTimeMinutes,
             sumDays('dailyCourseTimeMinutes'),
         ),
+        days,
+    };
+}
+
+/**
+ * 현재 백엔드의 평면 details 응답을 상세 화면이 사용하는 날짜별 days 구조로 변환합니다.
+ * 이미 days 구조로 내려오는 응답은 그대로 사용합니다.
+ */
+function adaptCurrentCourseResponse(response) {
+    if (Array.isArray(response?.days)) {
+        return response;
+    }
+
+    const details = Array.isArray(response?.details)
+        ? response.details
+        : [];
+    const groupedDays = new Map();
+
+    details.forEach((detail) => {
+        const dayNo = toFiniteNumber(detail?.dayNo, 1);
+
+        if (!groupedDays.has(dayNo)) {
+            groupedDays.set(dayNo, []);
+        }
+
+        groupedDays.get(dayNo).push({
+            ...detail,
+            visitOrder:
+                detail?.visitOrder ?? detail?.placeOrder,
+            expectedVisitMinutes:
+                detail?.expectedVisitMinutes ?? detail?.stayMinutes,
+            distanceFromPreviousKm:
+                detail?.distanceFromPreviousKm ??
+                detail?.distanceFromPrevKm,
+            travelTimeFromPreviousMinutes:
+                detail?.travelTimeFromPreviousMinutes ??
+                detail?.travelMinutesFromPrev,
+        });
+    });
+
+    const days = [...groupedDays.entries()]
+        .sort(([firstDayNo], [secondDayNo]) => firstDayNo - secondDayNo)
+        .map(([dayNo, places]) => ({
+            dayNo,
+            visitDate: places[0]?.visitDate?.slice?.(0, 10) || null,
+            places,
+        }));
+
+    return {
+        ...response,
+        coverImageUrl:
+            response?.coverImageUrl ||
+            details.find((detail) => detail?.imageUrl)?.imageUrl ||
+            null,
+        publicCourse:
+            response?.publicCourse ??
+            response?.isPublic === 'Y',
+        placeCount: response?.placeCount ?? details.length,
+        dayCount: response?.dayCount ?? days.length,
+        totalTravelTimeMinutes:
+            response?.totalTravelTimeMinutes ??
+            response?.totalTravelMinutes,
+        totalVisitTimeMinutes:
+            response?.totalVisitTimeMinutes ??
+            response?.totalVisitMinutes,
+        totalCourseTimeMinutes:
+            response?.totalCourseTimeMinutes ??
+            response?.totalCourseMinutes,
         days,
     };
 }
@@ -521,7 +590,10 @@ function CourseDetailPage() {
             signal: controller.signal,
         })
             .then((response) => {
-                const normalizedCourse = normalizeApiCourseDetail(response, courseId);
+                const normalizedCourse = normalizeApiCourseDetail(
+                    adaptCurrentCourseResponse(response),
+                    courseId,
+                );
 
                 if (!normalizedCourse.days.some((day) => day.places.length > 0)) {
                     setCourse(null);
@@ -969,3 +1041,4 @@ function CourseDetailPage() {
 }
 
 export default CourseDetailPage;
+

@@ -32,7 +32,7 @@ import static org.mockito.Mockito.when;
 class CourseDraftServiceTest {
 
     @Test
-    void createsDailyPlansAndHotelCandidatesFromLatestCandidatePool() {
+    void sharesExpandedCandidatePoolAcrossDailyPlans() {
         TravelSurveyRepository travelSurveyRepository =
                 mock(TravelSurveyRepository.class);
         SurveyResultRepository surveyResultRepository =
@@ -71,27 +71,14 @@ class CourseDraftServiceTest {
                         candidate(101L, "숙소 2", "HOTEL")
                 )
         );
-        PlaceCandidatePoolResponse secondDayPool = pool(
-                List.of(
-                        candidate(4L, "관광지 4", "TOUR"),
-                        candidate(5L, "관광지 5", "TOUR"),
-                        candidate(6L, "관광지 6", "TOUR")
-                ),
-                List.of(
-                        candidate(13L, "식당 3", "RESTAURANT"),
-                        candidate(14L, "식당 4", "RESTAURANT")
-                ),
-                List.of(candidate(22L, "카페 2", "CAFE")),
-                List.of()
-        );
-
         when(placeRecommendationService.recommendCandidatePool(
                 eq("ATLSP"),
                 eq("서울"),
                 eq("P"),
                 eq("COUPLE"),
-                anySet()
-        )).thenReturn(firstDayPool, secondDayPool);
+                anySet(),
+                eq(2)
+        )).thenReturn(firstDayPool);
 
         CourseDraftResponse draft = new CourseDraftService(
                 travelSurveyRepository,
@@ -100,9 +87,19 @@ class CourseDraftServiceTest {
         ).createDraft(1L);
 
         assertEquals(LocalTime.of(11, 0), draft.getDailyStartTime());
+        assertEquals(List.of("종로구", "중구"), draft.getPreferredRegions());
         assertEquals(2, draft.getDailyPlans().size());
         assertEquals(2, draft.getHotelCandidates().size());
         assertEquals(6, draft.getDailyPlans().get(0).getTargetPlaceCount());
+        assertEquals(
+                Map.of(
+                        "TOUR", 3,
+                        "RESTAURANT", 2,
+                        "CAFE", 1,
+                        "HOTEL", 0
+                ),
+                draft.getDailyPlans().get(0).getCategoryTargets()
+        );
         assertEquals(6, draft.getDailyPlans().get(0).getPlaceCandidates().size());
         assertEquals(LocalDate.of(2026, 7, 21),
                 draft.getDailyPlans().get(1).getVisitDate());
@@ -113,16 +110,19 @@ class CourseDraftServiceTest {
                 .getPlaceCandidates().stream()
                 .map(PlaceRecommendationResponse::getPlaceId)
                 .collect(java.util.stream.Collectors.toSet());
-        assertFalse(draft.getDailyPlans().get(1).getPlaceCandidates().stream()
+        Set<Long> secondDayIds = draft.getDailyPlans().get(1)
+                .getPlaceCandidates().stream()
                 .map(PlaceRecommendationResponse::getPlaceId)
-                .anyMatch(firstDayIds::contains));
+                .collect(java.util.stream.Collectors.toSet());
+        assertEquals(firstDayIds, secondDayIds);
 
-        verify(placeRecommendationService, times(2)).recommendCandidatePool(
+        verify(placeRecommendationService, times(1)).recommendCandidatePool(
                 eq("ATLSP"),
                 eq("서울"),
                 eq("P"),
                 eq("COUPLE"),
-                anySet()
+                eq(Set.of()),
+                eq(2)
         );
     }
 
@@ -145,7 +145,8 @@ class CourseDraftServiceTest {
         when(travelSurveyRepository.findById(2L)).thenReturn(Optional.of(survey));
         when(surveyResultRepository.findBySurveyId(2L)).thenReturn(Optional.of(surveyResult));
         when(placeRecommendationService.recommendCandidatePool(
-                eq("ATLSR"), eq("서울"), eq("R"), eq("FRIEND"), anySet()
+                eq("ATLSR"), eq("서울"), eq("R"), eq("FRIEND"), anySet(),
+                eq(1)
         )).thenReturn(pool(
                 List.of(candidate(1L, "관광지 1", "TOUR"), candidate(2L, "관광지 2", "TOUR")),
                 List.of(candidate(11L, "식당 1", "RESTAURANT")),
@@ -159,6 +160,15 @@ class CourseDraftServiceTest {
 
         assertEquals(LocalTime.of(13, 0), draft.getDailyStartTime());
         assertEquals(4, draft.getDailyTargetPlaceCount());
+        assertEquals(
+                Map.of(
+                        "TOUR", 2,
+                        "RESTAURANT", 1,
+                        "CAFE", 1,
+                        "HOTEL", 0
+                ),
+                draft.getDailyCategoryTargets()
+        );
     }
 
     private PlaceCandidatePoolResponse pool(
@@ -183,6 +193,7 @@ class CourseDraftServiceTest {
                 "ATLSP",
                 "P",
                 "COUPLE",
+                List.of("종로구", "중구"),
                 48,
                 54,
                 candidates,

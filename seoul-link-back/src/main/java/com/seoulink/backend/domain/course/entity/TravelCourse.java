@@ -103,4 +103,16 @@ public class TravelCourse {
     @UpdateTimestamp
     @Column(name = "UPDATED_AT", nullable = false)
     private LocalDateTime updatedAt;
+
+    public void updateBasicInfo(
+            String title,
+            String description,
+            String region,
+            String publicStatus
+    ) {
+        this.title = title;
+        this.description = description;
+        this.region = region;
+        this.publicStatus = publicStatus;
+    }
 }

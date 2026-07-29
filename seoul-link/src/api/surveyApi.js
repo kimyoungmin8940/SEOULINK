@@ -14,3 +14,8 @@ export const submitGuestSurvey = (requestData) => apiClient.post(
 export const getSurveyResult = (surveyId) => apiClient.get(
     `/surveys/${surveyId}/result`,
 );
+
+export const claimGuestSurvey = (guestToken, memberId) => apiClient.post(
+    '/surveys/claim',
+    { guestToken, memberId },
+);

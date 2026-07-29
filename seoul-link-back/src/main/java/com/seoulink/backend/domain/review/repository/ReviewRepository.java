@@ -1,12 +1,51 @@
 package com.seoulink.backend.domain.review.repository;
 
+import com.seoulink.backend.domain.review.entity.Review;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+import java.util.List;
+
 /**
- * 후기 엔티티의 저장·조회 기능을 담당할 Repository이다.
- * 삭제되지 않은 후기, 장소별 후기, 회원별 후기 조회 메서드를 정의한다.
- *
- * <p>Spring Data JPA 구현 시 이 인터페이스가 해당 엔티티의
- * {@code JpaRepository<엔티티, 기본키타입>}를 상속하도록 수정한다.</p>
+ * 도메인 데이터를 조회하고 저장하는 리포지토리입니다.
  */
-public interface ReviewRepository {
-    // TODO: 엔티티 매핑 완료 후 JpaRepository 상속 및 필요한 조회 메서드를 선언한다.
+public interface ReviewRepository extends JpaRepository<Review, Long> {
+    List<Review> findByIsDeletedOrderByCreatedAtDesc(String isDeleted);
+    List<Review> findByIsDeletedOrderByViewCountDesc(String isDeleted);
+    Page<Review> findByPlaceIdAndIsDeleted(Long placeId, String isDeleted, Pageable pageable);
+    Page<Review> findByMemberIdAndIsDeleted(Long memberId, String isDeleted, Pageable pageable);
+    Integer countByPlaceIdAndIsDeleted(Long placeId, String isDeleted);
+
+    @Query("""
+        select coalesce(avg(r.rating), 0)
+        from Review r
+        where r.placeId = :placeId
+          and r.isDeleted = 'N'
+    """)
+    Double averageRatingByPlaceId(@Param("placeId") Long placeId);
+
+    @Query("""
+        select r
+        from Review r
+        where r.isDeleted = 'N'
+          and (:keyword is null
+               or lower(r.reviewTitle) like lower(concat('%', :keyword, '%'))
+               or r.reviewContent like concat('%', :keyword, '%'))
+    """)
+    Page<Review> searchActive(@Param("keyword") String keyword, Pageable pageable);
+
+    @Query("""
+        select r
+        from Review r
+        where r.isDeleted = 'N'
+        order by (
+            select count(rl)
+            from ReviewLike rl
+            where rl.reviewId = r.reviewId
+        ) desc, r.createdAt desc
+    """)
+    Page<Review> findActiveOrderByLikeCount(Pageable pageable);
 }

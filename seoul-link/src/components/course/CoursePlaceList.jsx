@@ -143,3 +143,4 @@ function CoursePlaceList({ day, transportMode }) {
 }
 
 export default CoursePlaceList;
+
