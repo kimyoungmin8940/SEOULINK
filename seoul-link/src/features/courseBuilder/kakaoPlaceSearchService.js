@@ -24,7 +24,8 @@ const searchKakaoCategoryByBoundsCell = ({ bounds, groupCode, themeValue, region
             if (status === kakao.maps.services.Status.OK) {
                 const convertedPlaces = data
                     .filter((item) => isSeoulKakaoPlace(item))
-                    .map((item) => convertKakaoPlace({ item, themeValue, regionValue, fallbackBaseCategory }));
+                    .map((item) => convertKakaoPlace({ item, themeValue, regionValue, fallbackBaseCategory }))
+                    .filter(Boolean);
 
                 collectedPlaces.push(...convertedPlaces);
 
@@ -64,7 +65,8 @@ const searchKakaoKeywordByBoundsCell = ({ bounds, keyword, themeValue, regionVal
             if (status === kakao.maps.services.Status.OK) {
                 const convertedPlaces = data
                     .filter((item) => isSeoulKakaoPlace(item))
-                    .map((item) => convertKakaoPlace({ item, themeValue, regionValue, fallbackBaseCategory }));
+                    .map((item) => convertKakaoPlace({ item, themeValue, regionValue, fallbackBaseCategory }))
+                    .filter(Boolean);
 
                 collectedPlaces.push(...convertedPlaces);
 

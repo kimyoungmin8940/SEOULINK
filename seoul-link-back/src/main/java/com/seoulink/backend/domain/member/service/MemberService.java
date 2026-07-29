@@ -80,24 +80,52 @@ public class MemberService {
     }
 
     @Transactional
-    public LoginResponseDto socialLogin(String provider, String email, String name) {
+    public LoginResponseDto socialLogin(
+            String provider,
+            String providerUserId,
+            String email,
+            String name
+    ) {
         if (email == null || email.isBlank()) {
             throw new IllegalArgumentException("The OAuth provider did not provide an email address.");
         }
-        Member member = memberRepository.findByEmail(email).orElseGet(() -> {
-            Member socialMember = new Member();
-            socialMember.setEmail(email);
-            socialMember.setPassword(passwordEncoder.encode(java.util.UUID.randomUUID().toString()));
-            socialMember.setName(name == null || name.isBlank() ? provider + " user" : name);
-            socialMember.setStatus("ACTIVE");
-            socialMember.setLoginType("SOCIAL");
+        if (providerUserId == null || providerUserId.isBlank()) {
+            throw new IllegalArgumentException("The OAuth provider did not provide a user ID.");
+        }
 
-            return memberRepository.save(socialMember);
-        });
+        String socialProvider = provider.trim().toUpperCase();
+        String socialId = providerUserId.trim();
+
+        Member member = memberRepository
+                .findBySocialProviderAndSocialId(socialProvider, socialId)
+                .orElseGet(() -> createSocialMember(socialProvider, socialId, email.trim(), name));
         if (!"ACTIVE".equals(member.getStatus())) {
             throw new IllegalArgumentException("This account is inactive.");
         }
         return new LoginResponseDto(member.getMemberId(), member.getEmail(), member.getName(), member.getLoginType());
+    }
+
+    private Member createSocialMember(
+            String socialProvider,
+            String socialId,
+            String email,
+            String name
+    ) {
+        memberRepository.findByEmail(email).ifPresent(existing -> {
+            throw new IllegalArgumentException(
+                    "An account with this email already exists. Please use its original login method."
+            );
+        });
+
+        Member socialMember = new Member();
+        socialMember.setEmail(email);
+        socialMember.setPassword(passwordEncoder.encode(java.util.UUID.randomUUID().toString()));
+        socialMember.setName(name == null || name.isBlank() ? socialProvider + " user" : name);
+        socialMember.setStatus("ACTIVE");
+        socialMember.setLoginType("SOCIAL");
+        socialMember.setSocialProvider(socialProvider);
+        socialMember.setSocialId(socialId);
+        return memberRepository.save(socialMember);
     }
 
     private void grantDemoPass(Member member) {

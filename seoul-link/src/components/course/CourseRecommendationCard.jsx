@@ -75,6 +75,8 @@ function getPlaceImage(place) {
     return place?.imageUrl || place?.placeImageUrl || place?.thumbnailUrl || null;
 }
 
+// DB에 남아 있는 images/... 형식의 예전 상대경로는 현재 서버에서 제공하지 않는다.
+// 브라우저가 현재 화면 경로 뒤에 붙여 요청하지 않도록, 실제로 제공 가능한 주소만 사용한다.
 function getAverageScore(places) {
     const scores = places
         .map((place) => Number(place.recommendationScore))

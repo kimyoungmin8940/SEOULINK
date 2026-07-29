@@ -16,6 +16,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 import java.io.IOException;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 @Component
@@ -40,17 +41,31 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
             Authentication authentication
     ) throws IOException, ServletException {
         OAuth2AuthenticationToken token = (OAuth2AuthenticationToken) authentication;
-        String provider = token.getAuthorizedClientRegistrationId();
+        String provider = token.getAuthorizedClientRegistrationId().toUpperCase();
         OAuth2User oauthUser = (OAuth2User) authentication.getPrincipal();
 
-        SocialProfile profile = extractProfile(provider, oauthUser.getAttributes());
-        if (profile.email() == null || profile.email().isBlank()) {
-            response.sendError(HttpServletResponse.SC_BAD_REQUEST, "OAuth provider did not provide an email address.");
+        SocialProfile profile = extractProfile(provider, oauthUser);
+        if (profile.email() == null || profile.email().isBlank()
+                || profile.socialId() == null || profile.socialId().isBlank()) {
+            response.sendError(HttpServletResponse.SC_BAD_REQUEST, "OAuth provider did not provide the required account information.");
             return;
         }
 
-        Member member = memberRepository.findByEmail(profile.email())
-                .orElseGet(() -> createMember(profile, provider));
+        Optional<Member> socialMember = memberRepository
+                .findBySocialProviderAndSocialId(provider, profile.socialId());
+
+        Member member;
+        if (socialMember.isPresent()) {
+            member = socialMember.get();
+        } else if (memberRepository.findByEmail(profile.email()).isPresent()) {
+            response.sendError(
+                    HttpServletResponse.SC_CONFLICT,
+                    "An account with this email already exists. Please use its original login method."
+            );
+            return;
+        } else {
+            member = createMember(profile, provider);
+        }
 
         String targetUrl = UriComponentsBuilder.fromUriString(frontUrl)
                 .path("/oauth-success")
@@ -71,7 +86,9 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
         member.setPassword(passwordEncoder.encode(UUID.randomUUID().toString()));
         member.setName(profile.name());
         member.setNickname(createNickname(profile.email()));
-        member.setLoginType(provider.toUpperCase());
+        member.setLoginType("SOCIAL");
+        member.setSocialProvider(provider);
+        member.setSocialId(profile.socialId());
         member.setStatus("ACTIVE");
         return memberRepository.save(member);
     }
@@ -87,22 +104,35 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
     }
 
     @SuppressWarnings("unchecked")
-    private SocialProfile extractProfile(String provider, Map<String, Object> attributes) {
-        if ("kakao".equals(provider)) {
+    private SocialProfile extractProfile(String provider, OAuth2User oauthUser) {
+        Map<String, Object> attributes = oauthUser.getAttributes();
+        if ("KAKAO".equals(provider)) {
             Map<String, Object> account = (Map<String, Object>) attributes.getOrDefault("kakao_account", Map.of());
             Map<String, Object> properties = (Map<String, Object>) attributes.getOrDefault("properties", Map.of());
-            return new SocialProfile((String) account.get("email"), stringValue(properties.get("nickname"), "Kakao user"));
+            return new SocialProfile(
+                    stringValue(account.get("email"), null),
+                    stringValue(properties.get("nickname"), "Kakao user"),
+                    stringValue(attributes.get("id"), null)
+            );
         }
-        if ("naver".equals(provider)) {
-            Map<String, Object> response = (Map<String, Object>) attributes.getOrDefault("response", Map.of());
-            return new SocialProfile((String) response.get("email"), stringValue(response.get("name"), stringValue(response.get("nickname"), "Naver user")));
+        if ("NAVER".equals(provider)) {
+            Map<String, Object> naverResponse = (Map<String, Object>) attributes.getOrDefault("response", Map.of());
+            return new SocialProfile(
+                    stringValue(naverResponse.get("email"), null),
+                    stringValue(naverResponse.get("name"), stringValue(naverResponse.get("nickname"), "Naver user")),
+                    stringValue(naverResponse.get("id"), null)
+            );
         }
-        return new SocialProfile((String) attributes.get("email"), stringValue(attributes.get("name"), "Google user"));
+        return new SocialProfile(
+                stringValue(attributes.get("email"), null),
+                stringValue(attributes.get("name"), "Google user"),
+                stringValue(attributes.get("sub"), oauthUser.getName())
+        );
     }
 
     private String stringValue(Object value, String defaultValue) {
         return value instanceof String text && !text.isBlank() ? text : defaultValue;
     }
 
-    private record SocialProfile(String email, String name) { }
+    private record SocialProfile(String email, String name, String socialId) { }
 }

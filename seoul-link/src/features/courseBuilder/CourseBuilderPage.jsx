@@ -131,14 +131,6 @@ function CourseBuilderPage({ initialTheme = "ALL" }) {
         setCoursePlaces((currentPlaces) => clampCoursePlacesToDayCount(currentPlaces, nextDayCount));
     }, []);
 
-    const handlePreviousDay = useCallback(() => {
-        setActiveDayNo((currentDayNo) => Math.max(1, currentDayNo - 1));
-    }, []);
-
-    const handleNextDay = useCallback(() => {
-        setActiveDayNo((currentDayNo) => Math.min(totalDayCount, currentDayNo + 1));
-    }, [totalDayCount]);
-
     const searchPlacesByCurrentMap = useCallback(
         async ({
                    regionValue,
@@ -362,9 +354,13 @@ function CourseBuilderPage({ initialTheme = "ALL" }) {
             if (requestId !== searchRequestIdRef.current) return;
 
             if (keywordPlaces.length === 0) {
+                const noResultMessage =
+                    `“${keyword}”에 해당하는 서울 장소를 찾지 못했어요. 장소명이나 띄어쓰기를 확인한 뒤 다시 검색해 주세요.`;
+
                 setMapPlaces([]);
                 pendingInfoWindowRequestRef.current = null;
-                setMapStatus(`서울 전체에서 '${keyword}' 검색 결과가 없습니다. 다른 검색어로 다시 시도해보세요.`);
+                setMapStatus(noResultMessage);
+                alert(noResultMessage);
                 return;
             }
 

@@ -6,7 +6,7 @@
     overflow: auto;
     box-sizing: border-box;
     color: #102a47;
-    background: #f2f8fd;
+    background: #f6fbff;
 }
 
 .login-layout {
@@ -17,7 +17,7 @@
     overflow: hidden;
     border: 1px solid #cfdeeb;
     border-radius: 14px;
-    background: #ffffff;
+    background: #f7fbff;
     box-shadow: 0 20px 60px rgba(34, 72, 108, 0.1);
 }
 
@@ -26,7 +26,7 @@
     min-width: 0;
     min-height: 590px;
     overflow: hidden;
-    background: #f4f9ff;
+    background: #f7fbff;
 }
 
 .login-intro::after {
@@ -55,7 +55,7 @@
     display: grid;
     place-items: center;
     border-radius: 50%;
-    background: #ffffff;
+    background: #fbfdff;
     box-shadow: 0 8px 20px rgba(25, 107, 186, 0.11);
 }
 
