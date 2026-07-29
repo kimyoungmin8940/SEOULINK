@@ -155,4 +155,22 @@ public class PlaceService {
         if (request.getThemeNightViewYn() != null) place.setThemeNightViewYn(request.getThemeNightViewYn());
         if (request.getThemeHotelStayYn() != null) place.setThemeHotelStayYn(request.getThemeHotelStayYn());
     }
+
+    @Transactional(readOnly = true)
+    public List<PlaceResponse> getPlacesByNames(
+            List<String> names
+    ) {
+        if (names == null || names.isEmpty()) {
+            return List.of();
+        }
+
+        return placeRepository
+                .findByNameInAndIsActive(
+                        names,
+                        "Y"
+                )
+                .stream()
+                .map(PlaceResponse::new)
+                .toList();
+    }
 }

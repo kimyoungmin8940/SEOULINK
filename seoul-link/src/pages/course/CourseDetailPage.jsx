@@ -42,6 +42,7 @@ import {
 import recommendationPreview from '../../mocks/courseRecommendation.json';
 import { mockThemeCourseListResponse } from '../../mocks/homeMockData';
 import { getThemeCourseById } from '../../data/themeCourseData';
+import { getPlacesByNames } from '../../api/placeApi';
 import hanokImage from '../../assets/images/moods/mood-hanok-photo.png';
 import walkingImage from '../../assets/images/moods/mood-walking-alley.png';
 import localFoodImage from '../../assets/images/moods/mood-local-food.png';
@@ -571,6 +572,83 @@ function CourseDetailPage() {
     // 북마크 API가 연결되기 전까지 상세 화면 안에서 선택 상태만 표시합니다.
     const [isBookmarked, setIsBookmarked] = useState(false);
     const [toast, setToast] = useState(null);
+
+    useEffect(() => {
+        if (!isThemeCoursePath || !themeCourse) {
+            return;
+        }
+
+        const loadThemeCoursePlaces = async () => {
+            try {
+                const placeNames = [
+                    ...new Set(
+                        themeCourse.days.flatMap((day) =>
+                            day.places
+                                .map((place) => place.placeName)
+                                .filter(Boolean)
+                        )
+                    ),
+                ];
+
+                if (placeNames.length === 0) {
+                    return;
+                }
+
+                const dbPlaces = await getPlacesByNames(placeNames);
+
+                const placeMap = new Map(
+                    (Array.isArray(dbPlaces) ? dbPlaces : []).map(
+                        (place) => [place.name?.trim(), place]
+                    )
+                );
+
+                const courseWithDbPlaces = {
+                    ...themeCourse,
+                    days: themeCourse.days.map((day) => ({
+                        ...day,
+                        places: day.places.map((place) => {
+                            const dbPlace = placeMap.get(
+                                place.placeName?.trim()
+                            );
+
+                            if (!dbPlace) {
+                                return place;
+                            }
+
+                            return {
+                                ...place,
+                                placeId:
+                                    dbPlace.placeId ?? place.placeId,
+                                imageUrl:
+                                    dbPlace.imageUrl || place.imageUrl,
+                                address:
+                                    dbPlace.address || place.address,
+                                latitude:
+                                    dbPlace.latitude ?? place.latitude,
+                                longitude:
+                                    dbPlace.longitude ?? place.longitude,
+                            };
+                        }),
+                    })),
+                };
+
+                const normalizedCourse =
+                    normalizeCourseDetail(courseWithDbPlaces);
+
+                setCourse(normalizedCourse);
+                setActiveDayNo(
+                    normalizedCourse.days?.[0]?.dayNo ?? 1
+                );
+            } catch (error) {
+                console.error(
+                    '테마 코스 장소 이미지 조회 실패:',
+                    error
+                );
+            }
+        };
+
+        loadThemeCoursePlaces();
+    }, [isThemeCoursePath, themeCourse]);
 
     useEffect(() => {
         if (!courseId) {

@@ -88,4 +88,11 @@ public class PlaceController {
     public void deactivatePlace(@PathVariable Long placeId) {
         placeService.deactivatePlace(placeId);
     }
+
+    @GetMapping("/by-names")
+    public List<PlaceResponse> getPlacesByNames(
+            @RequestParam List<String> names
+    ) {
+        return placeService.getPlacesByNames(names);
+    }
 }

@@ -19,3 +19,15 @@ export const getRecommendedPlaces = (
         options,
     );
 };
+
+export const getPlacesByNames = (names) => {
+    const params = new URLSearchParams();
+
+    names.forEach((name) => {
+        params.append('names', name);
+    });
+
+    return apiClient.get(
+        `/places/by-names?${params.toString()}`
+    );
+};
