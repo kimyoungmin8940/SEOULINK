@@ -46,7 +46,8 @@ public class CoursePlaceResponse {
     private String visitTime;
     private Integer expectedVisitMinutes;
 
-    // 같은 날짜의 첫 장소는 이전 장소가 없으므로 거리·시간은 0이고 경로 종류는 null이다.
+    // DAY 1 첫 장소는 거리·시간 0, 경로 종류 null이다. DAY 2 이후 첫 일반
+    // 장소는 화면에 별도로 복원되는 전날 숙소에서 이동해 온 경로값을 가질 수 있다.
     private Double distanceFromPreviousKm;
     private Double travelTimeFromPreviousMinutes;
     private TransitPathType transitPathType;

@@ -11,16 +11,10 @@ import {
     getCurrentMemberId,
     normalizeRecommendedCourseList,
 } from '../../utils/courseHistory';
-import { syncStoredRecommendationHistory } from '../../utils/recommendationHistorySync';
 
 import { mockThemeCourseListResponse } from '../../mocks/homeMockData';
-import rainyCafeImage from '../../assets/images/moods/mood-rainy-cafe.png';
-import sunsetImage from '../../assets/images/moods/mood-sunset-seoul.png';
-import hanokImage from '../../assets/images/moods/mood-hanok-photo.png';
-import walkingImage from '../../assets/images/moods/mood-walking-alley.png';
 
 const themeCourses = mockThemeCourseListResponse.data;
-const fallbackImages = [hanokImage, sunsetImage, rainyCafeImage, walkingImage];
 
 // 로그인 기능이 완성되기 전 콘솔 테스트와 기존 프론트 저장값을 함께 지원합니다.
 const LOCAL_RECOMMENDED_COURSE_KEYS = [
@@ -49,9 +43,7 @@ function readLocalRecommendedCourses() {
     for (const storage of [localStorage, sessionStorage]) {
         for (const key of LOCAL_RECOMMENDED_COURSE_KEYS) {
             const parsed = safelyParse(storage.getItem(key));
-            const courses = normalizeRecommendedCourseList(parsed, {
-                fallbackImages,
-            });
+            const courses = normalizeRecommendedCourseList(parsed);
 
             if (courses.length > 0) {
                 return courses;
@@ -65,62 +57,56 @@ function readLocalRecommendedCourses() {
 function RecommendSection() {
     const isLoggedIn = checkIsLoggedIn();
     const memberId = useMemo(() => getCurrentMemberId(), []);
+    const shouldLoadServerRecommendations = isLoggedIn && Boolean(memberId);
     const [myRecommendedCourses, setMyRecommendedCourses] = useState(
-        () => (isLoggedIn ? readLocalRecommendedCourses() : []),
+        () => (
+            isLoggedIn && !shouldLoadServerRecommendations
+                ? readLocalRecommendedCourses()
+                : []
+        ),
+    );
+    const [isLoadingRecommendations, setIsLoadingRecommendations] = useState(
+        shouldLoadServerRecommendations,
     );
 
-    // 브라우저 임시 추천 코스를 먼저 표시하고,
-    // 백엔드에 추천받은 전체 이력이 있으면 서버 결과로 교체합니다.
+    // 실제 회원은 서버 응답이 끝나기 전까지 임시·테마 카드를 렌더링하지 않습니다.
+    // 콘솔 test-token처럼 memberId가 없는 임시 로그인에서만 브라우저 값을 사용합니다.
     useEffect(() => {
         if (!isLoggedIn) {
             setMyRecommendedCourses([]);
+            setIsLoadingRecommendations(false);
             return undefined;
         }
 
         const localCourses = readLocalRecommendedCourses();
 
-        if (localCourses.length > 0) {
+        if (!memberId) {
             setMyRecommendedCourses(localCourses);
+            setIsLoadingRecommendations(false);
+            return undefined;
         }
 
-        // 로그인 통합 전 memberId가 없거나 가짜 로그인만 한 경우에는
-        // 브라우저 저장 추천 코스를 그대로 유지합니다.
-        if (!memberId) return undefined;
-
         const controller = new AbortController();
+        setMyRecommendedCourses([]);
+        setIsLoadingRecommendations(true);
 
         const loadRecommendedCourses = async () => {
-            try {
-                await syncStoredRecommendationHistory({
-                    signal: controller.signal,
-                });
-            } catch (error) {
-                if (error?.name === 'AbortError') return;
-                // 이전 세션 복구가 실패해도 서버에 이미 저장된 추천 이력은 조회합니다.
-            }
-
             try {
                 const response = await getRecommendedCourses(memberId, {
                     signal: controller.signal,
                 });
-                const serverCourses = normalizeRecommendedCourseList(response, {
-                    fallbackImages,
-                });
+                const serverCourses = normalizeRecommendedCourseList(response);
 
-                // 실제 추천 이력이 있을 때만 브라우저 임시 데이터를 교체합니다.
-                // 서버가 빈 배열을 반환하면 기존 로컬 추천 코스를 유지합니다.
-                if (serverCourses.length > 0) {
-                    setMyRecommendedCourses(serverCourses);
-                } else if (localCourses.length === 0) {
-                    setMyRecommendedCourses([]);
-                }
+                // 실제 회원의 목록은 빈 배열까지 포함해 서버 값을 최종 기준으로 사용합니다.
+                setMyRecommendedCourses(serverCourses);
             } catch (error) {
                 if (error?.name === 'AbortError') return;
 
-                // test-token처럼 실제 인증이 되지 않아 API가 실패해도
-                // 콘솔에 저장한 추천 코스를 지우지 않습니다.
-                if (localCourses.length === 0) {
-                    setMyRecommendedCourses([]);
+                // 서버 자체가 실패한 경우에만 현재 탭의 실제 추천 응답을 임시 복구합니다.
+                setMyRecommendedCourses(localCourses);
+            } finally {
+                if (!controller.signal.aborted) {
+                    setIsLoadingRecommendations(false);
                 }
             }
         };
@@ -131,20 +117,30 @@ function RecommendSection() {
     }, [isLoggedIn, memberId]);
 
     const hasMyRecommendedCourses = isLoggedIn && myRecommendedCourses.length > 0;
+    const showPersonalizedHeading =
+        isLoadingRecommendations || hasMyRecommendedCourses;
 
     // 추천받은 코스가 있으면 최신 4개, 없으면 테마별 전체 코스에서 인기순 4개
-    const coursesToShow = hasMyRecommendedCourses
-        ? myRecommendedCourses.slice(0, 4)
-        : [...themeCourses]
-            .sort((a, b) => b.likeCount - a.likeCount)
-            .slice(0, 4);
+    const coursesToShow = isLoadingRecommendations
+        ? []
+        : hasMyRecommendedCourses
+            ? myRecommendedCourses.slice(0, 4)
+            : [...themeCourses]
+                .sort((a, b) => b.likeCount - a.likeCount)
+                .slice(0, 4);
 
-    const sectionTitle = hasMyRecommendedCourses ? '취향에 맞는 추천 코스' : '인기 테마 추천 코스';
-    const sectionDescription = hasMyRecommendedCourses
-        ? '취향 검사로 추천받은 최신 코스 4개를 확인해보세요.'
-        : '아직 추천받은 코스가 없어 테마별 코스 중 인기순 4개를 보여드려요.';
+    const sectionTitle = showPersonalizedHeading
+        ? '취향에 맞는 추천 코스'
+        : '인기 테마 추천 코스';
+    const sectionDescription = isLoadingRecommendations
+        ? '추천받은 코스를 불러오고 있어요.'
+        : hasMyRecommendedCourses
+            ? '취향 검사로 추천받은 최신 코스 4개를 확인해보세요.'
+            : '아직 추천받은 코스가 없어 테마별 코스 중 인기순 4개를 보여드려요.';
     // 추천 이력이 있으면 지금까지 추천받은 코스 전체 목록으로 이동합니다.
-    const moreLink = hasMyRecommendedCourses ? '/courses/recommendations' : '/courses/themes';
+    const moreLink = showPersonalizedHeading
+        ? '/courses/recommendations'
+        : '/courses/themes';
 
     return (
         <section className="section">
@@ -163,7 +159,7 @@ function RecommendSection() {
                     className="course-more-btn"
                     href={moreLink}
                     onClick={(event) => {
-                        if (hasMyRecommendedCourses) {
+                        if (showPersonalizedHeading) {
                             handleProtectedLinkClick(event);
                         }
                     }}
@@ -174,26 +170,45 @@ function RecommendSection() {
             </div>
 
             {/* 상황에 따라 개인 추천 코스 또는 인기 테마 코스 4개를 보여줌 */}
-            <div className="course-grid">
-                {coursesToShow.map((course) => {
-                    const courseId = getCourseId(course);
+            <div
+                className={`course-grid${isLoadingRecommendations ? ' is-loading' : ''}`}
+                aria-busy={isLoadingRecommendations}
+                aria-label={isLoadingRecommendations ? '추천 코스를 불러오는 중' : undefined}
+            >
+                {isLoadingRecommendations
+                    ? [1, 2, 3, 4].map((item) => (
+                        <div
+                            className="course-card course-card-loading"
+                            key={item}
+                            aria-hidden="true"
+                        >
+                            <span className="course-card-loading__image" />
+                            <span className="course-card-loading__body">
+                                <i />
+                                <i />
+                                <i />
+                            </span>
+                        </div>
+                    ))
+                    : coursesToShow.map((course) => {
+                        const courseId = getCourseId(course);
 
-                    if (!courseId) return null;
+                        if (!courseId) return null;
 
-                    const detailPath = hasMyRecommendedCourses
-                        ? `/courses/recommendations/${courseId}`
-                        : `/courses/${courseId}`;
-                    const normalizedCourse = { ...course, courseId };
+                        const detailPath = hasMyRecommendedCourses
+                            ? `/courses/recommendations/${courseId}`
+                            : `/courses/${courseId}`;
+                        const normalizedCourse = { ...course, courseId };
 
-                    return (
-                        <CourseCard
-                            key={courseId}
-                            course={normalizedCourse}
-                            detailPath={detailPath}
-                            requiresLogin={hasMyRecommendedCourses}
-                        />
-                    );
-                })}
+                        return (
+                            <CourseCard
+                                key={courseId}
+                                course={normalizedCourse}
+                                detailPath={detailPath}
+                                requiresLogin={hasMyRecommendedCourses}
+                            />
+                        );
+                    })}
             </div>
         </section>
     );

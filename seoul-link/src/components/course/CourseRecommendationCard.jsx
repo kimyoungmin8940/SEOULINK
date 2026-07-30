@@ -81,61 +81,6 @@ function formatMinutes(value) {
     return `${hours}시간 ${restMinutes}분`;
 }
 
-function getPlaceReductionNotice(day, transportMode) {
-    if (
-        String(transportMode || '').trim().toUpperCase()
-        !== 'PUBLIC_TRANSIT'
-    ) {
-        return null;
-    }
-
-    const places = Array.isArray(day?.places) ? day.places : [];
-    const ordinaryPlaceCount = places.filter(
-        (place) => !isHotelCategory(place?.category),
-    ).length;
-    const removedPlaceCount = Math.max(
-        0,
-        Number(day?.routeRemovedPlaceCount) || 0,
-    );
-
-    if (removedPlaceCount > 0) {
-        return {
-            title: `이동 조건 때문에 장소 ${removedPlaceCount}곳을 제외했어요`,
-            description:
-                '실제 대중교통 이동이 40분을 넘었고, 40분 이내 이동과 DAY·코스 간 중복 제한을 함께 만족하는 대체 장소가 부족했습니다.',
-        };
-    }
-
-    if (ordinaryPlaceCount <= 2) {
-        return {
-            title: ordinaryPlaceCount > 0
-                ? `이번 DAY는 가능한 장소가 ${ordinaryPlaceCount}곳뿐이에요`
-                : '이번 DAY는 조건에 맞는 일반 장소를 찾지 못했어요',
-            description:
-                '대중교통 40분 이내 이동과 DAY·코스 간 중복 제한을 우선 적용해 현재 후보 중 가능한 장소만 담았습니다.',
-        };
-    }
-
-    return null;
-}
-
-function PlaceReductionNotice({ notice, compact = false }) {
-    if (!notice) return null;
-
-    return (
-        <div
-            className={`course-result-place-reduction-notice${compact ? ' compact' : ''}`}
-            role="status"
-        >
-            <TriangleAlert size={14} aria-hidden="true" />
-            <span>
-                <strong>{notice.title}</strong>
-                <small>{notice.description}</small>
-            </span>
-        </div>
-    );
-}
-
 function normalizeImageUrl(value) {
     if (typeof value !== 'string') {
         return null;
@@ -291,10 +236,6 @@ function ExpandedSchedule({ days, transportMode }) {
                 const routeDetailsErrorMessage = String(
                     day.routeDetailsError || '',
                 ).trim();
-                const placeReductionNotice = getPlaceReductionNotice(
-                    day,
-                    transportMode,
-                );
 
                 return (
                     <section className="course-result-expanded-day" key={`${day.dayNo}-${day.visitDate}`}>
@@ -317,11 +258,6 @@ function ExpandedSchedule({ days, transportMode }) {
                             실제 경로를 받지 못한 일부 구간만 예상값으로 표시합니다.
                         </p>
                     )}
-
-                    <PlaceReductionNotice
-                        notice={placeReductionNotice}
-                        compact
-                    />
 
                     <ol>
                         {schedulePlaces.map((place, index) => {
@@ -470,10 +406,31 @@ function CourseRecommendationCard({
     const displayPlaceCount = days.length > 1
         ? (activeDay.places || []).length
         : allPlaces.length;
-    const activePlaceReductionNotice = getPlaceReductionNotice(
-        activeDay,
-        transportMode,
-    );
+    const requestedPlaceCount = Number(activeDay?.requestedPlaceCount);
+    const actualPlaceCount = activeDay?.actualPlaceCount != null
+        && Number.isFinite(Number(activeDay.actualPlaceCount))
+        ? Number(activeDay.actualPlaceCount)
+        : activeDayPlaces.filter(
+            (place) => !isHotelCategory(place?.category),
+        ).length;
+    const placeCountAdjusted = Boolean(activeDay?.placeCountAdjusted)
+        || (
+            Number.isFinite(requestedPlaceCount)
+            && requestedPlaceCount > actualPlaceCount
+        );
+    const normalizedTransportMode = String(transportMode || '')
+        .trim()
+        .toUpperCase();
+    const placeCountAdjustmentNotice = placeCountAdjusted
+        ? normalizedTransportMode === 'WALKING'
+            ? `도보 구간당 20분 제한과 코스 간 중복 제한을 함께 적용해 DAY ${activeDay.dayNo || 1}는 ${actualPlaceCount}곳으로 조정했어요.`
+            : normalizedTransportMode === 'PUBLIC_TRANSIT'
+                ? `대중교통 구간당 40분 제한과 코스 간 중복 제한을 함께 적용해 DAY ${activeDay.dayNo || 1}는 ${actualPlaceCount}곳으로 조정했어요.`
+                : normalizedTransportMode === 'DRIVING' || normalizedTransportMode === 'CAR'
+                    ? `자동차 이동 조건과 코스 간 중복 제한을 함께 적용해 DAY ${activeDay.dayNo || 1}는 ${actualPlaceCount}곳으로 조정했어요.`
+                    : activeDay?.adjustmentNotice
+                        || `이동시간과 중복 제한을 만족하는 장소가 부족해 DAY ${activeDay.dayNo || 1}는 ${actualPlaceCount}곳으로 조정했어요.`
+        : '';
 
     return (
         <article
@@ -584,9 +541,15 @@ function CourseRecommendationCard({
                         </div>
                     )}
 
-                    <PlaceReductionNotice
-                        notice={activePlaceReductionNotice}
-                    />
+                    {placeCountAdjustmentNotice && (
+                        <div className="course-result-place-reduction-notice compact" role="status">
+                            <TriangleAlert size={15} aria-hidden="true" />
+                            <span>
+                                <strong>장소 수가 조정되었어요</strong>
+                                <small>{placeCountAdjustmentNotice}</small>
+                            </span>
+                        </div>
+                    )}
 
                     <ol className="course-result-stops">
                         {activeRouteStops.map((place, index) => (

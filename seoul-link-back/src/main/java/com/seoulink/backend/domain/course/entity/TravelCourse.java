@@ -113,6 +113,35 @@ public class TravelCourse {
         this.savedStatus = "Y";
     }
 
+    /**
+     * 추천 화면에서 실제 경로 조회가 끝난 값을 같은 추천 이력 행에 반영한다.
+     * 저장 여부는 호출 목적에 따라 유지하거나 Y로 전환한다.
+     */
+    public void refreshRecommendationSnapshot(
+            String title,
+            String description,
+            String travelCode,
+            String region,
+            double totalDistanceKm,
+            double totalTravelTimeMinutes,
+            int totalVisitTimeMinutes,
+            double totalCourseTimeMinutes,
+            boolean markAsSaved
+    ) {
+        this.title = title;
+        this.description = description;
+        this.travelCode = travelCode;
+        this.region = region;
+        this.totalDistanceKm = totalDistanceKm;
+        this.totalTravelTimeMinutes = totalTravelTimeMinutes;
+        this.totalVisitTimeMinutes = totalVisitTimeMinutes;
+        this.totalCourseTimeMinutes = totalCourseTimeMinutes;
+
+        if (markAsSaved) {
+            markSaved();
+        }
+    }
+
     /** 내 코스 목록에 포함되는 저장 완료 행인지 반환한다. */
     public boolean isSaved() {
         return "Y".equalsIgnoreCase(savedStatus);

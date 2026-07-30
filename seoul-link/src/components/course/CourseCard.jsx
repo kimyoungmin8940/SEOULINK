@@ -2,6 +2,8 @@
 // RecommendSection에서 courses 배열을 map으로 돌리면서 이 컴포넌트에 course 데이터를 전달
 import { Clock3, MapPin } from 'lucide-react';
 import { requireLogin } from '../../utils/authGuard';
+import { getCourseCoverImageUrls } from '../../utils/courseImage';
+import CourseImage from './CourseImage';
 
 const COURSE_DETAIL_ENTRY_KEY = 'seoulinkCourseDetailEntry';
 
@@ -21,6 +23,8 @@ function CourseCard({
     detailPath,
     requiresLogin = false,
 }) {
+    const coverImageUrls = getCourseCoverImageUrls(course);
+
     // 부모 컴포넌트가 전달한 상세 경로로 이동하고,
     // 경로가 없으면 일반 코스 상세 페이지로 이동
     const moveToRecommendedCourseDetail = () => {
@@ -70,10 +74,10 @@ function CourseCard({
         >
             {/* 코스 대표 이미지 영역*/}
             <div className="course-img-wrap">
-                {/* imageUrl이 있을 때만 이미지를 렌더링*/}
-                {course.imageUrl && (
-                    <img src={course.imageUrl} alt={course.title} />
-                )}
+                <CourseImage
+                    imageUrls={coverImageUrls}
+                    alt={`${course.title} 대표 이미지`}
+                />
             </div>
 
             {/* 코스 제목, 설명, 소요시간, 지역, 태그를 보여주는 정보 영역*/}

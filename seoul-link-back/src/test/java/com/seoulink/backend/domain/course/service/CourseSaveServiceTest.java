@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.StreamSupport;
 
@@ -190,7 +191,8 @@ class CourseSaveServiceTest {
         assertEquals(1, response.getDayCount());
         assertTrue(existingCourse.isSaved());
         verify(travelCourseRepository, never()).save(any());
-        verify(courseDetailRepository, never()).saveAll(any());
+        verify(courseDetailRepository).deleteAllInBatch(existingDetails);
+        verify(courseDetailRepository).saveAll(any());
     }
 
     @Test
@@ -225,6 +227,103 @@ class CourseSaveServiceTest {
         verify(travelCourseRepository).save(courseCaptor.capture());
         assertEquals("N", courseCaptor.getValue().getSavedStatus());
         verify(courseDetailRepository).saveAll(any());
+    }
+
+    @Test
+    @DisplayName("추천 화면의 실제 경로값을 courseId가 같은 추천 이력 상세에 반영한다")
+    void refreshRecommendationHistoryWithResolvedRouteDetails() {
+        LocalDate visitDate = LocalDate.of(2026, 7, 20);
+        CourseSavePlaceDto firstPlace = place(
+                1L,
+                visitDate,
+                1,
+                90,
+                0.0,
+                0.0
+        );
+        CourseSavePlaceDto secondPlace = place(
+                2L,
+                visitDate,
+                2,
+                60,
+                2.4,
+                18.0
+        );
+        secondPlace.setTransitPathType(TransitPathType.SUBWAY);
+        secondPlace.setRouteEstimated(false);
+
+        CourseSaveRequest request = CourseSaveRequest.builder()
+                .courseId(88L)
+                .memberId(1L)
+                .resultId(101L)
+                .title("추천받은 취향 집중 코스")
+                .courseType("SURVEY")
+                .transportMode(TransportMode.PUBLIC_TRANSIT)
+                .places(List.of(firstPlace, secondPlace))
+                .build();
+        TravelCourse historyCourse = TravelCourse.builder()
+                .courseId(88L)
+                .memberId(1L)
+                .resultId(101L)
+                .title("추천받은 취향 집중 코스")
+                .courseType("SURVEY")
+                .savedStatus("N")
+                .totalDistanceKm(1.0)
+                .totalTravelTimeMinutes(10.0)
+                .totalVisitTimeMinutes(150)
+                .totalCourseTimeMinutes(160.0)
+                .build();
+        List<CourseDetail> estimatedDetails = List.of(
+                CourseDetail.builder()
+                        .detailId(801L)
+                        .courseId(88L)
+                        .placeId(1L)
+                        .dayNo(1)
+                        .placeOrder(1)
+                        .visitDate(visitDate)
+                        .routeEstimated(false)
+                        .build(),
+                CourseDetail.builder()
+                        .detailId(802L)
+                        .courseId(88L)
+                        .placeId(2L)
+                        .dayNo(1)
+                        .placeOrder(2)
+                        .visitDate(visitDate)
+                        .travelTimeFromPreviousMinutes(10.0)
+                        .routeEstimated(true)
+                        .build()
+        );
+
+        when(travelCourseRepository.findByCourseIdAndMemberId(88L, 1L))
+                .thenReturn(Optional.of(historyCourse));
+        when(courseDetailRepository
+                .findByCourseIdOrderByDayNoAscPlaceOrderAsc(88L))
+                .thenReturn(estimatedDetails);
+
+        CourseSaveResponse response = courseSaveService
+                .saveRecommendationHistory(List.of(request))
+                .get(0);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Iterable<CourseDetail>> detailCaptor =
+                ArgumentCaptor.forClass(Iterable.class);
+        verify(courseDetailRepository).deleteAllInBatch(estimatedDetails);
+        verify(courseDetailRepository).saveAll(detailCaptor.capture());
+        List<CourseDetail> refreshedDetails = StreamSupport
+                .stream(detailCaptor.getValue().spliterator(), false)
+                .toList();
+
+        assertEquals(88L, response.getCourseId());
+        assertEquals("N", historyCourse.getSavedStatus());
+        assertEquals(2.4, historyCourse.getTotalDistanceKm(), 0.000001);
+        assertEquals(18.0, historyCourse.getTotalTravelTimeMinutes(), 0.000001);
+        assertEquals(18.0,
+                refreshedDetails.get(1).getTravelTimeFromPreviousMinutes(),
+                0.000001);
+        assertEquals(TransitPathType.SUBWAY,
+                refreshedDetails.get(1).getTransitPathType());
+        assertEquals(false, refreshedDetails.get(1).getRouteEstimated());
     }
 
     @Test
@@ -273,6 +372,99 @@ class CourseSaveServiceTest {
 
         assertNull(details.get(0).getTransitPathType());
         assertEquals(TransitPathType.SUBWAY, details.get(1).getTransitPathType());
+    }
+
+    @Test
+    @DisplayName("DAY 2 첫 장소에는 전날 숙소 출발 경로를 저장할 수 있다")
+    void savePreviousHotelRouteOnFirstPlaceAfterDayOne() {
+        LocalDate firstDate = LocalDate.of(2026, 7, 20);
+        LocalDate secondDate = LocalDate.of(2026, 7, 21);
+        CourseSavePlaceDto hotel = place(
+                100L,
+                firstDate,
+                2,
+                0,
+                2.0,
+                20.0
+        );
+        hotel.setCategory("HOTEL");
+        CourseSavePlaceDto secondDayFirstPlace = place(
+                20L,
+                secondDate,
+                1,
+                60,
+                7.6,
+                34.0
+        );
+        secondDayFirstPlace.setTransitPathType(TransitPathType.BUS);
+        secondDayFirstPlace.setRouteEstimated(true);
+        CourseSaveRequest request = CourseSaveRequest.builder()
+                .transportMode(TransportMode.PUBLIC_TRANSIT)
+                .memberId(1L)
+                .title("숙소 출발 2일 코스")
+                .places(List.of(
+                        place(10L, firstDate, 1, 90, 0.0, 0.0),
+                        hotel,
+                        secondDayFirstPlace
+                ))
+                .build();
+        when(travelCourseRepository.save(any(TravelCourse.class)))
+                .thenReturn(TravelCourse.builder()
+                        .courseId(31L)
+                        .title("숙소 출발 2일 코스")
+                        .build());
+
+        courseSaveService.saveOptimizedCourse(request);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Iterable<CourseDetail>> detailCaptor =
+                ArgumentCaptor.forClass(Iterable.class);
+        verify(courseDetailRepository).saveAll(detailCaptor.capture());
+        List<CourseDetail> details = StreamSupport
+                .stream(detailCaptor.getValue().spliterator(), false)
+                .toList();
+        CourseDetail savedSecondDayFirstPlace = details.get(2);
+
+        assertEquals(2, savedSecondDayFirstPlace.getDayNo());
+        assertEquals(1, savedSecondDayFirstPlace.getPlaceOrder());
+        assertEquals(7.6,
+                savedSecondDayFirstPlace.getDistanceFromPreviousKm(),
+                0.000001);
+        assertEquals(34.0,
+                savedSecondDayFirstPlace.getTravelTimeFromPreviousMinutes(),
+                0.000001);
+        assertEquals(TransitPathType.BUS,
+                savedSecondDayFirstPlace.getTransitPathType());
+        assertEquals(true, savedSecondDayFirstPlace.getRouteEstimated());
+    }
+
+    @Test
+    @DisplayName("DAY 1 첫 장소에는 이전 이동 경로를 저장할 수 없다")
+    void rejectRouteMetadataOnFirstDayFirstPlace() {
+        LocalDate visitDate = LocalDate.of(2026, 7, 20);
+        CourseSavePlaceDto firstPlace = place(
+                10L,
+                visitDate,
+                1,
+                90,
+                1.0,
+                10.0
+        );
+        firstPlace.setTransitPathType(TransitPathType.BUS);
+        firstPlace.setRouteEstimated(true);
+        CourseSaveRequest request = CourseSaveRequest.builder()
+                .transportMode(TransportMode.PUBLIC_TRANSIT)
+                .memberId(1L)
+                .title("잘못된 첫 구간 코스")
+                .places(List.of(firstPlace))
+                .build();
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> courseSaveService.saveOptimizedCourse(request)
+        );
+        verify(travelCourseRepository, never()).save(any());
+        verify(courseDetailRepository, never()).saveAll(any());
     }
 
 

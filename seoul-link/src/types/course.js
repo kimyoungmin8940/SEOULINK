@@ -69,6 +69,7 @@
  * @property {number=} dailyTravelTimeMinutes
  * @property {number=} dailyVisitTimeMinutes
  * @property {number=} dailyCourseTimeMinutes
+ * @property {?CoursePlace=} routeOriginPlace DAY 2 이후 전날 숙소 출발점
  * @property {boolean=} routeDetailsAttempted 실제 교통편 상세 조회를 이미 시도했는지 여부
  * @property {?string=} routeDetailsError 상세 조회 자체가 실패한 경우의 화면 메시지
  * @property {CoursePlace[]} places
@@ -172,6 +173,7 @@
  * @property {string} title
  * @property {?string} description
  * @property {?string} coverImageUrl
+ * @property {string[]=} coverImageUrls 방문 순서대로 시도할 실제 장소 사진 후보
  * @property {?string} travelCode
  * @property {?TransportMode} transportMode
  * @property {boolean=} estimatedTravelTimes 추천 직후 미리보기에서만 사용하는 추정 구간 여부
@@ -198,6 +200,7 @@
  * @property {string} title
  * @property {?string} description
  * @property {?string} coverImageUrl
+ * @property {string[]=} coverImageUrls 방문 순서대로 시도할 실제 장소 사진 후보
  * @property {'CUSTOM'|'SURVEY'|'CHATBOT'} courseType
  * @property {?TransportMode} transportMode
  * @property {string[]} regions

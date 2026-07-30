@@ -1,4 +1,4 @@
-package com.seoulink.backend.domain.course.service;
+package com.seoulink.backend.domain.place.course.service;
 
 import com.seoulink.backend.domain.course.dto.response.CourseDetailResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseRecommendationResponse;
@@ -8,6 +8,7 @@ import com.seoulink.backend.domain.course.model.TransportMode;
 import com.seoulink.backend.domain.course.model.TransitPathType;
 import com.seoulink.backend.domain.course.repository.CourseDetailRepository;
 import com.seoulink.backend.domain.course.repository.TravelCourseRepository;
+import com.seoulink.backend.domain.course.service.CourseService;
 import com.seoulink.backend.domain.place.entity.Place;
 import com.seoulink.backend.domain.place.repository.PlaceRepository;
 import com.seoulink.backend.domain.place.service.PlaceRecommendationService;

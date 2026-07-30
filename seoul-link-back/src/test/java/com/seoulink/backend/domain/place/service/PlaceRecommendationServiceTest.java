@@ -10,6 +10,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.ArrayList;
 import java.util.stream.Collectors;
@@ -159,6 +160,27 @@ class PlaceRecommendationServiceTest {
                 response.getRecommendedPlaces().get(1).getRecommendationScore(),
                 0.000001
         );
+    }
+
+    @Test
+    void restoresOnlyRequestedDisplayScoresWithTheSameNormalization() {
+        Place genericPlace = place(1L, "일반 관광지", "TOUR", true);
+        Place datePlace = place(2L, "데이트 관광지", "TOUR", true);
+        Place unusedPlace = place(3L, "미사용 관광지", "TOUR", true);
+        datePlace.setThemeDateYn("Y");
+        when(placeRepository.findByIsActive("Y"))
+                .thenReturn(List.of(genericPlace, datePlace, unusedPlace));
+
+        Map<Long, Double> scores = placeRecommendationService.findDisplayScores(
+                "ATBSP",
+                "COUPLE",
+                List.of(1L, 2L)
+        );
+
+        assertEquals(Set.of(1L, 2L), scores.keySet());
+        assertEquals(95.0, scores.get(2L), 0.000001);
+        assertTrue(scores.get(1L) >= 70.0);
+        assertFalse(scores.containsKey(3L));
     }
 
     @Test

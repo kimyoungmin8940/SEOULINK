@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
     ArrowLeft,
     CalendarDays,
@@ -19,14 +19,9 @@ import {
     getCurrentMemberId,
     normalizeMyCourseList,
 } from '../../utils/courseHistory';
-import hanokImage from '../../assets/images/moods/mood-hanok-photo.png';
-import sunsetImage from '../../assets/images/moods/mood-sunset-seoul.png';
-import rainyCafeImage from '../../assets/images/moods/mood-rainy-cafe.png';
-import walkingImage from '../../assets/images/moods/mood-walking-alley.png';
 
 const COURSES_PER_PAGE = 8;
 const COURSE_DETAIL_ENTRY_KEY = 'seoulinkCourseDetailEntry';
-const fallbackImages = [hanokImage, sunsetImage, rainyCafeImage, walkingImage];
 
 function getInitialPage() {
     const page = Number(new URLSearchParams(window.location.search).get('page'));
@@ -82,6 +77,31 @@ function getCourseTypeLabel(courseType) {
     }[courseType] || '저장 코스';
 }
 
+/** 첫 장소 사진이 깨지면 코스의 다음 실제 장소 사진을 대표로 사용합니다. */
+function MyCourseCoverImage({ course }) {
+    const imageCandidates = useMemo(() => [...new Set([
+        ...(Array.isArray(course?.coverImageUrls) ? course.coverImageUrls : []),
+        course?.coverImageUrl,
+        course?.imageUrl,
+    ].filter(Boolean))], [course]);
+    const [imageIndex, setImageIndex] = useState(0);
+    const imageUrl = imageCandidates[imageIndex] || null;
+
+    useEffect(() => {
+        setImageIndex(0);
+    }, [course?.courseId]);
+
+    if (!imageUrl) return null;
+
+    return (
+        <img
+            src={imageUrl}
+            alt={`${course.title} 대표 이미지`}
+            onError={() => setImageIndex((currentIndex) => currentIndex + 1)}
+        />
+    );
+}
+
 function MyCourseCard({ course }) {
     const moveToDetail = () => {
         sessionStorage.setItem(COURSE_DETAIL_ENTRY_KEY, JSON.stringify({
@@ -109,15 +129,7 @@ function MyCourseCard({ course }) {
             onKeyDown={handleKeyDown}
         >
             <div className="my-course-card-image">
-                <img
-                    src={course.imageUrl}
-                    alt={`${course.title} 대표 이미지`}
-                    onError={(event) => {
-                        if (event.currentTarget.src !== hanokImage) {
-                            event.currentTarget.src = hanokImage;
-                        }
-                    }}
-                />
+                <MyCourseCoverImage course={course} />
                 <span>{getCourseTypeLabel(course.courseType)}</span>
             </div>
 
@@ -171,9 +183,7 @@ function MyCoursesPage() {
 
         getMyCourses(initialState.memberId, { signal: controller.signal })
             .then((response) => {
-                const normalizedCourses = normalizeMyCourseList(response, {
-                    fallbackImages,
-                });
+                const normalizedCourses = normalizeMyCourseList(response);
 
                 setCourses(normalizedCourses);
                 setStatus(normalizedCourses.length > 0 ? 'success' : 'empty');

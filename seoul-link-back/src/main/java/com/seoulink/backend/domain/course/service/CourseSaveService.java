@@ -89,12 +89,15 @@ public class CourseSaveService {
      * 추천 API가 사용자에게 보여준 모든 옵션을 저장 전 추천 이력으로 기록한다.
      *
      * <p>같은 추천 조합이 재호출되어도 기존 행을 재사용하고, 이 단계에서는
-     * 내 코스에 포함되지 않도록 IS_SAVED를 N으로 저장한다.</p>
+     * 내 코스에 포함되지 않도록 IS_SAVED를 N으로 저장한다. 반환한 코스 ID는
+     * 실제 경로 조회가 끝난 뒤 같은 이력 행을 갱신하는 식별자로 사용한다.</p>
      */
     @Transactional
-    public void saveRecommendationHistory(List<CourseSaveRequest> requests) {
+    public List<CourseSaveResponse> saveRecommendationHistory(
+            List<CourseSaveRequest> requests
+    ) {
         if (requests == null || requests.isEmpty()) {
-            return;
+            return List.of();
         }
 
         List<ValidatedCourse> validatedCourses = requests.stream()
@@ -102,13 +105,15 @@ public class CourseSaveService {
                 .toList();
         validateSameMemberAndTransportMode(requests);
 
+        List<CourseSaveResponse> savedCourses = new ArrayList<>();
         for (int index = 0; index < requests.size(); index++) {
-            saveValidatedCourse(
+            savedCourses.add(saveValidatedCourse(
                     requests.get(index),
                     validatedCourses.get(index),
                     false
-            );
+            ));
         }
+        return List.copyOf(savedCourses);
     }
 
     /** 검증이 끝난 코스 한 건의 기본 정보와 상세 장소를 저장하고 합계를 반환한다. */
@@ -117,6 +122,15 @@ public class CourseSaveService {
             ValidatedCourse validated,
             boolean markAsSaved
     ) {
+        CourseSaveResponse targetedCourse = refreshTargetedHistoryCourse(
+                request,
+                validated,
+                markAsSaved
+        );
+        if (targetedCourse != null) {
+            return targetedCourse;
+        }
+
         CourseSaveResponse existingCourse = findExistingSurveyCourse(
                 request,
                 validated,
@@ -126,22 +140,7 @@ public class CourseSaveService {
             return existingCourse;
         }
 
-        double totalDistanceKm = validated.places().stream()
-                .mapToDouble(CourseSavePlaceDto::getDistanceFromPreviousKm)
-                .sum();
-        double totalTravelTimeMinutes = validated.places().stream()
-                .mapToDouble(CourseSavePlaceDto::getTravelTimeFromPreviousMinutes)
-                .sum();
-        int totalVisitTimeMinutes = validated.places().stream()
-                .mapToInt(this::normalizedStayMinutes)
-                .sum();
-
-        double storedTotalDistanceKm = round(totalDistanceKm, 3);
-        double storedTotalTravelTimeMinutes = round(totalTravelTimeMinutes, 2);
-        double storedTotalCourseTimeMinutes = round(
-                totalVisitTimeMinutes + totalTravelTimeMinutes,
-                2
-        );
+        CourseTotals totals = calculateTotals(validated);
 
         TravelCourse savedCourse = travelCourseRepository.save(
                 TravelCourse.builder()
@@ -156,10 +155,10 @@ public class CourseSaveService {
                         .publicStatus(Boolean.TRUE.equals(request.getPublicCourse()) ? "Y" : "N")
                         .viewCount(0L)
                         .savedStatus(markAsSaved ? "Y" : "N")
-                        .totalDistanceKm(storedTotalDistanceKm)
-                        .totalTravelTimeMinutes(storedTotalTravelTimeMinutes)
-                        .totalVisitTimeMinutes(totalVisitTimeMinutes)
-                        .totalCourseTimeMinutes(storedTotalCourseTimeMinutes)
+                        .totalDistanceKm(totals.distanceKm())
+                        .totalTravelTimeMinutes(totals.travelMinutes())
+                        .totalVisitTimeMinutes(totals.visitMinutes())
+                        .totalCourseTimeMinutes(totals.courseMinutes())
                         .build()
         );
 
@@ -167,47 +166,56 @@ public class CourseSaveService {
             throw new IllegalStateException("저장된 코스 ID를 확인할 수 없습니다.");
         }
 
-        Map<LocalDate, Integer> dayNumbers = createDayNumbers(validated.places());
-        // 장소명·주소 같은 표시 정보는 중복 저장하지 않고 PLACE_ID만 보관해 조회 시 PLACES와 연결한다.
-        // 거리·시간·경로 종류는 해당 장소로 들어오는 이전 구간 값이며 첫 장소는 0·0·null이다.
-        List<CourseDetail> details = validated.places().stream()
-                .map(place -> CourseDetail.builder()
-                        .courseId(savedCourse.getCourseId())
-                        .placeId(place.getPlaceId())
-                        .dayNo(dayNumbers.get(place.getVisitDate()))
-                        .placeOrder(place.getVisitOrder())
-                        .visitTime(trimToNull(place.getVisitTime()))
-                        .stayMinutes(normalizedStayMinutes(place))
-                        .visitDate(place.getVisitDate())
-                        .distanceFromPreviousKm(round(
-                                place.getDistanceFromPreviousKm(),
-                                3
-                        ))
-                        .travelTimeFromPreviousMinutes(round(
-                                place.getTravelTimeFromPreviousMinutes(),
-                                2
-                        ))
-                        .transitPathType(place.getTransitPathType())
-                        .routeEstimated(Boolean.TRUE.equals(
-                                place.getRouteEstimated()
-                        ))
-                        .build())
-                .toList();
-
+        List<CourseDetail> details = buildDetails(
+                savedCourse.getCourseId(),
+                validated.places()
+        );
         courseDetailRepository.saveAll(details);
 
-        return CourseSaveResponse.builder()
-                .courseId(savedCourse.getCourseId())
-                .title(savedCourse.getTitle())
-                // 전체 이동수단은 TRAVEL_SURVEY.TRANSPORT_TYPE에 저장되므로 요청 검증값을 반환한다.
-                .transportMode(validated.transportMode())
-                .placeCount(details.size())
-                .dayCount(dayNumbers.size())
-                .totalDistanceKm(storedTotalDistanceKm)
-                .totalTravelTimeMinutes(storedTotalTravelTimeMinutes)
-                .totalVisitTimeMinutes(totalVisitTimeMinutes)
-                .totalCourseTimeMinutes(storedTotalCourseTimeMinutes)
-                .build();
+        return toSaveResponse(
+                savedCourse,
+                validated,
+                details,
+                totals
+        );
+    }
+
+    /**
+     * 추천 응답에 실려 온 courseId로 정확한 추천 이력 행을 찾아 실제 경로값을
+     * 갱신한다. 장소 교체·삭제로 구성이 달라져도 다른 추천 코스를 건드리지 않는다.
+     */
+    private CourseSaveResponse refreshTargetedHistoryCourse(
+            CourseSaveRequest request,
+            ValidatedCourse validated,
+            boolean markAsSaved
+    ) {
+        if (request.getCourseId() == null
+                || !"SURVEY".equals(validated.courseType())
+                || request.getResultId() == null) {
+            return null;
+        }
+
+        TravelCourse course = travelCourseRepository
+                .findByCourseIdAndMemberId(
+                        request.getCourseId(),
+                        request.getMemberId()
+                )
+                .filter(candidate -> "SURVEY".equalsIgnoreCase(
+                        candidate.getCourseType()
+                ))
+                .filter(candidate -> request.getResultId().equals(
+                        candidate.getResultId()
+                ))
+                .orElse(null);
+
+        return course == null
+                ? null
+                : refreshExistingHistoryCourse(
+                        course,
+                        request,
+                        validated,
+                        markAsSaved
+                );
     }
 
     /**
@@ -254,34 +262,173 @@ public class CourseSaveService {
                 continue;
             }
 
-            if (markAsSaved && !candidate.isSaved()) {
-                candidate.markSaved();
+            if (markAsSaved) {
+                // 저장 버튼 요청에는 추천 화면에서 이미 조회한 실제 경로값이
+                // 포함되므로 기존 이력 상세도 함께 최신 상태로 바꾼다.
+                return refreshExistingHistoryCourse(
+                        candidate,
+                        request,
+                        validated,
+                        true
+                );
             }
 
-            return CourseSaveResponse.builder()
-                    .courseId(candidate.getCourseId())
-                    .title(candidate.getTitle())
-                    .transportMode(validated.transportMode())
-                    .placeCount(details.size())
-                    .dayCount((int) details.stream()
-                            .map(CourseDetail::getVisitDate)
-                            .filter(java.util.Objects::nonNull)
-                            .distinct()
-                            .count())
-                    .totalDistanceKm(candidate.getTotalDistanceKm())
-                    .totalTravelTimeMinutes(
-                            candidate.getTotalTravelTimeMinutes()
-                    )
-                    .totalVisitTimeMinutes(
-                            candidate.getTotalVisitTimeMinutes()
-                    )
-                    .totalCourseTimeMinutes(
-                            candidate.getTotalCourseTimeMinutes()
-                    )
-                    .build();
+            if (Boolean.TRUE.equals(request.getRouteDetailsResolved())) {
+                // 수정 전 응답에는 courseId가 없으므로 장소 구성이 같은 경우에
+                // 한해 실제 경로 조회 완료 스냅샷을 기존 이력에 복구한다.
+                return refreshExistingHistoryCourse(
+                        candidate,
+                        request,
+                        validated,
+                        false
+                );
+            }
+
+            return toExistingSaveResponse(
+                    candidate,
+                    validated.transportMode(),
+                    details
+            );
         }
 
         return null;
+    }
+
+    /** 기존 추천 이력의 기본 합계와 장소별 경로 스냅샷을 한 트랜잭션에서 교체한다. */
+    private CourseSaveResponse refreshExistingHistoryCourse(
+            TravelCourse course,
+            CourseSaveRequest request,
+            ValidatedCourse validated,
+            boolean markAsSaved
+    ) {
+        CourseTotals totals = calculateTotals(validated);
+        List<CourseDetail> existingDetails = courseDetailRepository
+                .findByCourseIdOrderByDayNoAscPlaceOrderAsc(
+                        course.getCourseId()
+                );
+
+        course.refreshRecommendationSnapshot(
+                validated.title(),
+                trimToNull(request.getDescription()),
+                validated.travelCode(),
+                trimToNull(request.getRegion()),
+                totals.distanceKm(),
+                totals.travelMinutes(),
+                totals.visitMinutes(),
+                totals.courseMinutes(),
+                markAsSaved
+        );
+
+        if (existingDetails != null && !existingDetails.isEmpty()) {
+            courseDetailRepository.deleteAllInBatch(existingDetails);
+        }
+
+        List<CourseDetail> updatedDetails = buildDetails(
+                course.getCourseId(),
+                validated.places()
+        );
+        courseDetailRepository.saveAll(updatedDetails);
+
+        return toSaveResponse(
+                course,
+                validated,
+                updatedDetails,
+                totals
+        );
+    }
+
+    /** 저장 요청의 장소별 값을 DB 합계 자릿수에 맞춰 계산한다. */
+    private CourseTotals calculateTotals(ValidatedCourse validated) {
+        double totalDistanceKm = validated.places().stream()
+                .mapToDouble(CourseSavePlaceDto::getDistanceFromPreviousKm)
+                .sum();
+        double totalTravelTimeMinutes = validated.places().stream()
+                .mapToDouble(CourseSavePlaceDto::getTravelTimeFromPreviousMinutes)
+                .sum();
+        int totalVisitTimeMinutes = validated.places().stream()
+                .mapToInt(this::normalizedStayMinutes)
+                .sum();
+
+        return new CourseTotals(
+                round(totalDistanceKm, 3),
+                round(totalTravelTimeMinutes, 2),
+                totalVisitTimeMinutes,
+                round(totalVisitTimeMinutes + totalTravelTimeMinutes, 2)
+        );
+    }
+
+    /** 추천 장소 스냅샷을 COURSE_DETAILS 엔티티로 변환한다. */
+    private List<CourseDetail> buildDetails(
+            Long courseId,
+            List<CourseSavePlaceDto> places
+    ) {
+        Map<LocalDate, Integer> dayNumbers = createDayNumbers(places);
+
+        // 거리·시간·경로 종류는 해당 장소로 들어오는 이전 구간 값이다.
+        return places.stream()
+                .map(place -> CourseDetail.builder()
+                        .courseId(courseId)
+                        .placeId(place.getPlaceId())
+                        .dayNo(dayNumbers.get(place.getVisitDate()))
+                        .placeOrder(place.getVisitOrder())
+                        .visitTime(trimToNull(place.getVisitTime()))
+                        .stayMinutes(normalizedStayMinutes(place))
+                        .visitDate(place.getVisitDate())
+                        .distanceFromPreviousKm(round(
+                                place.getDistanceFromPreviousKm(),
+                                3
+                        ))
+                        .travelTimeFromPreviousMinutes(round(
+                                place.getTravelTimeFromPreviousMinutes(),
+                                2
+                        ))
+                        .transitPathType(place.getTransitPathType())
+                        .routeEstimated(Boolean.TRUE.equals(
+                                place.getRouteEstimated()
+                        ))
+                        .build())
+                .toList();
+    }
+
+    private CourseSaveResponse toSaveResponse(
+            TravelCourse course,
+            ValidatedCourse validated,
+            List<CourseDetail> details,
+            CourseTotals totals
+    ) {
+        return CourseSaveResponse.builder()
+                .courseId(course.getCourseId())
+                .title(course.getTitle())
+                .transportMode(validated.transportMode())
+                .placeCount(details.size())
+                .dayCount(createDayNumbers(validated.places()).size())
+                .totalDistanceKm(totals.distanceKm())
+                .totalTravelTimeMinutes(totals.travelMinutes())
+                .totalVisitTimeMinutes(totals.visitMinutes())
+                .totalCourseTimeMinutes(totals.courseMinutes())
+                .build();
+    }
+
+    private CourseSaveResponse toExistingSaveResponse(
+            TravelCourse course,
+            TransportMode transportMode,
+            List<CourseDetail> details
+    ) {
+        return CourseSaveResponse.builder()
+                .courseId(course.getCourseId())
+                .title(course.getTitle())
+                .transportMode(transportMode)
+                .placeCount(details.size())
+                .dayCount((int) details.stream()
+                        .map(CourseDetail::getVisitDate)
+                        .filter(java.util.Objects::nonNull)
+                        .distinct()
+                        .count())
+                .totalDistanceKm(course.getTotalDistanceKm())
+                .totalTravelTimeMinutes(course.getTotalTravelTimeMinutes())
+                .totalVisitTimeMinutes(course.getTotalVisitTimeMinutes())
+                .totalCourseTimeMinutes(course.getTotalCourseTimeMinutes())
+                .build();
     }
 
     /** 추천 옵션의 날짜·장소 구성을 방문 순서와 무관한 안정적인 키로 만든다. */
@@ -355,6 +502,7 @@ public class CourseSaveService {
         if (request == null) {
             throw new IllegalArgumentException("코스 저장 요청은 null일 수 없습니다.");
         }
+        validateOptionalPositiveId(request.getCourseId(), "코스 ID");
         validatePositiveId(request.getMemberId(), "회원 ID");
         validateOptionalPositiveId(request.getResultId(), "설문 결과 ID");
         validateOptionalPositiveId(request.getPaymentId(), "결제 ID");
@@ -477,12 +625,6 @@ public class CourseSaveService {
                 place.getTravelTimeFromPreviousMinutes(),
                 "이전 장소로부터의 이동시간"
         );
-        if (place.getVisitOrder() == 1
-                && Boolean.TRUE.equals(place.getRouteEstimated())) {
-            throw new IllegalArgumentException(
-                    "날짜별 첫 장소에는 예상 이동 구간을 표시할 수 없습니다."
-            );
-        }
     }
 
     /** 각 날짜의 방문 순서가 반드시 1부터 시작해 중간 번호 없이 이어지는지 확인한다. */
@@ -504,16 +646,37 @@ public class CourseSaveService {
         }
     }
 
-    /** 첫 장소와 도보·자동차 코스에는 대중교통 경로 종류가 잘못 저장되지 않게 한다. */
+    /**
+     * DAY 2 이후 숙소 출발 구간은 첫 일반 장소에 귀속해 저장할 수 있게 하고,
+     * 그 외 첫 장소와 도보·자동차 코스에는 경로 종류가 잘못 저장되지 않게 한다.
+     */
     private void validateTransitPathTypes(
             List<CourseSavePlaceDto> places,
             TransportMode transportMode
     ) {
+        Set<LocalDate> datesStartingFromPreviousHotel =
+                findDatesStartingFromPreviousHotel(places);
+
         for (CourseSavePlaceDto place : places) {
             TransitPathType transitPathType = place.getTransitPathType();
-            if (place.getVisitOrder() == 1 && transitPathType != null) {
+            boolean firstPlace = place.getVisitOrder() == 1;
+            boolean startsFromPreviousHotel =
+                    datesStartingFromPreviousHotel.contains(
+                            place.getVisitDate()
+                    );
+
+            if (firstPlace
+                    && transitPathType != null
+                    && !startsFromPreviousHotel) {
                 throw new IllegalArgumentException(
-                        "날짜별 첫 장소에는 대중교통 경로 종류를 저장할 수 없습니다."
+                    "날짜별 첫 장소에는 대중교통 경로 종류를 저장할 수 없습니다."
+                );
+            }
+            if (firstPlace
+                    && Boolean.TRUE.equals(place.getRouteEstimated())
+                    && !startsFromPreviousHotel) {
+                throw new IllegalArgumentException(
+                        "날짜별 첫 장소에는 예상 이동 구간을 표시할 수 없습니다."
                 );
             }
             if (transportMode != TransportMode.PUBLIC_TRANSIT
@@ -523,6 +686,43 @@ public class CourseSaveService {
                 );
             }
         }
+    }
+
+    /**
+     * 전날 마지막 장소가 숙소인 날짜를 찾는다.
+     *
+     * <p>추천 화면은 이 숙소를 DAY 2 이후의 별도 출발점으로 표시하므로,
+     * 해당 날짜의 첫 일반 장소에는 숙소에서 이동해 온 경로값이 존재할 수 있다.</p>
+     */
+    private Set<LocalDate> findDatesStartingFromPreviousHotel(
+            List<CourseSavePlaceDto> places
+    ) {
+        Map<LocalDate, List<CourseSavePlaceDto>> placesByDate =
+                new LinkedHashMap<>();
+        for (CourseSavePlaceDto place : places) {
+            placesByDate.computeIfAbsent(
+                    place.getVisitDate(),
+                    ignored -> new ArrayList<>()
+            ).add(place);
+        }
+
+        List<LocalDate> visitDates = new ArrayList<>(placesByDate.keySet());
+        Set<LocalDate> datesStartingFromHotel = new HashSet<>();
+        for (int index = 1; index < visitDates.size(); index++) {
+            List<CourseSavePlaceDto> previousDayPlaces =
+                    placesByDate.get(visitDates.get(index - 1));
+            CourseSavePlaceDto previousDayLastPlace =
+                    previousDayPlaces.stream()
+                            .max(Comparator.comparing(
+                                    CourseSavePlaceDto::getVisitOrder
+                            ))
+                            .orElse(null);
+            if (previousDayLastPlace != null
+                    && isHotel(previousDayLastPlace.getCategory())) {
+                datesStartingFromHotel.add(visitDates.get(index));
+            }
+        }
+        return datesStartingFromHotel;
     }
 
     /** 정렬된 방문 날짜를 처음 나타난 순서대로 1일차, 2일차 번호에 매핑한다. */
@@ -627,6 +827,14 @@ public class CourseSaveService {
             String travelCode,
             TransportMode transportMode,
             List<CourseSavePlaceDto> places
+    ) {
+    }
+
+    private record CourseTotals(
+            double distanceKm,
+            double travelMinutes,
+            int visitMinutes,
+            double courseMinutes
     ) {
     }
 }

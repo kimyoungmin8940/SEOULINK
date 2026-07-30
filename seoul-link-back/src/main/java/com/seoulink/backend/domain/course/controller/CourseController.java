@@ -13,6 +13,7 @@ import com.seoulink.backend.domain.course.dto.response.CourseOptimizeResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseRecommendResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseRecommendationResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseSaveResponse;
+import com.seoulink.backend.domain.course.exception.PublicTransitMinimumPlaceException;
 import com.seoulink.backend.domain.course.service.CourseDraftService;
 import com.seoulink.backend.domain.course.service.CourseOptimizationService;
 import com.seoulink.backend.domain.course.service.CourseRecommendationHistoryService;
@@ -193,9 +194,10 @@ public class CourseController {
     @PostMapping("/recommended/history")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void recordRecommendedCourseHistory(
-            @RequestBody CourseRecommendResponse response
+            @RequestBody CourseRecommendResponse response,
+            @RequestParam(required = false) Long memberId
     ) {
-        courseRecommendationHistoryService.record(response);
+        courseRecommendationHistoryService.record(response, memberId);
     }
 
     /**
@@ -229,6 +231,22 @@ public class CourseController {
             NoSuchElementException exception
     ) {
         return new CourseErrorResponse("COURSE_NOT_FOUND", exception.getMessage());
+    }
+
+
+    /**
+     * 대중교통 실제 경로가 최소 장소 수를 깨야만 40분 상한을 만족하는 경우
+     * 프런트가 중복 제한 완화 재시도를 구분할 수 있도록 422로 반환한다.
+     */
+    @ExceptionHandler(PublicTransitMinimumPlaceException.class)
+    @ResponseStatus(HttpStatus.UNPROCESSABLE_ENTITY)
+    public CourseErrorResponse handlePublicTransitMinimumPlaceFailure(
+            PublicTransitMinimumPlaceException exception
+    ) {
+        return new CourseErrorResponse(
+                "PUBLIC_TRANSIT_MINIMUM_PLACES_REQUIRED",
+                exception.getMessage()
+        );
     }
 
     /** 저장·최적화 내부 상태 오류는 상세 원인을 노출하지 않고 공통 500 코드로 반환한다. */

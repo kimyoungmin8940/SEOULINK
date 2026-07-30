@@ -7,6 +7,7 @@ import com.seoulink.backend.domain.course.dto.response.CourseDayResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseOptionResponse;
 import com.seoulink.backend.domain.course.dto.response.CoursePlaceResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseRecommendResponse;
+import com.seoulink.backend.domain.course.dto.response.CourseSaveResponse;
 import com.seoulink.backend.domain.course.model.TransportMode;
 import com.seoulink.backend.domain.survey.entity.SurveyResult;
 import com.seoulink.backend.domain.survey.entity.TravelSurvey;
@@ -84,10 +85,19 @@ public class CourseRecommendationHistoryService {
             return;
         }
 
-        List<CourseSaveRequest> historyRequests = response.getCourseOptions()
+        List<CourseOptionResponse> historyOptions = response.getCourseOptions()
                 == null
                 ? List.of()
                 : response.getCourseOptions().stream()
+                .filter(java.util.Objects::nonNull)
+                .filter(option -> option.getDays() != null)
+                .filter(option -> option.getDays().stream().anyMatch(day ->
+                        day != null
+                                && day.getPlaces() != null
+                                && !day.getPlaces().isEmpty()
+                ))
+                .toList();
+        List<CourseSaveRequest> historyRequests = historyOptions.stream()
                 .map(option -> toHistoryRequest(
                         memberId,
                         resultId,
@@ -99,16 +109,58 @@ public class CourseRecommendationHistoryService {
                 .filter(historyRequest -> !historyRequest.getPlaces().isEmpty())
                 .toList();
 
-        courseSaveService.saveRecommendationHistory(historyRequests);
+        List<CourseSaveResponse> savedCourses =
+                courseSaveService.saveRecommendationHistory(historyRequests);
+        if (savedCourses == null) {
+            return;
+        }
+
+        int mappedCount = Math.min(
+                historyOptions.size(),
+                savedCourses.size()
+        );
+        for (int index = 0; index < mappedCount; index++) {
+            CourseSaveResponse savedCourse = savedCourses.get(index);
+            if (savedCourse != null && savedCourse.getCourseId() != null) {
+                historyOptions.get(index).setCourseId(
+                        savedCourse.getCourseId()
+                );
+            }
+        }
     }
 
     /** 브라우저 세션에 남은 기존 추천 응답을 현재 회원 이력으로 복구한다. */
     @Transactional
     public void record(CourseRecommendResponse response) {
-        record(null, response);
+        record(response, null);
     }
 
-    /** 설문 결과에서 원래 설문을 찾고, 그 설문을 수행한 회원 ID를 복원한다. */
+    /**
+     * 브라우저 세션에 남은 추천 응답을 명시한 회원의 이력으로 복구한다.
+     *
+     * <p>설문이 이미 회원에게 연결돼 있으면 설문 소유자를 우선하고, 게스트
+     * 설문처럼 소유자가 비어 있을 때만 전달받은 회원 ID를 사용한다.</p>
+     */
+    @Transactional
+    public void record(CourseRecommendResponse response, Long memberId) {
+        if (memberId != null && memberId < 1) {
+            throw new IllegalArgumentException(
+                    "추천 이력 회원 ID는 1 이상이어야 합니다."
+            );
+        }
+
+        CourseRecommendRequest request = memberId == null
+                ? null
+                : CourseRecommendRequest.builder()
+                .memberId(memberId)
+                .build();
+        record(request, response);
+    }
+
+    /**
+     * 설문 소유 회원을 우선 복원하고, 게스트 설문이면 추천 요청의 로그인
+     * 회원 ID를 사용한다.
+     */
     private Long resolveMemberId(
             CourseRecommendRequest request,
             Long resultId
@@ -123,13 +175,22 @@ public class CourseRecommendationHistoryService {
         if (surveyId == null) {
             surveyId = request == null ? null : request.getSurveyId();
         }
-        if (surveyId == null) {
-            return null;
-        }
 
-        return travelSurveyRepository.findById(surveyId)
+        Long surveyMemberId = surveyId == null
+                ? null
+                : travelSurveyRepository.findById(surveyId)
                 .map(TravelSurvey::getMemberId)
                 .orElse(null);
+        if (surveyMemberId != null && surveyMemberId > 0) {
+            return surveyMemberId;
+        }
+
+        Long requestedMemberId = request == null
+                ? null
+                : request.getMemberId();
+        return requestedMemberId != null && requestedMemberId > 0
+                ? requestedMemberId
+                : null;
     }
 
     /** 추천 응답 옵션 한 건을 기존 코스 저장 계약으로 변환한다. */
@@ -144,8 +205,17 @@ public class CourseRecommendationHistoryService {
         String travelCode = response.getTravelCode() != null
                 ? response.getTravelCode()
                 : request == null ? null : request.getTravelCode();
+        boolean routeDetailsResolved = option.getDays() != null
+                && option.getDays().stream().anyMatch(day ->
+                day != null
+                        && Boolean.TRUE.equals(
+                        day.getRouteDetailsAttempted()
+                )
+        );
 
         return CourseSaveRequest.builder()
+                .courseId(option.getCourseId())
+                .routeDetailsResolved(routeDetailsResolved)
                 .memberId(memberId)
                 .resultId(resultId)
                 .title(option.getTitle() != null
@@ -161,7 +231,14 @@ public class CourseRecommendationHistoryService {
                 .build();
     }
 
-    /** 날짜마다 출발 장소를 1번으로 두고 저장 검증에 맞는 연속 순서를 만든다. */
+    /**
+     * 날짜마다 화면에 표시되는 일반 장소 순서를 저장 형식으로 변환한다.
+     *
+     * <p>DAY 2 이후는 전날 마지막 숙소에서 출발하지만, 추천 응답의 숙소는
+     * 전날 마지막 장소에만 들어 있고 다음 날에는 별도 출발점으로 표시된다.
+     * 이 경우 다음 날 첫 일반 장소에 들어 있는 숙소 출발 거리·시간·경로
+     * 종류를 0으로 지우지 않고 그대로 저장한다.</p>
+     */
     private List<CourseSavePlaceDto> toHistoryPlaces(
             List<CourseDayResponse> days
     ) {
@@ -179,9 +256,10 @@ public class CourseRecommendationHistoryService {
                         .thenComparing(
                                 CourseDayResponse::getDayNo,
                                 Comparator.nullsLast(Comparator.naturalOrder())
-                        ))
+                ))
                 .toList();
         List<CourseSavePlaceDto> places = new ArrayList<>();
+        CoursePlaceResponse previousDayLastHotel = null;
 
         for (CourseDayResponse day : sortedDays) {
             LocalDate visitDate = day.getVisitDate();
@@ -197,10 +275,15 @@ public class CourseRecommendationHistoryService {
                             Comparator.nullsLast(Comparator.naturalOrder())
                     ))
                     .toList();
+            boolean startsWithHotel = !dayPlaces.isEmpty()
+                    && isHotel(dayPlaces.get(0));
+            boolean startsFromPreviousDayHotel =
+                    previousDayLastHotel != null && !startsWithHotel;
 
             for (int index = 0; index < dayPlaces.size(); index++) {
                 CoursePlaceResponse place = dayPlaces.get(index);
-                boolean firstPlace = index == 0;
+                boolean firstPlace = index == 0
+                        && !startsFromPreviousDayHotel;
 
                 places.add(CourseSavePlaceDto.builder()
                         .placeId(place.getPlaceId())
@@ -227,12 +310,33 @@ public class CourseRecommendationHistoryService {
                         .routeEstimated(!firstPlace
                                 && Boolean.TRUE.equals(
                                         place.getRouteEstimated()
-                                ))
+                        ))
                         .build());
             }
+
+            previousDayLastHotel = dayPlaces.stream()
+                    .filter(this::isHotel)
+                    .max(Comparator.comparing(
+                            CoursePlaceResponse::getVisitOrder,
+                            Comparator.nullsLast(Comparator.naturalOrder())
+                    ))
+                    .orElse(null);
         }
 
         return List.copyOf(places);
+    }
+
+    private boolean isHotel(CoursePlaceResponse place) {
+        if (place == null || place.getCategory() == null) {
+            return false;
+        }
+        String category = place.getCategory().trim()
+                .toUpperCase(java.util.Locale.ROOT);
+        return category.equals("HOTEL")
+                || category.equals("숙소")
+                || category.equals("호텔")
+                || category.equals("ACCOMMODATION")
+                || category.equals("LODGING");
     }
 
     private int nonNegativeInteger(Integer value) {

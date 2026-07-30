@@ -1,5 +1,5 @@
 
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment } from 'react';
 import {
     BedDouble,
     Clock3,
@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 
 import CourseTransportIcon from './CourseTransportIcon';
+import CourseImage from './CourseImage';
 import { getTravelLegMeta } from '../../utils/courseTransport';
 
 const categoryMeta = {
@@ -37,42 +38,34 @@ function formatMinutes(value) {
 function CoursePlaceImage({
     imageUrl,
     fallbackImageUrl,
-    isExample,
     placeName,
 }) {
-    const [showExample, setShowExample] = useState(Boolean(isExample || !imageUrl));
-
-    useEffect(() => {
-        setShowExample(Boolean(isExample || !imageUrl));
-    }, [fallbackImageUrl, imageUrl, isExample]);
-
-    const source = showExample ? fallbackImageUrl : imageUrl;
-
-    if (!source) {
-        return <span className="course-detail-place-image-empty" aria-hidden="true" />;
-    }
-
     return (
         <span className="course-detail-place-image">
-            <img
-                src={source}
-                alt={`${placeName || '추천 장소'} ${showExample ? '예시 사진' : '사진'}`}
-                onError={() => {
-                    if (!showExample && fallbackImageUrl) {
-                        setShowExample(true);
-                    }
-                }}
+            <CourseImage
+                imageUrls={[imageUrl]}
+                fallbackImageUrl={fallbackImageUrl}
+                alt={`${placeName || '추천 장소'} 사진`}
+                fallbackLabel="예시 사진"
+                fallbackLabelClassName="course-detail-place-image-label"
+                emptyClassName="course-detail-place-image-empty"
             />
-            {showExample && (
-                <em className="course-detail-place-image-label">예시 사진</em>
-            )}
         </span>
     );
 }
 
 /** 선택한 일차의 장소와 장소 사이 이동 정보를 시간 순 타임라인으로 표시합니다. */
 function CoursePlaceList({ day, transportMode }) {
-    const places = Array.isArray(day?.places) ? day.places : [];
+    const routeOriginPlace = day?.routeOriginPlace
+        ? {
+            ...day.routeOriginPlace,
+            routeOrigin: true,
+        }
+        : null;
+    const regularPlaces = Array.isArray(day?.places) ? day.places : [];
+    const places = routeOriginPlace
+        ? [routeOriginPlace, ...regularPlaces]
+        : regularPlaces;
 
     if (places.length === 0) {
         return (
@@ -88,8 +81,17 @@ function CoursePlaceList({ day, transportMode }) {
                 const meta = categoryMeta[place.category] || categoryMeta.TOUR;
                 const Icon = meta.Icon;
                 const address = place.roadAddress || place.address;
-                const score = Number(place.recommendationScore);
+                const rawScore = place.recommendationScore;
+                const score = rawScore == null || rawScore === ''
+                    ? null
+                    : Number(rawScore);
                 const hasScore = Number.isFinite(score);
+                const isRouteOrigin = Boolean(place.routeOrigin);
+                const displayVisitOrder = isRouteOrigin
+                    ? 'H'
+                    : routeOriginPlace
+                        ? index + 1
+                        : place.visitOrder ?? index + 1;
                 const isLast = index === places.length - 1;
                 // 백엔드는 이전 장소→현재 장소의 이동 정보를 현재 장소에 함께 내려줍니다.
                 const legTransport = getTravelLegMeta(
@@ -128,7 +130,7 @@ function CoursePlaceList({ day, transportMode }) {
                             </time>
 
                             <span className="course-detail-stop-rail" aria-hidden="true">
-                                <b className={meta.tone}>{place.visitOrder ?? index + 1}</b>
+                                <b className={meta.tone}>{displayVisitOrder}</b>
                             </span>
 
                             <article className="course-detail-place-card">
@@ -160,7 +162,6 @@ function CoursePlaceList({ day, transportMode }) {
                                     <CoursePlaceImage
                                         imageUrl={place.displayImageUrl}
                                         fallbackImageUrl={place.fallbackImageUrl}
-                                        isExample={place.displayImageIsExample}
                                         placeName={place.placeName}
                                     />
 

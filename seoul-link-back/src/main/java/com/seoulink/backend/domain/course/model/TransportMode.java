@@ -27,9 +27,21 @@ public enum TransportMode {
         }
 
         return switch (value.trim().toUpperCase(Locale.ROOT)) {
-            case "PUBLIC", "PUBLIC_TRANSIT" -> PUBLIC_TRANSIT;
-            case "WALKING" -> WALKING;
-            case "CAR", "DRIVING" -> DRIVING;
+            case "PUBLIC",
+                    "PUBLIC_TRANSIT",
+                    "PUBLIC_TRANSPORT",
+                    "TRANSIT",
+                    "대중교통" -> PUBLIC_TRANSIT;
+            case "WALKING",
+                    "WALK",
+                    "FOOT",
+                    "도보",
+                    "도보 중심" -> WALKING;
+            case "CAR",
+                    "DRIVING",
+                    "AUTO",
+                    "자동차",
+                    "차량" -> DRIVING;
             default -> null;
         };
     }

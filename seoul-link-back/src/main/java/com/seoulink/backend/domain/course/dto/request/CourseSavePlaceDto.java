@@ -25,7 +25,8 @@ public class CourseSavePlaceDto {
     private String visitTime;
 
     // 해당 장소의 체류시간과 바로 이전 장소에서 이동해 온 거리·시간이다.
-    // 날짜별 첫 장소는 거리·이동시간을 0, 대중교통 경로 종류를 null로 전달한다.
+    // DAY 1 첫 장소는 0/null이며, DAY 2 이후 전날 숙소에서 출발한 첫 일반
+    // 장소에는 숙소→장소 구간의 실제 경로값이 들어갈 수 있다.
     private Integer expectedVisitMinutes;
     private Double distanceFromPreviousKm;
     private Double travelTimeFromPreviousMinutes;

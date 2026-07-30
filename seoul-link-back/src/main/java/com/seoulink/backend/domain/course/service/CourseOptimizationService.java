@@ -1,5 +1,6 @@
 package com.seoulink.backend.domain.course.service;
 
+import com.seoulink.backend.domain.course.exception.PublicTransitMinimumPlaceException;
 import com.seoulink.backend.domain.course.dto.request.CourseOptimizeRequest;
 import com.seoulink.backend.domain.course.dto.request.PlaceCandidateDto;
 import com.seoulink.backend.domain.course.dto.response.CourseOptimizeResponse;
@@ -43,6 +44,10 @@ public class CourseOptimizationService {
     private static final double PUBLIC_TRANSIT_MAX_MINUTES = 40.0;
     private static final double PUBLIC_TRANSIT_HOTEL_MAX_MINUTES = 40.0;
     private static final int PUBLIC_TRANSIT_MAX_REPAIR_ALTERNATIVES = 8;
+    // 실제 경로 보정 중 장소를 계속 삭제해 숙소만 남는 결과를 만들지 않는다.
+    // P형은 일반 장소 4곳, R형은 3곳을 최소로 유지한다.
+    private static final int DENSE_SCHEDULE_MIN_ORDINARY_PLACES = 4;
+    private static final int RELAXED_SCHEDULE_MIN_ORDINARY_PLACES = 3;
 
     private final DistanceService distanceService;
     private final VisitDurationService visitDurationService;
@@ -486,7 +491,8 @@ public class CourseOptimizationService {
                 PublicTransitRouteRepair repair =
                         repairActualPublicTransitRoute(
                                 dailyCandidates,
-                                routeAlternatives
+                                routeAlternatives,
+                                request.getTravelCode()
                         );
                 resolvedDailyCandidates = repair.candidates();
                 routeMatrix = repair.routeMatrix();
@@ -567,11 +573,17 @@ public class CourseOptimizationService {
      */
     private PublicTransitRouteRepair repairActualPublicTransitRoute(
             List<PlaceCandidateDto> dailyCandidates,
-            List<PlaceCandidateDto> routeAlternatives
+            List<PlaceCandidateDto> routeAlternatives,
+            String travelCode
     ) {
         List<PlaceCandidateDto> repairedCandidates = new ArrayList<>(
                 dailyCandidates
         );
+        int minimumOrdinaryPlaceCount =
+                resolveMinimumActualRouteOrdinaryPlaceCount(
+                        travelCode,
+                        dailyCandidates
+                );
         Set<Long> attemptedAlternativeIds = new HashSet<>();
         int guard = Math.max(24, repairedCandidates.size() * 12);
 
@@ -615,14 +627,44 @@ public class CourseOptimizationService {
                 continue;
             }
 
-            // 하드 제한은 장소 수보다 우선한다. 대체 후보가 없을 때만 문제 장소를
-            // 제거하고 실제 경로를 다시 계산한다. 최소 3곳에서 검사를 중단하지 않는다.
+            // 40분 상한은 유지하되 장소를 계속 지워 숙소만 남기는 결과는 만들지 않는다.
+            // 최소 개수를 깨야 한다면 프런트가 중복 제한을 단계적으로 완화한 후보 풀로
+            // 같은 DAY를 다시 요청할 수 있도록 실패를 명확히 반환한다.
+            if (!isHotelCategory(
+                    repairedCandidates.get(violationIndex).getCategory()
+            ) && countOrdinaryPlaces(repairedCandidates)
+                    <= minimumOrdinaryPlaceCount) {
+                throw new PublicTransitMinimumPlaceException(
+                        minimumOrdinaryPlaceCount
+                );
+            }
             repairedCandidates.remove(violationIndex);
         }
 
         throw new IllegalStateException(
                 "대중교통 이동 제한을 만족하는 경로를 만들지 못했습니다."
         );
+    }
+
+
+    private int resolveMinimumActualRouteOrdinaryPlaceCount(
+            String travelCode,
+            List<PlaceCandidateDto> candidates
+    ) {
+        int availableOrdinaryPlaceCount = countOrdinaryPlaces(candidates);
+        String normalizedTravelCode = travelCode == null
+                ? ""
+                : travelCode.trim().toUpperCase(Locale.ROOT);
+        int configuredMinimum = normalizedTravelCode.endsWith("P")
+                ? DENSE_SCHEDULE_MIN_ORDINARY_PLACES
+                : RELAXED_SCHEDULE_MIN_ORDINARY_PLACES;
+        return Math.min(availableOrdinaryPlaceCount, configuredMinimum);
+    }
+
+    private int countOrdinaryPlaces(List<PlaceCandidateDto> candidates) {
+        return (int) candidates.stream()
+                .filter(candidate -> !isHotelCategory(candidate.getCategory()))
+                .count();
     }
 
     /**

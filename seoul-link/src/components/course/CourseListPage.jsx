@@ -144,8 +144,8 @@ function normalizeTransportLabel(value) {
     const normalized = String(value || '').trim().toUpperCase();
 
     if (normalized === 'WALKING') return '도보';
-    if (normalized === 'CAR') return '자동차';
-    if (normalized === 'PUBLIC_TRANSIT') return '대중교통';
+    if (normalized === 'CAR' || normalized === 'DRIVING') return '자동차';
+    if (normalized === 'PUBLIC' || normalized === 'PUBLIC_TRANSIT') return '대중교통';
     return '이동수단 미정';
 }
 
@@ -206,6 +206,32 @@ function getCourseId(course) {
     return Number.isInteger(courseId) && courseId > 0 ? courseId : null;
 }
 
+/** 첫 장소 이미지가 깨지면 방문 순서상 다음 장소 이미지를 대표로 사용합니다. */
+function CourseHistoryCoverImage({ course }) {
+    const imageCandidates = useMemo(() => [...new Set([
+        ...(Array.isArray(course?.coverImageUrls) ? course.coverImageUrls : []),
+        course?.coverImageUrl,
+        course?.imageUrl,
+    ].filter(Boolean))], [course]);
+    const [imageIndex, setImageIndex] = useState(0);
+    const imageUrl = imageCandidates[imageIndex] || null;
+
+    useEffect(() => {
+        setImageIndex(0);
+    }, [course?.courseId]);
+
+    if (!imageUrl) return null;
+
+    return (
+        <img
+            className="recommended-history-item__image"
+            src={imageUrl}
+            alt={`${course.title} 대표 이미지`}
+            onError={() => setImageIndex((currentIndex) => currentIndex + 1)}
+        />
+    );
+}
+
 function RecommendedHistoryListItem({ course }) {
     const moveToRecommendedCourseDetail = () => {
         if (!requireLogin()) {
@@ -247,13 +273,7 @@ function RecommendedHistoryListItem({ course }) {
             aria-label={`${course.title} 추천 코스 상세보기`}
         >
             <div className="recommended-history-item__image-wrap">
-                {course.imageUrl && (
-                    <img
-                        className="recommended-history-item__image"
-                        src={course.imageUrl}
-                        alt={course.title}
-                    />
-                )}
+                <CourseHistoryCoverImage course={course} />
                 <span className="recommended-history-item__badge">
                     {course.optionName || '추천 코스'}
                 </span>
@@ -340,6 +360,7 @@ function RecommendedCourseHistoryPage() {
         const loadRecommendedCourseHistory = async () => {
             try {
                 await syncStoredRecommendationHistory({
+                    memberId: initialState.memberId,
                     signal: controller.signal,
                 });
             } catch (error) {
@@ -352,9 +373,8 @@ function RecommendedCourseHistoryPage() {
                     initialState.memberId,
                     { signal: controller.signal },
                 );
-                const normalizedCourses = normalizeRecommendedCourseList(response, {
-                    fallbackImages,
-                });
+                // 서버 추천 카드는 예시 이미지를 쓰지 않고 실제 장소 사진 후보만 사용합니다.
+                const normalizedCourses = normalizeRecommendedCourseList(response);
 
                 if (normalizedCourses.length > 0) {
                     setCourses(normalizedCourses);

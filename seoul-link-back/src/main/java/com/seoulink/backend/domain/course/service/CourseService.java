@@ -10,8 +10,11 @@ import com.seoulink.backend.domain.course.model.TransportMode;
 import com.seoulink.backend.domain.course.repository.CourseDetailRepository;
 import com.seoulink.backend.domain.course.repository.TravelCourseRepository;
 import com.seoulink.backend.domain.place.entity.Place;
+import com.seoulink.backend.domain.place.exception.InvalidTravelCodeException;
 import com.seoulink.backend.domain.place.repository.PlaceRepository;
+import com.seoulink.backend.domain.place.service.PlaceRecommendationService;
 import com.seoulink.backend.domain.survey.entity.SurveyResult;
+import com.seoulink.backend.domain.survey.entity.TravelSurvey;
 import com.seoulink.backend.domain.survey.repository.SurveyResultRepository;
 import com.seoulink.backend.domain.survey.repository.TravelSurveyRepository;
 import org.springframework.stereotype.Service;
@@ -41,19 +44,22 @@ public class CourseService {
     private final PlaceRepository placeRepository;
     private final SurveyResultRepository surveyResultRepository;
     private final TravelSurveyRepository travelSurveyRepository;
+    private final PlaceRecommendationService placeRecommendationService;
 
     public CourseService(
             TravelCourseRepository travelCourseRepository,
             CourseDetailRepository courseDetailRepository,
             PlaceRepository placeRepository,
             SurveyResultRepository surveyResultRepository,
-            TravelSurveyRepository travelSurveyRepository
+            TravelSurveyRepository travelSurveyRepository,
+            PlaceRecommendationService placeRecommendationService
     ) {
         this.travelCourseRepository = travelCourseRepository;
         this.courseDetailRepository = courseDetailRepository;
         this.placeRepository = placeRepository;
         this.surveyResultRepository = surveyResultRepository;
         this.travelSurveyRepository = travelSurveyRepository;
+        this.placeRecommendationService = placeRecommendationService;
     }
 
     /**
@@ -102,7 +108,14 @@ public class CourseService {
                         courseId
                 );
         Map<Long, Place> placesById = loadPlacesById(details);
-        List<CourseDayResponse> days = toDayResponses(details, placesById);
+        Map<Long, Double> recommendationScores =
+                resolveRecommendationScores(course, details);
+        List<CourseDayResponse> days = toDayResponses(
+                details,
+                placesById,
+                recommendationScores
+        );
+        List<String> coverImageUrls = findCoverImages(details, placesById);
         int excludedHotelStayMinutes = excludedHotelStayMinutes(
                 details,
                 placesById
@@ -113,7 +126,8 @@ public class CourseService {
                 .resultId(course.getResultId())
                 .title(course.getTitle())
                 .description(course.getDescription())
-                .coverImageUrl(findCoverImage(details, placesById))
+                .coverImageUrl(firstImage(coverImageUrls))
+                .coverImageUrls(coverImageUrls)
                 .travelCode(course.getTravelCode())
                 .transportMode(resolveTransportMode(course))
                 .courseType(course.getCourseType())
@@ -203,6 +217,7 @@ public class CourseService {
                 ? List.of()
                 : List.of(course.getRegion());
         TransportMode transportMode = resolveTransportMode(course);
+        List<String> coverImageUrls = findCoverImages(details, placesById);
 
         return CourseRecommendationResponse.builder()
                 .courseId(course.getCourseId())
@@ -213,7 +228,8 @@ public class CourseService {
                 ))
                 .title(course.getTitle())
                 .description(course.getDescription())
-                .coverImageUrl(findCoverImage(details, placesById))
+                .coverImageUrl(firstImage(coverImageUrls))
+                .coverImageUrls(coverImageUrls)
                 .courseType(course.getCourseType())
                 .transportMode(transportMode)
                 .regions(regions)
@@ -294,7 +310,8 @@ public class CourseService {
     /** 저장 상세를 dayNo 기준으로 묶어 추천 결과와 동일한 날짜별 구조를 만든다. */
     private List<CourseDayResponse> toDayResponses(
             List<CourseDetail> details,
-            Map<Long, Place> placesById
+            Map<Long, Place> placesById,
+            Map<Long, Double> recommendationScores
     ) {
         Map<Integer, List<CourseDetail>> detailsByDay = new TreeMap<>();
         for (CourseDetail detail : details) {
@@ -303,20 +320,46 @@ public class CourseService {
                     .add(detail);
         }
 
-        return detailsByDay.entrySet().stream()
-                .map(entry -> toDayResponse(
-                        entry.getKey(),
-                        entry.getValue(),
-                        placesById
-                ))
-                .toList();
+        List<CourseDayResponse> days = new ArrayList<>();
+        CourseDetail previousDayHotel = null;
+
+        for (Map.Entry<Integer, List<CourseDetail>> entry
+                : detailsByDay.entrySet()) {
+            List<CourseDetail> dailyDetails = entry.getValue();
+            CoursePlaceResponse routeOriginPlace =
+                    shouldRestoreHotelOrigin(previousDayHotel, dailyDetails)
+                            ? toRouteOriginResponse(
+                                    previousDayHotel,
+                                    placesById.get(
+                                            previousDayHotel.getPlaceId()
+                                    ),
+                                    recommendationScores
+                            )
+                            : null;
+
+            days.add(toDayResponse(
+                    entry.getKey(),
+                    dailyDetails,
+                    placesById,
+                    recommendationScores,
+                    routeOriginPlace
+            ));
+            previousDayHotel = findLastHotelDetail(
+                    dailyDetails,
+                    placesById
+            );
+        }
+
+        return List.copyOf(days);
     }
 
     /** 한 날짜의 상세 장소와 거리·시간 합계를 날짜별 응답으로 변환한다. */
     private CourseDayResponse toDayResponse(
             Integer dayNo,
             List<CourseDetail> dailyDetails,
-            Map<Long, Place> placesById
+            Map<Long, Place> placesById,
+            Map<Long, Double> recommendationScores,
+            CoursePlaceResponse routeOriginPlace
     ) {
         double dailyDistanceKm = dailyDetails.stream()
                 .mapToDouble(detail -> valueOrZero(
@@ -345,13 +388,68 @@ public class CourseService {
                         dailyVisitTimeMinutes + dailyTravelTimeMinutes,
                         2
                 ))
+                .routeOriginPlace(routeOriginPlace)
                 .places(dailyDetails.stream()
                         .map(detail -> toPlaceResponse(
                                 detail,
-                                placesById.get(detail.getPlaceId())
+                                placesById.get(detail.getPlaceId()),
+                                recommendationScores
                         ))
                         .toList())
                 .build();
+    }
+
+    /**
+     * DAY 2 이후에는 전날 마지막 숙소를 표시 전용 출발점으로 복원한다.
+     * 이미 같은 숙소가 해당 날짜 첫 상세 행에 저장된 구버전 데이터는 중복 표시하지 않는다.
+     */
+    private boolean shouldRestoreHotelOrigin(
+            CourseDetail previousDayHotel,
+            List<CourseDetail> dailyDetails
+    ) {
+        if (previousDayHotel == null
+                || dailyDetails == null
+                || dailyDetails.isEmpty()) {
+            return false;
+        }
+        return !previousDayHotel.getPlaceId().equals(
+                dailyDetails.get(0).getPlaceId()
+        );
+    }
+
+    /** 하루의 마지막 숙소 상세 행을 다음 날 출발점 후보로 찾는다. */
+    private CourseDetail findLastHotelDetail(
+            List<CourseDetail> dailyDetails,
+            Map<Long, Place> placesById
+    ) {
+        for (int index = dailyDetails.size() - 1; index >= 0; index--) {
+            CourseDetail detail = dailyDetails.get(index);
+            if (isHotel(placesById.get(detail.getPlaceId()))) {
+                return detail;
+            }
+        }
+        return null;
+    }
+
+    /** 전날 숙소를 현재 날짜의 이동값 없는 표시 전용 출발 장소로 변환한다. */
+    private CoursePlaceResponse toRouteOriginResponse(
+            CourseDetail hotelDetail,
+            Place hotel,
+            Map<Long, Double> recommendationScores
+    ) {
+        CoursePlaceResponse response = toPlaceResponse(
+                hotelDetail,
+                hotel,
+                recommendationScores
+        );
+        response.setVisitOrder(1);
+        response.setVisitTime(null);
+        response.setExpectedVisitMinutes(0);
+        response.setDistanceFromPreviousKm(0.0);
+        response.setTravelTimeFromPreviousMinutes(0.0);
+        response.setTransitPathType(null);
+        response.setRouteEstimated(false);
+        return response;
     }
 
     /** null일 수 있는 소수 저장값을 날짜별 합산에서 안전하게 0으로 처리한다. */
@@ -378,13 +476,17 @@ public class CourseService {
      */
     private CoursePlaceResponse toPlaceResponse(
             CourseDetail detail,
-            Place place
+            Place place,
+            Map<Long, Double> recommendationScores
     ) {
         // 저장한 이전→현재 구간의 경로 종류를 거리·시간과 함께 상세 화면까지 전달한다.
         CoursePlaceResponse.CoursePlaceResponseBuilder response =
                 CoursePlaceResponse.builder()
                 .detailId(detail.getDetailId())
                 .placeId(detail.getPlaceId())
+                .recommendationScore(recommendationScores.get(
+                        detail.getPlaceId()
+                ))
                 .visitOrder(detail.getPlaceOrder())
                 .memo(detail.getMemo())
                 .visitTime(detail.getVisitTime())
@@ -405,7 +507,7 @@ public class CourseService {
                     .region(place.getRegion())
                     .address(place.getAddress())
                     .roadAddress(place.getRoadAddress())
-                    .imageUrl(place.getImageUrl())
+                    .imageUrl(normalizeImageUrl(place.getImageUrl()))
                     .latitude(place.getLatitude())
                     .longitude(place.getLongitude())
                     .themePalaceCultureYn(place.getThemePalaceCultureYn())
@@ -461,20 +563,108 @@ public class CourseService {
         return placesById;
     }
 
-    /** 방문 순서상 첫 번째로 이미지가 등록된 장소를 코스 대표 이미지로 사용한다. */
-    private String findCoverImage(
+    /**
+     * 방문 순서대로 실제 장소 사진 후보를 모두 반환한다.
+     *
+     * <p>첫 URL이 만료되거나 깨져도 목록과 상세 화면이 다음 실제 장소 사진을
+     * 같은 순서로 시도할 수 있도록 한 장만 고르지 않는다.</p>
+     */
+    private List<String> findCoverImages(
             List<CourseDetail> details,
             Map<Long, Place> placesById
     ) {
+        Set<String> imageUrls = new LinkedHashSet<>();
         for (CourseDetail detail : details) {
             Place place = placesById.get(detail.getPlaceId());
-            if (place != null
-                    && place.getImageUrl() != null
-                    && !place.getImageUrl().isBlank()) {
-                return place.getImageUrl();
+            String imageUrl = place == null
+                    ? null
+                    : normalizeImageUrl(place.getImageUrl());
+            if (imageUrl != null) {
+                imageUrls.add(imageUrl);
             }
         }
-        return null;
+        return List.copyOf(imageUrls);
+    }
+
+    private String firstImage(List<String> imageUrls) {
+        return imageUrls == null || imageUrls.isEmpty()
+                ? null
+                : imageUrls.get(0);
+    }
+
+    /**
+     * 공공데이터에 남아 있는 HTTP 주소를 HTTPS로 통일하고 빈 이미지 값을 제거한다.
+     */
+    private String normalizeImageUrl(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+
+        String normalized = value.trim();
+        if ("null".equalsIgnoreCase(normalized)
+                || "undefined".equalsIgnoreCase(normalized)
+                || "n/a".equalsIgnoreCase(normalized)) {
+            return null;
+        }
+        if (normalized.regionMatches(true, 0, "http://", 0, 7)) {
+            return "https://" + normalized.substring(7);
+        }
+        return normalized;
+    }
+
+    /**
+     * 최초 추천과 같은 점수 서비스를 사용해 기존 이력의 장소별 표시 점수도 복원한다.
+     */
+    private Map<Long, Double> resolveRecommendationScores(
+            TravelCourse course,
+            List<CourseDetail> details
+    ) {
+        if (placeRecommendationService == null
+                || course == null
+                || course.getResultId() == null
+                || details == null
+                || details.isEmpty()) {
+            return Map.of();
+        }
+
+        SurveyResult surveyResult = surveyResultRepository
+                .findById(course.getResultId())
+                .orElse(null);
+        String travelCode = course.getTravelCode();
+        if ((travelCode == null || travelCode.isBlank())
+                && surveyResult != null) {
+            travelCode = surveyResult.getTravelCode();
+        }
+        if (travelCode == null || travelCode.isBlank()) {
+            return Map.of();
+        }
+
+        String companionType = null;
+        if (surveyResult != null && surveyResult.getSurveyId() != null) {
+            companionType = travelSurveyRepository
+                    .findById(surveyResult.getSurveyId())
+                    .map(TravelSurvey::getCompanionType)
+                    .orElse(null);
+        }
+
+        List<Long> placeIds = details.stream()
+                .map(CourseDetail::getPlaceId)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .toList();
+
+        try {
+            Map<Long, Double> scores = placeRecommendationService
+                    .findDisplayScores(
+                            travelCode,
+                            companionType,
+                            placeIds
+                    );
+            return scores == null ? Map.of() : scores;
+        } catch (InvalidTravelCodeException | IllegalArgumentException ignored) {
+            // 구버전의 잘못된 코드·동행 표기 때문에 상세 전체가 실패하지 않게 한다.
+            return Map.of();
+        }
     }
 
     /** 장소의 8개 테마 Y/N 값을 코스 카드용 태그로 변환한다. */

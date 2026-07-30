@@ -1,3 +1,5 @@
+import { getCourseCoverImageUrls } from './courseImage';
+
 /** 로그인 저장값의 손상된 JSON을 무시하고 null로 처리합니다. */
 function safelyParse(value) {
     if (!value || typeof value !== 'string') return null;
@@ -79,7 +81,6 @@ function nonEmptyArray(value) {
 /** 목록 API 응답을 서버 데이터 기준의 카드 형식으로 정규화합니다. */
 export function normalizeRecommendedCourseList(
     response,
-    { fallbackImages = [] } = {},
 ) {
     const list = Array.isArray(response)
         ? response
@@ -90,19 +91,15 @@ export function normalizeRecommendedCourseList(
                 : Array.isArray(response?.data?.content)
                     ? response.data.content
                     : [];
-    return list
-        .map((course, index) => {
+    const normalizedCourses = list
+        .map((course) => {
             const courseId = getCourseId(course);
             const serverRegions = nonEmptyArray(course?.regions);
             const serverTags = nonEmptyArray(course?.tags);
             const totalMinutes = course?.totalCourseTimeMinutes
                 ?? course?.totalVisitTimeMinutes;
-            const fallbackImage = fallbackImages.length > 0
-                ? fallbackImages[index % fallbackImages.length]
-                : null;
-            const coverImageUrl = course?.coverImageUrl
-                || course?.imageUrl
-                || fallbackImage;
+            const coverImageUrls = getCourseCoverImageUrls(course);
+            const coverImageUrl = coverImageUrls[0] || null;
 
             return {
                 ...course,
@@ -112,6 +109,7 @@ export function normalizeRecommendedCourseList(
                     || '취향 검사 결과를 바탕으로 추천된 서울 여행 코스입니다.',
                 coverImageUrl,
                 imageUrl: coverImageUrl,
+                coverImageUrls,
                 regions: serverRegions,
                 duration: course?.duration
                     || `약 ${formatMinutes(totalMinutes)}`,
@@ -126,16 +124,35 @@ export function normalizeRecommendedCourseList(
             };
         })
         .filter((course) => course.courseId);
+
+    /*
+     * 수정 전 화면 진입 시 세션 복구 API가 같은 추천을 한 번 더 저장한 경우에도
+     * 서버의 안정적인 recommendationKey 기준으로 최신 행 하나만 표시합니다.
+     * 키가 없는 구버전 응답은 서로 다른 코스를 잘못 합치지 않도록 courseId를
+     * 그대로 사용합니다.
+     */
+    const seenRecommendationKeys = new Set();
+    return normalizedCourses.filter((course) => {
+        const recommendationKey = String(
+            course?.recommendationKey || '',
+        ).trim();
+        const identity = recommendationKey
+            ? `recommendation:${recommendationKey}`
+            : `course:${course.courseId}`;
+
+        if (seenRecommendationKeys.has(identity)) {
+            return false;
+        }
+        seenRecommendationKeys.add(identity);
+        return true;
+    });
 }
 
 /** 내 코스 API 응답을 카드 모델로 통일하고 여행 시작·종료일을 보존합니다. */
 export function normalizeMyCourseList(
     response,
-    { fallbackImages = [] } = {},
 ) {
-    return normalizeRecommendedCourseList(response, {
-        fallbackImages,
-    }).map((course) => ({
+    return normalizeRecommendedCourseList(response).map((course) => ({
         ...course,
         startDate: course.startDate
             || course.travelStartDate

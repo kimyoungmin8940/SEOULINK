@@ -5,6 +5,7 @@ import { getRecommendedPlaces } from '../../api/placeApi';
 import { getSurveyResult } from '../../api/surveyApi';
 import SurveyFlowLayout from '../../components/survey/SurveyFlowLayout';
 import { storeCourseRecommendRequest } from '../../utils/courseRecommendationHandoff';
+import { getCurrentMemberId } from '../../utils/courseHistory';
 import PreferenceResultPage from '../PreferenceResultPage';
 
 const SURVEY_ID_STORAGE_KEY = 'seoulinkSurveyId';
@@ -110,6 +111,10 @@ function SurveyResultPage() {
 
             storeCourseRecommendRequest({
                 ...draft,
+                // 추천 API가 반환한 세 코스를 즉시 회원 추천 이력으로 저장할 수 있게
+                // 현재 로그인 회원 ID를 함께 전달합니다. 게스트 설문이 로그인 후에도
+                // 회원과 연결되지 않은 경우를 이 값으로 보완합니다.
+                memberId: getCurrentMemberId(),
                 // 결과 화면에 실제 표시한 백엔드 구 순위를 코스 가산점에도 그대로 사용합니다.
                 preferredRegions: result?.preferredRegions?.length
                     ? result.preferredRegions

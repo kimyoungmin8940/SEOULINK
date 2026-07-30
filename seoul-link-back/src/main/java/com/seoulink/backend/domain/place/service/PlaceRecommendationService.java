@@ -81,6 +81,48 @@ public class PlaceRecommendationService {
     }
 
     /**
+     * 저장된 추천 코스 상세에서도 최초 추천과 같은 장소별 표시 점수를 복원한다.
+     *
+     * <p>추천 후보를 만들 때와 동일하게 서울 전체 활성 장소를 취향 코드와 동행
+     * 유형으로 점수화한 뒤 70~95점으로 보정한다. 따라서 별도 점수 컬럼을
+     * 추가하지 않아도 기존 추천 이력까지 같은 계산 기준으로 표시할 수 있다.</p>
+     */
+    public Map<Long, Double> findDisplayScores(
+            String travelCode,
+            String companionType,
+            Collection<Long> placeIds
+    ) {
+        if (placeIds == null || placeIds.isEmpty()) {
+            return Map.of();
+        }
+
+        Set<Long> requestedPlaceIds = placeIds.stream()
+                .filter(java.util.Objects::nonNull)
+                .filter(placeId -> placeId > 0)
+                .collect(Collectors.toCollection(java.util.LinkedHashSet::new));
+        if (requestedPlaceIds.isEmpty()) {
+            return Map.of();
+        }
+
+        String normalizedTravelCode = normalizeTravelCode(travelCode);
+        String normalizedCompanionType = normalizeCompanionType(companionType);
+        Map<Long, Double> scoresByPlaceId = new LinkedHashMap<>();
+
+        for (ScoredPlace scoredPlace : scoreAllPlaces(
+                null,
+                normalizedTravelCode,
+                normalizedCompanionType
+        )) {
+            Long placeId = scoredPlace.place().getPlaceId();
+            if (requestedPlaceIds.contains(placeId)) {
+                scoresByPlaceId.put(placeId, scoredPlace.score());
+            }
+        }
+
+        return Map.copyOf(scoresByPlaceId);
+    }
+
+    /**
      * 코스 생성 서비스가 HTTP나 프론트 전달 없이 직접 호출하는 후보 조회 진입점이다.
      *
      * <p>P형은 TOUR 24, RESTAURANT 16, CAFE 8의 유효 후보 48개를,

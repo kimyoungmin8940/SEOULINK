@@ -17,22 +17,19 @@ import {
 import Header from '../../components/common/Header';
 import Footer from '../../components/common/Footer';
 import PagePlaceholder from '../../components/common/PagePlaceholder';
+import CourseImage from '../../components/course/CourseImage';
 import { getRecommendedCourses } from '../../api/courseApi';
 import {
     getCurrentMemberId,
     normalizeRecommendedCourseList,
 } from '../../utils/courseHistory';
+import { syncStoredRecommendationHistory } from '../../utils/recommendationHistorySync';
 import { requireLogin } from '../../utils/authGuard';
+import { getCourseCoverImageUrls } from '../../utils/courseImage';
 import {
     isTemporaryLogin,
     recommendedCourseHistoryPreview,
 } from '../../mocks/recommendedCourseHistory';
-import rainyCafeImage from '../../assets/images/moods/mood-rainy-cafe.png';
-import sunsetImage from '../../assets/images/moods/mood-sunset-seoul.png';
-import hanokImage from '../../assets/images/moods/mood-hanok-photo.png';
-import walkingImage from '../../assets/images/moods/mood-walking-alley.png';
-
-const fallbackImages = [hanokImage, sunsetImage, rainyCafeImage, walkingImage];
 const COURSES_PER_PAGE = 8;
 const COURSE_DETAIL_ENTRY_KEY = 'seoulinkCourseDetailEntry';
 const SORT_OPTIONS = [
@@ -114,7 +111,7 @@ function readStoredRecommendedCourses() {
         const parsed = safelyParse(localStorage.getItem(key)) || safelyParse(sessionStorage.getItem(key));
         if (!Array.isArray(parsed) || parsed.length === 0) continue;
 
-        const normalized = normalizeRecommendedCourseList(parsed, { fallbackImages }).map((course) => ({
+        const normalized = normalizeRecommendedCourseList(parsed).map((course) => ({
             ...course,
             previewOnly: true,
         }));
@@ -142,8 +139,8 @@ function normalizeTransportLabel(value) {
     const normalized = String(value || '').trim().toUpperCase();
 
     if (normalized === 'WALKING') return '도보 이동';
-    if (normalized === 'CAR') return '자동차 이동';
-    if (normalized === 'PUBLIC_TRANSIT') return '대중교통 이동';
+    if (normalized === 'CAR' || normalized === 'DRIVING') return '자동차 이동';
+    if (normalized === 'PUBLIC' || normalized === 'PUBLIC_TRANSIT') return '대중교통 이동';
     return '이동수단 미정';
 }
 
@@ -205,6 +202,8 @@ function getCourseId(course) {
 }
 
 function RecommendedHistoryListItem({ course }) {
+    const coverImageUrls = getCourseCoverImageUrls(course);
+
     const moveToRecommendedCourseDetail = () => {
         if (!requireLogin()) return;
 
@@ -243,13 +242,11 @@ function RecommendedHistoryListItem({ course }) {
             aria-label={`${course.title} 추천 코스 상세보기`}
         >
             <div className="recommended-history-item__image-wrap">
-                {course.imageUrl && (
-                    <img
-                        className="recommended-history-item__image"
-                        src={course.imageUrl}
-                        alt={course.title}
-                    />
-                )}
+                <CourseImage
+                    imageUrls={coverImageUrls}
+                    className="recommended-history-item__image"
+                    alt={`${course.title} 대표 이미지`}
+                />
             </div>
 
             <div className="recommended-history-item__body">
@@ -338,9 +335,26 @@ function RecommendedCourseHistoryPage() {
 
         const controller = new AbortController();
 
-        getRecommendedCourses(initialState.memberId, { signal: controller.signal })
-            .then((response) => {
-                const normalizedCourses = normalizeRecommendedCourseList(response, { fallbackImages });
+        const loadRecommendedCourseHistory = async () => {
+            try {
+                // 추천 화면 세션에 남아 있는 최초 추천·재추천 결과를 먼저 서버에
+                // 복구합니다. 동일한 결과·날짜별 장소 구성은 백엔드에서 재사용하므로
+                // 완전히 같은 코스가 중복 행으로 생성되지 않습니다.
+                await syncStoredRecommendationHistory({
+                    memberId: initialState.memberId,
+                    signal: controller.signal,
+                });
+            } catch (error) {
+                if (error?.name === 'AbortError') return;
+                // 세션 복구 실패가 기존 서버 목록 조회까지 막지는 않게 합니다.
+            }
+
+            try {
+                const response = await getRecommendedCourses(
+                    initialState.memberId,
+                    { signal: controller.signal },
+                );
+                const normalizedCourses = normalizeRecommendedCourseList(response);
 
                 if (normalizedCourses.length > 0) {
                     setCourses(normalizedCourses);
@@ -359,8 +373,7 @@ function RecommendedCourseHistoryPage() {
                 setCourses([]);
                 setStatus('empty');
                 setErrorMessage('');
-            })
-            .catch((error) => {
+            } catch (error) {
                 if (error?.name === 'AbortError') return;
 
                 if (fallbackPreviewCourses.length > 0 && isTemporaryLogin()) {
@@ -372,7 +385,10 @@ function RecommendedCourseHistoryPage() {
 
                 setErrorMessage(error?.message || '추천받은 코스 목록을 불러오지 못했습니다.');
                 setStatus('error');
-            });
+            }
+        };
+
+        loadRecommendedCourseHistory();
 
         return () => controller.abort();
     }, [initialState, reloadKey]);

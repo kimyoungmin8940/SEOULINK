@@ -146,11 +146,18 @@ export const getRecommendedCourses = (memberId, options = {}) => apiClient.get(
  * 수정 전 브라우저 세션에만 남아 있던 추천 응답을 서버 추천 이력으로 복구합니다.
  * 서버는 같은 결과·장소 조합을 중복 저장하지 않습니다.
  */
-export const recordRecommendedCourses = (data, options = {}) => apiClient.post(
-    '/courses/recommended/history',
-    data,
-    options,
-);
+export const recordRecommendedCourses = (data, options = {}) => {
+    const { memberId, ...requestOptions } = options;
+    const query = memberId
+        ? `?memberId=${requirePositiveId(memberId, '회원 ID')}`
+        : '';
+
+    return apiClient.post(
+        `/courses/recommended/history${query}`,
+        data,
+        requestOptions,
+    );
+};
 
 /** @deprecated getRecommendedCourses를 사용하세요. */
 export const getCourses = getRecommendedCourses;

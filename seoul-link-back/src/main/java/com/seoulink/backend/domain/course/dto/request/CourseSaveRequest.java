@@ -23,6 +23,10 @@ import java.util.List;
 @AllArgsConstructor
 public class CourseSaveRequest {
 
+    // courseId는 추천 화면의 실제 경로값을 기존 추천 이력 행에 반영할 때 사용한다.
+    private Long courseId;
+    private Boolean routeDetailsResolved;
+
     // 코스 소유 회원과 선택적으로 연결되는 설문·결제 식별자이다.
     private Long memberId;
     private Long resultId;

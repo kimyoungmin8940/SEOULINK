@@ -27,6 +27,9 @@ import java.util.List;
 @AllArgsConstructor
 public class CourseRecommendRequest {
 
+    // 로그인 통합 전 추천 이력을 현재 회원에게 즉시 연결하기 위한 임시 회원 식별자이다.
+    private Long memberId;
+
     // 추천의 기준이 된 설문·SURVEY_RESULT 식별자와 5자리 여행 유형 코드이다.
     private Long surveyId;
     private Long resultId;

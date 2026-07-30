@@ -247,6 +247,16 @@ export function normalizeCourseRecommendRequest(data) {
         requestError('요청 데이터가 필요합니다.');
     }
 
+    const memberId = data.memberId == null || data.memberId === ''
+        ? null
+        : Number(data.memberId);
+    if (
+        memberId != null
+        && (!Number.isInteger(memberId) || memberId < 1)
+    ) {
+        requestError('memberId는 1 이상의 정수여야 합니다.');
+    }
+
     const resultId = Number(data.resultId);
     if (!Number.isInteger(resultId) || resultId < 1) {
         requestError('resultId는 1 이상의 정수여야 합니다.');
@@ -292,6 +302,7 @@ export function normalizeCourseRecommendRequest(data) {
 
     return {
         ...data,
+        memberId,
         resultId,
         travelCode: travelCode || null,
         companionType: companionType || null,

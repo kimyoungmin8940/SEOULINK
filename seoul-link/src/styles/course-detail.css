@@ -254,6 +254,20 @@
   display: block;
 }
 
+.course-detail-hero-image-label {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 2;
+  padding: 4px 8px;
+  border-radius: 7px;
+  background: rgba(24, 51, 74, 0.82);
+  color: #fff;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+}
+
 /* 핵심 수치 카드 */
 .course-detail-metrics {
   min-height: 70px;

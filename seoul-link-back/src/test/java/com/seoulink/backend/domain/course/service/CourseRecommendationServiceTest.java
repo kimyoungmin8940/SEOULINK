@@ -1277,7 +1277,7 @@ class CourseRecommendationServiceTest {
 
         assertEquals(3, response.getOptionCount());
         assertDailyOverlapAtMost(response, 3);
-        assertEquals(2, maximumFirstDayOptionOverlap(response));
+        assertTrue(maximumFirstDayOptionOverlap(response) >= 2);
 
         java.lang.reflect.Field maximumOverlapField =
                 CourseRecommendationService.class.getDeclaredField(
@@ -1554,12 +1554,12 @@ class CourseRecommendationServiceTest {
 
         assertEquals(3, response.getOptionCount());
         assertEquals(3, response.getCourseOptions().size());
-        assertTrue(response.getCourseOptions().stream()
-                .flatMap(option -> option.getDays().stream())
-                .anyMatch(day -> day.getPlaces().size() == 3));
         for (CourseOptionResponse option : response.getCourseOptions()) {
             for (CourseDayResponse day : option.getDays()) {
-                assertTrue(day.getPlaces().size() >= 3);
+                assertEquals(4, day.getPlaces().size());
+                assertTrue(!Boolean.TRUE.equals(
+                        day.getPlaceCountAdjusted()
+                ));
                 assertWalkingLimits(day);
             }
         }
@@ -1567,8 +1567,8 @@ class CourseRecommendationServiceTest {
     }
 
     @Test
-    @DisplayName("실제 3곳 경로가 20분을 넘으면 최후 수단으로 2곳까지 줄여 반환한다")
-    void walkingRecommendationRepairsThreePlaceActualOverLimitToTwo() {
+    @DisplayName("일부 실제 3곳 경로가 20분을 넘으면 다른 후보를 먼저 찾아 장소 수를 유지한다")
+    void walkingRecommendationTriesOtherActualCandidatesBeforeReducing() {
         CourseRecommendationService service =
                 walkingServiceWithActualOverrides(
                         Map.of(pairKey(1L, 2L), 20.9),
@@ -1591,14 +1591,47 @@ class CourseRecommendationServiceTest {
 
         assertEquals(3, response.getOptionCount());
         assertEquals(3, response.getCourseOptions().size());
-        assertTrue(response.getCourseOptions().stream()
-                .flatMap(option -> option.getDays().stream())
-                .anyMatch(day -> day.getPlaces().size() == 2));
         for (CourseOptionResponse option : response.getCourseOptions()) {
             for (CourseDayResponse day : option.getDays()) {
-                assertTrue(day.getPlaces().size() >= 2);
+                assertEquals(3, day.getPlaces().size());
+                assertTrue(!Boolean.TRUE.equals(
+                        day.getPlaceCountAdjusted()
+                ));
                 assertWalkingLimits(day);
             }
+        }
+        assertAllOptionDayPairsOverlapAtMost(response, 1);
+    }
+
+    @Test
+    @DisplayName("확장 후보도 실제 3곳 경로가 불가능할 때만 2곳과 조정 안내를 반환한다")
+    void walkingRecommendationReturnsTwoPlacesWithNoticeOnlyAsLastResort() {
+        CourseRecommendationService service =
+                walkingServiceWithActualDailyPlaceLimit(2);
+        CourseRecommendRequest request = CourseRecommendRequest.builder()
+                .resultId(129L)
+                .travelCode("ATLSP")
+                .transportMode(TransportMode.WALKING)
+                .dailyStartTime(LocalTime.of(11, 0))
+                .dailyPlans(List.of(walkingTourPlan(
+                        LocalDate.of(2026, 7, 29),
+                        3,
+                        walkingTourCandidates(12)
+                )))
+                .build();
+
+        CourseRecommendResponse response = service.recommend(request);
+
+        assertEquals(3, response.getOptionCount());
+        for (CourseOptionResponse option : response.getCourseOptions()) {
+            CourseDayResponse day = option.getDays().get(0);
+            assertEquals(2, day.getPlaces().size());
+            assertTrue(Boolean.TRUE.equals(day.getPlaceCountAdjusted()));
+            assertEquals(3, day.getRequestedPlaceCount());
+            assertEquals(2, day.getActualPlaceCount());
+            assertTrue(day.getAdjustmentNotice() != null
+                    && !day.getAdjustmentNotice().isBlank());
+            assertWalkingLimits(day);
         }
         assertAllOptionDayPairsOverlapAtMost(response, 1);
     }

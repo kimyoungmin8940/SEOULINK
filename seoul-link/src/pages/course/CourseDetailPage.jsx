@@ -25,6 +25,7 @@ import {
 import Header from '../../components/common/Header';
 import Footer from '../../components/common/Footer';
 import CoursePlaceList from '../../components/course/CoursePlaceList';
+import CourseImage from '../../components/course/CourseImage';
 import KakaoCourseMap from '../../components/course/KakaoCourseMap';
 import CourseTransportIcon from '../../components/course/CourseTransportIcon';
 import {
@@ -48,6 +49,10 @@ import {
     normalizeTravelCode,
     rememberCourseTravelCode,
 } from '../../utils/courseTravelCode';
+import {
+    getCourseCoverImageUrls,
+    getPlaceImageUrl,
+} from '../../utils/courseImage';
 import recommendationPreview from '../../mocks/courseRecommendation.json';
 import { mockThemeCourseListResponse } from '../../mocks/homeMockData';
 import hanokImage from '../../assets/images/moods/mood-hanok-photo.png';
@@ -56,13 +61,17 @@ import localFoodImage from '../../assets/images/moods/mood-local-food.png';
 import rainyCafeImage from '../../assets/images/moods/mood-rainy-cafe.png';
 import sunsetImage from '../../assets/images/moods/mood-sunset-seoul.png';
 
-const placeFallbackImages = [
+const neutralPlaceFallbackImages = [
     hanokImage,
     walkingImage,
-    localFoodImage,
-    rainyCafeImage,
     sunsetImage,
 ];
+
+const placeFallbackImagesByCategory = {
+    TOUR: neutralPlaceFallbackImages,
+    RESTAURANT: [localFoodImage],
+    CAFE: [rainyCafeImage],
+};
 
 const themeFields = [
     ['themePalaceCultureYn', '역사·문화'],
@@ -120,6 +129,56 @@ function isHotelCategory(category) {
     return ['HOTEL', '숙소', '호텔', 'ACCOMMODATION', 'LODGING'].includes(normalized);
 }
 
+function normalizePlaceCategory(category) {
+    const normalized = String(category || '').trim().toUpperCase();
+
+    if (['RESTAURANT', '식당', '음식점', '맛집', 'FOOD'].includes(normalized)) {
+        return 'RESTAURANT';
+    }
+
+    if (['CAFE', 'CAFÉ', '카페', 'COFFEE'].includes(normalized)) {
+        return 'CAFE';
+    }
+
+    if (['HOTEL', '숙소', '호텔', 'ACCOMMODATION', 'LODGING'].includes(normalized)) {
+        return 'HOTEL';
+    }
+
+    if (['TOUR', '관광', '관광지', 'ATTRACTION', 'SIGHTSEEING'].includes(normalized)) {
+        return 'TOUR';
+    }
+
+    return normalized || null;
+}
+
+/** 같은 장소는 다시 렌더링되어도 동일한 예시 사진을 사용합니다. */
+function pickStableFallbackImage(images, seed) {
+    if (!Array.isArray(images) || images.length === 0) return null;
+
+    const normalizedSeed = String(seed ?? 'seoulink-example-image');
+    let hash = 0;
+
+    for (let index = 0; index < normalizedSeed.length; index += 1) {
+        hash = ((hash * 31) + normalizedSeed.charCodeAt(index)) | 0;
+    }
+
+    return images[(hash >>> 0) % images.length];
+}
+
+/**
+ * 음식·카페 사진은 각각 식당·카페에만 배정하고,
+ * 전용 예시가 없는 카테고리만 중립적인 예시 사진 중 한 장을 사용합니다.
+ */
+function getPlaceFallbackImage(category, seed) {
+    const normalizedCategory = normalizePlaceCategory(category);
+    const categoryImages = placeFallbackImagesByCategory[normalizedCategory];
+    const candidates = categoryImages?.length > 0
+        ? categoryImages
+        : neutralPlaceFallbackImages;
+
+    return pickStableFallbackImage(candidates, seed);
+}
+
 /** 목록에서 상세로 이동할 때 함께 저장한 요약과 돌아갈 경로를 읽습니다. */
 function readCourseDetailEntry(courseId) {
     try {
@@ -165,6 +224,8 @@ function minutesToTime(value) {
 function normalizeDays(rawDays) {
     return (Array.isArray(rawDays) ? rawDays : []).map((day, dayIndex) => {
         let timeCursor = 10 * 60;
+        const rawRouteOrigin = day?.routeOriginPlace || null;
+        const hasRouteOrigin = Boolean(rawRouteOrigin?.placeId);
         const sortedPlaces = [...(Array.isArray(day?.places) ? day.places : [])]
             .sort((first, second) => (
                 toFiniteNumber(first.visitOrder, 999) - toFiniteNumber(second.visitOrder, 999)
@@ -175,18 +236,16 @@ function normalizeDays(rawDays) {
             const expectedVisitMinutes = isHotelCategory(place.category)
                 ? 0
                 : toFiniteNumber(place.expectedVisitMinutes);
-            const actualImageUrl = place.imageUrl
-                || place.placeImageUrl
-                || place.thumbnailUrl
-                || null;
-            const fallbackImageUrl = placeFallbackImages[
-                (placeIndex + dayIndex) % placeFallbackImages.length
-            ];
+            const actualImageUrl = getPlaceImageUrl(place);
+            const fallbackImageUrl = getPlaceFallbackImage(
+                place.category,
+                place.placeId || place.placeName || `${dayIndex}-${placeIndex}`,
+            );
 
             // 서버가 예상 시각을 주지 않으면 10:00부터 이동·체류시간을 누적해 표시합니다.
             if (explicitTime) {
                 timeCursor = timeToMinutes(explicitTime);
-            } else if (placeIndex > 0) {
+            } else if (placeIndex > 0 || hasRouteOrigin) {
                 timeCursor += toFiniteNumber(place.travelTimeFromPreviousMinutes);
             }
 
@@ -207,10 +266,39 @@ function normalizeDays(rawDays) {
                 routeEstimated: Boolean(place.routeEstimated),
                 displayVisitTime,
                 fallbackImageUrl,
-                displayImageUrl: actualImageUrl || fallbackImageUrl,
+                displayImageUrl: actualImageUrl,
                 displayImageIsExample: !actualImageUrl,
             };
         });
+
+        const firstPlace = places[0] || null;
+        const firstVisitMinutes = timeToMinutes(firstPlace?.displayVisitTime);
+        const routeOriginVisitMinutes = firstVisitMinutes == null
+            ? 10 * 60
+            : firstVisitMinutes - toFiniteNumber(
+                firstPlace?.travelTimeFromPreviousMinutes,
+            );
+        const routeOriginActualImageUrl = getPlaceImageUrl(rawRouteOrigin);
+        const routeOriginFallbackImageUrl = getPlaceFallbackImage(
+            rawRouteOrigin?.category,
+            rawRouteOrigin?.placeId || rawRouteOrigin?.placeName || `origin-${dayIndex}`,
+        );
+        const routeOriginPlace = hasRouteOrigin
+            ? {
+                ...rawRouteOrigin,
+                routeOrigin: true,
+                visitOrder: 1,
+                expectedVisitMinutes: 0,
+                distanceFromPreviousKm: 0,
+                travelTimeFromPreviousMinutes: 0,
+                transitPathType: null,
+                routeEstimated: false,
+                displayVisitTime: minutesToTime(routeOriginVisitMinutes),
+                fallbackImageUrl: routeOriginFallbackImageUrl,
+                displayImageUrl: routeOriginActualImageUrl,
+                displayImageIsExample: !routeOriginActualImageUrl,
+            }
+            : null;
 
         const derivedDistance = places.reduce(
             (sum, place) => sum + place.distanceFromPreviousKm,
@@ -237,6 +325,7 @@ function normalizeDays(rawDays) {
             dailyTravelTimeMinutes,
             dailyVisitTimeMinutes: derivedVisitTime,
             dailyCourseTimeMinutes: dailyTravelTimeMinutes + derivedVisitTime,
+            routeOriginPlace,
             places,
         };
     });
@@ -255,15 +344,26 @@ function normalizeCourseDetail(rawCourse) {
         sumDays('dailyTravelTimeMinutes'),
     );
     const totalVisitTimeMinutes = sumDays('dailyVisitTimeMinutes');
+    const coverImageUrls = getCourseCoverImageUrls({
+        ...rawCourse,
+        placeImageUrls: places.map((place) => place.imageUrl),
+    });
+    const firstCoverPlace = places[0]
+        || days.find((day) => day.routeOriginPlace)?.routeOriginPlace
+        || null;
+    const coverFallbackImageUrl = getPlaceFallbackImage(
+        firstCoverPlace?.category,
+        firstCoverPlace?.placeId || rawCourse?.courseId || rawCourse?.title,
+    );
 
     return {
         ...rawCourse,
         title: rawCourse?.title || '서울 맞춤 추천 코스',
         description: rawCourse?.description
             || '취향과 장소 간 이동 거리를 반영해 만든 서울 여행 코스입니다.',
-        coverImageUrl: rawCourse?.coverImageUrl
-            || places.find((place) => place.imageUrl)?.imageUrl
-            || hanokImage,
+        coverImageUrl: coverImageUrls[0] || null,
+        coverImageUrls,
+        coverFallbackImageUrl,
         travelCode: normalizeTravelCode(
             rawCourse?.travelCode
             || rawCourse?.preferenceCode
@@ -311,6 +411,10 @@ function normalizeApiCourseDetail(response, courseId) {
             || summary?.coverImageUrl
             || summary?.imageUrl
             || null,
+        coverImageUrls: Array.isArray(response?.coverImageUrls)
+            && response.coverImageUrls.length > 0
+            ? response.coverImageUrls
+            : summary?.coverImageUrls,
         region: response?.region
             || summary?.region
             || summary?.area
@@ -411,7 +515,8 @@ function buildPreviewCourse(courseId) {
         courseId: courseId || summary?.courseId || null,
         title: summary?.title || previewOption.title,
         description: summary?.description || previewOption.description,
-        coverImageUrl: summary?.coverImageUrl || summary?.imageUrl || hanokImage,
+        coverImageUrl: summary?.coverImageUrl || summary?.imageUrl || null,
+        coverImageUrls: summary?.coverImageUrls || null,
         travelCode: summary?.travelCode
             || summary?.preferenceCode
             || summary?.typeCode
@@ -506,6 +611,16 @@ function getCourseTypeLabel(courseType) {
 
 /** 현재 선택된 일차의 장소만 지도에 전달하는 상세 화면 지도 카드입니다. */
 function CourseRouteMap({ day }) {
+    const places = day?.routeOriginPlace
+        ? [
+            {
+                ...day.routeOriginPlace,
+                routeOrigin: true,
+            },
+            ...(day?.places || []),
+        ]
+        : day?.places || [];
+
     return (
         <section className="course-detail-map-card">
             <div className="course-detail-side-heading">
@@ -517,7 +632,7 @@ function CourseRouteMap({ day }) {
 
             <div className="course-detail-map-canvas">
                 <KakaoCourseMap
-                    places={day?.places || []}
+                    places={places}
                     ariaLabel={`DAY ${day?.dayNo || 1} 장소 방문 순서가 표시된 카카오 지도`}
                 />
             </div>
@@ -878,14 +993,12 @@ function CourseDetailPage() {
                             </div>
 
                             <div className="course-detail-hero-image">
-                                <img
-                                    src={course.coverImageUrl}
+                                <CourseImage
+                                    imageUrls={course.coverImageUrls}
+                                    fallbackImageUrl={course.coverFallbackImageUrl}
                                     alt={`${course.title} 대표 이미지`}
-                                    onError={(event) => {
-                                        if (event.currentTarget.src !== hanokImage) {
-                                            event.currentTarget.src = hanokImage;
-                                        }
-                                    }}
+                                    fallbackLabel="예시 사진"
+                                    fallbackLabelClassName="course-detail-hero-image-label"
                                 />
                             </div>
                                 </section>

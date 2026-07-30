@@ -32,6 +32,8 @@ public class CourseRecommendationResponse {
     private String title;
     private String description;
     private String coverImageUrl;
+    @Builder.Default
+    private List<String> coverImageUrls = new ArrayList<>();
     private String courseType;
     private TransportMode transportMode;
 

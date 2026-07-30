@@ -25,6 +25,8 @@ public class CourseDetailResponse {
     private String title;
     private String description;
     private String coverImageUrl;
+    @Builder.Default
+    private List<String> coverImageUrls = new ArrayList<>();
     private String travelCode;
     private TransportMode transportMode;
     private String courseType;

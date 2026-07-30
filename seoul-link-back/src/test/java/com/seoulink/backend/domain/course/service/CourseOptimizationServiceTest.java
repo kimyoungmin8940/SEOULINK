@@ -1,5 +1,6 @@
 package com.seoulink.backend.domain.course.service;
 
+import com.seoulink.backend.domain.course.exception.PublicTransitMinimumPlaceException;
 import com.seoulink.backend.domain.course.dto.request.CourseOptimizeRequest;
 import com.seoulink.backend.domain.course.dto.request.PlaceCandidateDto;
 import com.seoulink.backend.domain.course.dto.response.CourseOptimizeResponse;
@@ -1326,8 +1327,8 @@ class CourseOptimizationServiceTest {
     }
 
     @Test
-    @DisplayName("장소가 3곳이어도 실제 대중교통 40분 상한 위반을 그대로 허용하지 않는다")
-    void enforcesActualPublicTransitLimitEvenWithThreePlaces() {
+    @DisplayName("대중교통 40분 제한 때문에 최소 일반 장소 수를 깨야 하면 경로 보정을 실패시킨다")
+    void rejectsPublicTransitRepairBelowMinimumOrdinaryPlaces() {
         DistanceService mockedDistanceService = mock(DistanceService.class);
         when(mockedDistanceService.calculateRouteLegMatrix(
                 anyList(),
@@ -1373,20 +1374,12 @@ class CourseOptimizationServiceTest {
                 ))
                 .build();
 
-        CourseOptimizeResponse response =
-                service.resolveFixedRouteDetails(request);
-
-        assertEquals(
-                List.of(1L, 3L),
-                response.getOptimizedPlaces().stream()
-                        .map(OptimizedPlaceDto::getPlaceId)
-                        .toList()
+        PublicTransitMinimumPlaceException exception = assertThrows(
+                PublicTransitMinimumPlaceException.class,
+                () -> service.resolveFixedRouteDetails(request)
         );
-        assertTrue(response.getOptimizedPlaces().stream()
-                .skip(1)
-                .allMatch(place ->
-                        place.getTravelTimeFromPreviousMinutes() <= 40.0
-                ));
+
+        assertTrue(exception.getMessage().contains("최소 장소 수"));
     }
 
     @Test

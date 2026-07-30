@@ -624,66 +624,151 @@ public class CourseRecommendationService {
             );
         }
 
-        List<WalkingCandidateCombination> combinations =
-                combinationSelection.combinations();
-        int appliedDailyOverlapLimit =
-                combinationSelection.dailyOverlapLimit();
         Map<String, CourseOptimizeResponse> actualRouteCache =
                 new LinkedHashMap<>();
         Set<String> invalidActualRouteKeys = new LinkedHashSet<>();
         Set<LocalDate> actualLimitFailureDates = new LinkedHashSet<>();
-        int attemptedCombinations = 0;
-        for (WalkingCandidateCombination combination : combinations) {
-            attemptedCombinations++;
-            List<ResolvedWalkingCandidate> resolvedCandidates =
-                    new ArrayList<>();
-            boolean invalidCombination = false;
-            for (WalkingOptionCandidate candidate
-                    : combination.candidates()) {
-                CourseOptimizeResponse actual = resolveActualWalkingCandidate(
-                        candidate,
-                        request.getResultId(),
+        Set<String> attemptedActualCombinationKeys = new LinkedHashSet<>();
+
+        ResolvedWalkingResponse bestReducedResponse = null;
+        ResolvedWalkingResponse resolvedResponse =
+                tryWalkingCombinationSelection(
+                        request,
+                        validated,
+                        routeContexts,
+                        originalRequestedPlaceCounts,
+                        combinationSelection,
                         actualRouteCache,
                         invalidActualRouteKeys,
-                        actualLimitFailureDates
+                        actualLimitFailureDates,
+                        attemptedActualCombinationKeys
                 );
-                if (actual == null) {
-                    invalidCombination = true;
-                    break;
-                }
-                resolvedCandidates.add(new ResolvedWalkingCandidate(
-                        candidate,
-                        actual
-                ));
+        if (resolvedResponse != null) {
+            if (resolvedResponse.placeCountShortfall() == 0) {
+                return resolvedResponse.response();
             }
-            if (invalidCombination) {
-                continue;
-            }
+            bestReducedResponse = resolvedResponse;
+        }
 
-            CourseRecommendResponse response =
-                    buildWalkingJointResponse(
+        /*
+         * 추정 경로에서 기본 중복 상한을 만족한 조합이 실제 ORS 검증에서
+         * 탈락했더라도 바로 장소 수를 줄이지 않는다. 같은 후보 안에서 도보 전용
+         * 중복 상한 2→3을 먼저 확인하면 장소 수를 유지한 유효 조합을 찾을 수 있다.
+         */
+        for (int relaxedOverlap =
+                combinationSelection.dailyOverlapLimit() + 1;
+             relaxedOverlap <= MAX_WALKING_RELAXED_DAILY_OVERLAP_LIMIT;
+             relaxedOverlap++) {
+            WalkingCombinationSelection relaxedSelection =
+                    selectWalkingCandidateCombinations(
+                            candidatesByStrategy,
+                            relaxedOverlap
+                    );
+            resolvedResponse = tryWalkingCombinationSelection(
+                    request,
+                    validated,
+                    routeContexts,
+                    originalRequestedPlaceCounts,
+                    relaxedSelection,
+                    actualRouteCache,
+                    invalidActualRouteKeys,
+                    actualLimitFailureDates,
+                    attemptedActualCombinationKeys
+            );
+            if (resolvedResponse != null) {
+                if (resolvedResponse.placeCountShortfall() == 0) {
+                    log.warn(
+                            "실제 도보 경로 검증 후 장소 수를 유지하기 위해 "
+                                    + "옵션 간 중복 상한만 완화했습니다: "
+                                    + "resultId={}, overlapLimit={}",
+                            request.getResultId(),
+                            relaxedOverlap
+                    );
+                    return resolvedResponse.response();
+                }
+                bestReducedResponse = betterWalkingResponse(
+                        bestReducedResponse,
+                        resolvedResponse
+                );
+            }
+        }
+
+        /*
+         * 초기 8개 후보가 실제 경로에서 모두 탈락한 경우에는 전략별 후보를
+         * 최대 16개까지 다시 넓힌다. 확장 후보에서도 중복 1→2→3 순서로
+         * 확인하고, 이 과정까지 실패한 DAY만 마지막에 장소 수를 줄인다.
+         */
+        for (OptionStrategy strategy : OptionStrategy.values()) {
+            candidatesByStrategy.put(
+                    strategy,
+                    generateWalkingOptionCandidates(
                             request,
                             validated,
                             routeContexts,
-                            appliedDailyOverlapLimit,
-                            resolvedCandidates,
-                            originalRequestedPlaceCounts
+                            dailyOverlapLimit,
+                            strategy,
+                            EXPANDED_WALKING_OPTION_CANDIDATES_PER_STRATEGY,
+                            EXPANDED_WALKING_CANDIDATE_GENERATION_ATTEMPTS
+                    )
+            );
+        }
+        log.warn(
+                "실제 도보 경로 검증 실패 후 장소 수 축소 전에 후보를 확장합니다: "
+                        + "resultId={}, candidateCounts={}",
+                request.getResultId(),
+                walkingCandidateCounts(candidatesByStrategy)
+        );
+
+        for (int overlapLimit = dailyOverlapLimit;
+             overlapLimit <= MAX_WALKING_RELAXED_DAILY_OVERLAP_LIMIT;
+             overlapLimit++) {
+            WalkingCombinationSelection expandedSelection =
+                    selectWalkingCandidateCombinations(
+                            candidatesByStrategy,
+                            overlapLimit
                     );
-            if (response != null) {
-                log.info(
-                        "도보 세 코스 동시 선택 완료: resultId={}, "
-                                + "attemptedCombinations={}, "
-                                + "actualValidatedCandidates={}, "
-                                + "maximumDailyOverlap={}, "
-                                + "walkingAverageLimit={}",
-                        request.getResultId(),
-                        attemptedCombinations,
-                        actualRouteCache.size(),
-                        appliedDailyOverlapLimit,
-                        WALKING_RELAXED_AVERAGE_MINUTES
+            resolvedResponse = tryWalkingCombinationSelection(
+                    request,
+                    validated,
+                    routeContexts,
+                    originalRequestedPlaceCounts,
+                    expandedSelection,
+                    actualRouteCache,
+                    invalidActualRouteKeys,
+                    actualLimitFailureDates,
+                    attemptedActualCombinationKeys
+            );
+            if (resolvedResponse != null) {
+                if (resolvedResponse.placeCountShortfall() == 0) {
+                    if (overlapLimit > dailyOverlapLimit) {
+                        log.warn(
+                                "확장 후보의 실제 도보 경로를 사용해 장소 수는 "
+                                        + "유지하고 중복 상한만 완화했습니다: "
+                                        + "resultId={}, overlapLimit={}",
+                                request.getResultId(),
+                                overlapLimit
+                        );
+                    }
+                    return resolvedResponse.response();
+                }
+                bestReducedResponse = betterWalkingResponse(
+                        bestReducedResponse,
+                        resolvedResponse
                 );
-                return response;
             }
+        }
+
+        if (bestReducedResponse != null) {
+            log.warn(
+                    "후보 확장과 중복 상한 완화를 모두 확인한 뒤에만 실제 "
+                            + "도보 제한으로 장소 수가 조정된 응답을 사용합니다: "
+                            + "resultId={}, placeCountShortfall={}, "
+                            + "overlapLimit={}",
+                    request.getResultId(),
+                    bestReducedResponse.placeCountShortfall(),
+                    bestReducedResponse.dailyOverlapLimit()
+            );
+            return bestReducedResponse.response();
         }
 
         Map<LocalDate, DailyRouteContext> reducedRouteContexts =
@@ -721,12 +806,171 @@ public class CourseRecommendationService {
                 "후보 풀 확장과 세 코스 전체 재선택 후에도 실제 도보 제한을 "
                         + "만족하는 조합을 만들 수 없습니다. resultId="
                         + request.getResultId()
-                        + ", attemptedCombinations=" + attemptedCombinations
+                        + ", attemptedCombinations="
+                        + attemptedActualCombinationKeys.size()
                         + ", actualValidatedCandidates="
                         + actualRouteCache.size()
                         + ", invalidActualCandidates="
                         + invalidActualRouteKeys.size()
         );
+    }
+
+    /**
+     * 한 중복 상한에서 만든 세 코스 조합을 실제 ORS 경로로 검증한다.
+     * 같은 후보는 호출 전체 캐시를 공유하고, 같은 조합도 중복 상한별 한 번만
+     * 검사해 후보 확장·완화 단계의 외부 호출이 불필요하게 반복되지 않게 한다.
+     */
+    private ResolvedWalkingResponse tryWalkingCombinationSelection(
+            CourseRecommendRequest request,
+            ValidatedRecommendation validated,
+            Map<LocalDate, DailyRouteContext> routeContexts,
+            Map<LocalDate, Integer> originalRequestedPlaceCounts,
+            WalkingCombinationSelection selection,
+            Map<String, CourseOptimizeResponse> actualRouteCache,
+            Set<String> invalidActualRouteKeys,
+            Set<LocalDate> actualLimitFailureDates,
+            Set<String> attemptedCombinationKeys
+    ) {
+        if (selection == null || selection.combinations().isEmpty()) {
+            return null;
+        }
+
+        int overlapLimit = selection.dailyOverlapLimit();
+        ResolvedWalkingResponse bestReducedResponse = null;
+        for (WalkingCandidateCombination combination
+                : selection.combinations()) {
+            String attemptKey = overlapLimit + ":" + combination.signature();
+            if (!attemptedCombinationKeys.add(attemptKey)) {
+                continue;
+            }
+
+            List<ResolvedWalkingCandidate> resolvedCandidates =
+                    new ArrayList<>();
+            boolean invalidCombination = false;
+            for (WalkingOptionCandidate candidate
+                    : combination.candidates()) {
+                CourseOptimizeResponse actual = resolveActualWalkingCandidate(
+                        candidate,
+                        request.getResultId(),
+                        actualRouteCache,
+                        invalidActualRouteKeys,
+                        actualLimitFailureDates
+                );
+                if (actual == null) {
+                    invalidCombination = true;
+                    break;
+                }
+                resolvedCandidates.add(new ResolvedWalkingCandidate(
+                        candidate,
+                        actual
+                ));
+            }
+            if (invalidCombination) {
+                continue;
+            }
+
+            CourseRecommendResponse response = buildWalkingJointResponse(
+                    request,
+                    validated,
+                    routeContexts,
+                    overlapLimit,
+                    resolvedCandidates,
+                    originalRequestedPlaceCounts
+            );
+            if (response == null) {
+                continue;
+            }
+            int placeCountShortfall =
+                    calculateWalkingResponsePlaceCountShortfall(
+                            response,
+                            originalRequestedPlaceCounts
+                    );
+            ResolvedWalkingResponse resolved = new ResolvedWalkingResponse(
+                    response,
+                    placeCountShortfall,
+                    overlapLimit
+            );
+            if (placeCountShortfall > 0) {
+                bestReducedResponse = betterWalkingResponse(
+                        bestReducedResponse,
+                        resolved
+                );
+                continue;
+            }
+
+            log.info(
+                    "도보 세 코스 동시 선택 완료: resultId={}, "
+                            + "attemptedCombinations={}, "
+                            + "actualValidatedCandidates={}, "
+                            + "maximumDailyOverlap={}, "
+                            + "walkingAverageLimit={}",
+                    request.getResultId(),
+                    attemptedCombinationKeys.size(),
+                    actualRouteCache.size(),
+                    overlapLimit,
+                    WALKING_RELAXED_AVERAGE_MINUTES
+            );
+            return resolved;
+        }
+        return bestReducedResponse;
+    }
+
+    private int calculateWalkingResponsePlaceCountShortfall(
+            CourseRecommendResponse response,
+            Map<LocalDate, Integer> originalRequestedPlaceCounts
+    ) {
+        if (response == null || response.getCourseOptions() == null) {
+            return Integer.MAX_VALUE;
+        }
+
+        int shortfall = 0;
+        for (CourseOptionResponse option : response.getCourseOptions()) {
+            if (option == null || option.getDays() == null) {
+                continue;
+            }
+            for (CourseDayResponse day : option.getDays()) {
+                if (day == null || day.getVisitDate() == null) {
+                    continue;
+                }
+                int actualPlaceCount = day.getPlaces() == null
+                        ? 0
+                        : (int) day.getPlaces().stream()
+                        .filter(java.util.Objects::nonNull)
+                        .filter(place -> !"HOTEL".equalsIgnoreCase(
+                                place.getCategory()
+                        ))
+                        .count();
+                int requestedPlaceCount =
+                        originalRequestedPlaceCounts.getOrDefault(
+                                day.getVisitDate(),
+                                actualPlaceCount
+                        );
+                shortfall += Math.max(
+                        0,
+                        requestedPlaceCount - actualPlaceCount
+                );
+            }
+        }
+        return shortfall;
+    }
+
+    private ResolvedWalkingResponse betterWalkingResponse(
+            ResolvedWalkingResponse current,
+            ResolvedWalkingResponse candidate
+    ) {
+        if (candidate == null) {
+            return current;
+        }
+        if (current == null
+                || candidate.placeCountShortfall()
+                < current.placeCountShortfall()
+                || candidate.placeCountShortfall()
+                == current.placeCountShortfall()
+                && candidate.dailyOverlapLimit()
+                < current.dailyOverlapLimit()) {
+            return candidate;
+        }
+        return current;
     }
 
     /**
@@ -7570,6 +7814,13 @@ public class CourseRecommendationService {
     private record ResolvedWalkingCandidate(
             WalkingOptionCandidate candidate,
             CourseOptimizeResponse actual
+    ) {
+    }
+
+    private record ResolvedWalkingResponse(
+            CourseRecommendResponse response,
+            int placeCountShortfall,
+            int dailyOverlapLimit
     ) {
     }
 

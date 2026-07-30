@@ -17,7 +17,8 @@ import java.util.List;
 @AllArgsConstructor
 public class CourseOptionResponse {
 
-    // 화면 표시 순번과 코스 생성 전략이다.
+    // 추천 이력에 먼저 저장된 코스 ID와 화면 표시 순번·생성 전략이다.
+    private Long courseId;
     private Integer optionNo;
     private String optionType;
     private String optionName;

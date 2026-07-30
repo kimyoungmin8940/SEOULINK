@@ -8,6 +8,7 @@ import com.seoulink.backend.domain.course.dto.response.CoursePlaceResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseRecommendResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseRecommendationResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseSaveResponse;
+import com.seoulink.backend.domain.course.exception.PublicTransitMinimumPlaceException;
 import com.seoulink.backend.domain.course.model.TransportMode;
 import com.seoulink.backend.domain.course.service.CourseDraftService;
 import com.seoulink.backend.domain.course.service.CourseOptimizationService;
@@ -27,6 +28,7 @@ import java.util.List;
 import java.util.NoSuchElementException;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -183,6 +185,36 @@ class CourseControllerTest {
                         .value(2))
                 .andExpect(jsonPath("$.optimizedPlaces[1].routeEstimated")
                         .value(true));
+    }
+
+    @Test
+    @DisplayName("대중교통 최소 장소 수 실패는 단계 완화 재시도용 422 코드로 반환한다")
+    void exposePublicTransitMinimumPlaceFailureForRetry() throws Exception {
+        CourseOptimizationService failedOptimizationService =
+                mock(CourseOptimizationService.class);
+        when(failedOptimizationService.resolveFixedRouteDetails(any()))
+                .thenThrow(new PublicTransitMinimumPlaceException(4));
+        MockMvc constraintMockMvc = standaloneSetup(new CourseController(
+                mock(CourseDraftService.class),
+                failedOptimizationService,
+                courseRecommendationService,
+                courseRecommendationHistoryService,
+                courseSaveService,
+                courseService
+        )).build();
+
+        constraintMockMvc.perform(post("/api/courses/route-details")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value(
+                        "PUBLIC_TRANSIT_MINIMUM_PLACES_REQUIRED"
+                ))
+                .andExpect(jsonPath("$.message").value(
+                        org.hamcrest.Matchers.containsString(
+                                "minimumOrdinaryPlaces=4"
+                        )
+                ));
     }
 
     @Test
@@ -701,6 +733,7 @@ class CourseControllerTest {
     @DisplayName("브라우저에 남은 추천 응답을 추천 이력으로 복구한다")
     void recordRecommendedCourseHistory() throws Exception {
         mockMvc.perform(post("/api/courses/recommended/history")
+                        .param("memberId", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -713,7 +746,8 @@ class CourseControllerTest {
                 .andExpect(status().isNoContent());
 
         verify(courseRecommendationHistoryService).record(
-                any(CourseRecommendResponse.class)
+                any(CourseRecommendResponse.class),
+                eq(1L)
         );
     }
 
