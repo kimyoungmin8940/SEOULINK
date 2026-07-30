@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     ArrowLeft,
     CalendarDays,
     ChevronLeft,
     ChevronRight,
+    Check,
+    ChevronDown,
     Clock3,
     Info,
-    ListFilter,
     MapPin,
     RefreshCw,
     Route,
@@ -318,6 +319,8 @@ function RecommendedCourseHistoryPage() {
     const [reloadKey, setReloadKey] = useState(0);
     const [requestedPage, setRequestedPage] = useState(getInitialPage);
     const [sortOption, setSortOption] = useState('latest');
+    const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
+    const sortMenuRef = useRef(null);
 
     useEffect(() => {
         const localPreviewCourses = readStoredRecommendedCourses();
@@ -387,6 +390,35 @@ function RecommendedCourseHistoryPage() {
         }
     }, [requestedPage, totalPages]);
 
+    useEffect(() => {
+        const closeSortMenu = (event) => {
+            if (event.type === 'keydown' && event.key === 'Escape') {
+                setIsSortMenuOpen(false);
+                return;
+            }
+
+            if (
+                event.type === 'mousedown'
+                && sortMenuRef.current
+                && !sortMenuRef.current.contains(event.target)
+            ) {
+                setIsSortMenuOpen(false);
+            }
+        };
+
+        document.addEventListener('mousedown', closeSortMenu);
+        document.addEventListener('keydown', closeSortMenu);
+
+        return () => {
+            document.removeEventListener('mousedown', closeSortMenu);
+            document.removeEventListener('keydown', closeSortMenu);
+        };
+    }, []);
+
+    const selectedSortLabel = SORT_OPTIONS.find(
+        (option) => option.value === sortOption,
+    )?.label || '최신순';
+
     const retry = () => {
         setStatus('loading');
         setErrorMessage('');
@@ -428,24 +460,53 @@ function RecommendedCourseHistoryPage() {
                     {status === 'success' && (
                         <div className="recommended-history-heading__actions">
                             <strong>총 {sortedCourses.length}개</strong>
-                            <div className="recommended-history-heading__sort">
-                                <label htmlFor="recommended-history-sort">
-                                    <ListFilter size={16} aria-hidden="true" /> 정렬
-                                </label>
-                                <select
-                                    id="recommended-history-sort"
-                                    value={sortOption}
-                                    onChange={(event) => {
-                                        setSortOption(event.target.value);
-                                        moveToPage(1);
-                                    }}
-                                >
-                                    {SORT_OPTIONS.map((option) => (
-                                        <option key={option.value} value={option.value}>
-                                            {option.label}
-                                        </option>
-                                    ))}
-                                </select>
+                            <div
+                                className={`recommended-history-heading__sort${isSortMenuOpen ? ' is-open' : ''}`}
+                                ref={sortMenuRef}
+                            >
+
+                                <div className="recommended-history-sort-menu">
+                                    <button
+                                        className="recommended-history-sort-trigger"
+                                        type="button"
+                                        aria-haspopup="listbox"
+                                        aria-expanded={isSortMenuOpen}
+                                        onClick={() => setIsSortMenuOpen((previous) => !previous)}
+                                    >
+                                        <span>{selectedSortLabel}</span>
+                                        <ChevronDown size={16} aria-hidden="true" />
+                                    </button>
+
+                                    {isSortMenuOpen && (
+                                        <div
+                                            className="recommended-history-sort-dropdown"
+                                            role="listbox"
+                                            aria-label="추천 코스 정렬 기준"
+                                        >
+                                            {SORT_OPTIONS.map((option) => {
+                                                const isSelected = option.value === sortOption;
+
+                                                return (
+                                                    <button
+                                                        className={isSelected ? 'is-selected' : ''}
+                                                        type="button"
+                                                        role="option"
+                                                        aria-selected={isSelected}
+                                                        key={option.value}
+                                                        onClick={() => {
+                                                            setSortOption(option.value);
+                                                            setIsSortMenuOpen(false);
+                                                            moveToPage(1);
+                                                        }}
+                                                    >
+                                                        <span>{option.label}</span>
+                                                        {isSelected && <Check size={16} aria-hidden="true" />}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     )}

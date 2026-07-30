@@ -82,6 +82,123 @@ class OdsayClientTest {
     }
 
     @Test
+    @DisplayName("이미 URL 인코딩된 API 키도 이중 인코딩하지 않는다")
+    void calculateRouteAvoidsDoubleEncodingForEncodedApiKey() {
+        RestClient.Builder builder = RestClient.builder()
+                .baseUrl("https://api.odsay.com/v1/api");
+        MockRestServiceServer mockServer =
+                MockRestServiceServer.bindTo(builder).build();
+        OdsayClient client = new OdsayClient(
+                builder.build(),
+                "test%2Bapi%2Fkey"
+        );
+
+        mockServer.expect(requestTo(
+                        "https://api.odsay.com/v1/api/searchPubTransPathT"
+                                + "?SX=126.978&SY=37.5665"
+                                + "&EX=126.977&EY=37.5796"
+                                + "&OPT=0&SearchType=0&SearchPathType=0"
+                                + "&apiKey=test%2Bapi%2Fkey"
+                ))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess(
+                        """
+                        {
+                          "result": {
+                            "path": [{
+                              "pathType": 1,
+                              "info": {
+                                "totalTime": 12,
+                                "totalDistance": 1200
+                              }
+                            }]
+                          }
+                        }
+                        """,
+                        MediaType.APPLICATION_JSON
+                ));
+
+        TransitRouteResult result = client.calculateRoute(
+                new RouteCoordinate(126.9780, 37.5665),
+                new RouteCoordinate(126.9770, 37.5796)
+        );
+
+        assertEquals(1.2, result.distanceKm(), 0.000001);
+        mockServer.verify();
+    }
+
+    @Test
+    @DisplayName("인증 오류 한 번이 나도 다음 구간은 로컬 차단 없이 다시 호출한다")
+    void calculateRouteRetriesLaterPairsAfterAuthenticationFailure() {
+        RestClient.Builder builder = RestClient.builder()
+                .baseUrl("https://api.odsay.com/v1/api");
+        MockRestServiceServer mockServer =
+                MockRestServiceServer.bindTo(builder).build();
+        OdsayClient client = new OdsayClient(builder.build(), "test-key");
+
+        mockServer.expect(requestTo(
+                        "https://api.odsay.com/v1/api/searchPubTransPathT"
+                                + "?SX=126.978&SY=37.5665"
+                                + "&EX=126.977&EY=37.5796"
+                                + "&OPT=0&SearchType=0&SearchPathType=0&apiKey=test-key"
+                ))
+                .andRespond(withSuccess(
+                        """
+                        {
+                          "error": {
+                            "code": "500",
+                            "msg": "[ApiKeyAuthFailed] ApiKey authentication failed."
+                          }
+                        }
+                        """,
+                        MediaType.APPLICATION_JSON
+                ));
+        mockServer.expect(requestTo(
+                        "https://api.odsay.com/v1/api/searchPubTransPathT"
+                                + "?SX=126.977&SY=37.5796"
+                                + "&EX=126.9997&EY=37.57"
+                                + "&OPT=0&SearchType=0&SearchPathType=0&apiKey=test-key"
+                ))
+                .andRespond(withSuccess(
+                        """
+                        {
+                          "result": {
+                            "path": [
+                              {
+                                "pathType": 2,
+                                "info": {
+                                  "totalTime": 17,
+                                  "totalDistance": 3200
+                                }
+                              }
+                            ]
+                          }
+                        }
+                        """,
+                        MediaType.APPLICATION_JSON
+                ));
+
+        OdsayApiException first = assertThrows(
+                OdsayApiException.class,
+                () -> client.calculateRoute(
+                        new RouteCoordinate(126.9780, 37.5665),
+                        new RouteCoordinate(126.9770, 37.5796)
+                )
+        );
+        TransitRouteResult second = client.calculateRoute(
+                new RouteCoordinate(126.9770, 37.5796),
+                new RouteCoordinate(126.9997, 37.5700)
+        );
+
+        assertEquals("500", first.getErrorCode());
+        assertTrue(first.getApiMessage().contains("ApiKeyAuthFailed"));
+        assertEquals(3.2, second.distanceKm());
+        assertEquals(17.0, second.travelTimeMinutes());
+        assertTrue(client.canAttemptRequest());
+        mockServer.verify();
+    }
+
+    @Test
     @DisplayName("ODsay 논리 오류는 오류 코드를 보존한 예외로 변환한다")
     void calculateRoutePreservesOdsayErrorCode() {
         RestClient.Builder builder = RestClient.builder()

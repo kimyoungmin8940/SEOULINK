@@ -21,6 +21,7 @@ public class CourseDetailResponse {
 
     // 저장된 코스의 기본 정보와 공개 상태이다.
     private Long courseId;
+    private Long resultId;
     private String title;
     private String description;
     private String coverImageUrl;

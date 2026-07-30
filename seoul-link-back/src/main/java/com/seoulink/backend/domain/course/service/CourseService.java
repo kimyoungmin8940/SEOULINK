@@ -21,6 +21,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -109,6 +110,7 @@ public class CourseService {
 
         return CourseDetailResponse.builder()
                 .courseId(course.getCourseId())
+                .resultId(course.getResultId())
                 .title(course.getTitle())
                 .description(course.getDescription())
                 .coverImageUrl(findCoverImage(details, placesById))
@@ -155,12 +157,15 @@ public class CourseService {
                 .toList();
     }
 
-    /** 회원이 보유한 모든 코스를 유형과 관계없이 최신순으로 반환한다. */
+    /** 회원이 실제로 저장한 코스만 유형과 관계없이 최신순으로 반환한다. */
     @Transactional(readOnly = true)
     public List<CourseRecommendationResponse> getMemberCourses(Long memberId) {
         validateMemberId(memberId);
         return travelCourseRepository
-                .findByMemberIdOrderByCreatedAtDesc(memberId)
+                .findByMemberIdAndSavedStatusOrderByCreatedAtDesc(
+                        memberId,
+                        "Y"
+                )
                 .stream()
                 .map(this::toRecommendationResponse)
                 .toList();
@@ -197,14 +202,20 @@ public class CourseService {
                 || course.getRegion().isBlank()
                 ? List.of()
                 : List.of(course.getRegion());
+        TransportMode transportMode = resolveTransportMode(course);
 
         return CourseRecommendationResponse.builder()
                 .courseId(course.getCourseId())
+                .resultId(course.getResultId())
+                .recommendationKey(createRecommendationKey(
+                        details,
+                        transportMode
+                ))
                 .title(course.getTitle())
                 .description(course.getDescription())
                 .coverImageUrl(findCoverImage(details, placesById))
                 .courseType(course.getCourseType())
-                .transportMode(resolveTransportMode(course))
+                .transportMode(transportMode)
                 .regions(regions)
                 .tags(createThemeTags(placesById.values()))
                 .placeCount(details.size())
@@ -227,6 +238,36 @@ public class CourseService {
                 // 코스 하트 테이블 연동 전까지는 미선택 상태로 반환한다.
                 .liked(false)
                 .build();
+    }
+
+    /**
+     * 추천 결과의 recommendationKey와 같은 규칙으로 저장 코스의 구성 키를 만든다.
+     *
+     * <p>방문 순서가 달라도 날짜별 장소 구성이 같으면 같은 추천 코스로
+     * 판별할 수 있도록 날짜와 장소 ID로 정렬한다.</p>
+     */
+    private String createRecommendationKey(
+            List<CourseDetail> details,
+            TransportMode transportMode
+    ) {
+        if (transportMode == null || details == null || details.isEmpty()) {
+            return null;
+        }
+
+        String composition = details.stream()
+                .filter(detail -> detail.getVisitDate() != null)
+                .filter(detail -> detail.getPlaceId() != null)
+                .sorted(Comparator
+                        .comparing(CourseDetail::getVisitDate)
+                        .thenComparing(CourseDetail::getPlaceId))
+                .map(detail -> detail.getVisitDate()
+                        + ":" + detail.getPlaceId())
+                .reduce((left, right) -> left + "," + right)
+                .orElse("");
+
+        return composition.isBlank()
+                ? null
+                : transportMode.name() + ":" + composition;
     }
 
     /** 로그인 연동 전 쿼리 파라미터로 받은 회원 ID의 최소 형식을 검증한다. */

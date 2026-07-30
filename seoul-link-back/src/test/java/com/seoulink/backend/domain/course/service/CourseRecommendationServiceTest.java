@@ -303,6 +303,7 @@ class CourseRecommendationServiceTest {
 
         CourseRecommendRequest request = CourseRecommendRequest.builder()
                 .resultId(101L)
+                .travelCode("ATLSP")
                 .transportMode(TransportMode.DRIVING)
                 .dailyStartTime(LocalTime.of(11, 0))
                 .dailyPlans(List.of(DailyPlanRequest.builder()
@@ -330,13 +331,17 @@ class CourseRecommendationServiceTest {
             assertEquals(1, countCategory(day, "CAFE"));
             assertEquals("TOUR", day.getPlaces().get(0).getCategory());
 
-            LocalTime firstRestaurantTime = day.getPlaces().stream()
+            List<LocalTime> restaurantTimes = day.getPlaces().stream()
                     .filter(place -> "RESTAURANT".equals(place.getCategory()))
                     .map(place -> LocalTime.parse(place.getVisitTime()))
-                    .findFirst()
-                    .orElseThrow();
+                    .toList();
+            assertEquals(2, restaurantTimes.size());
+            LocalTime firstRestaurantTime = restaurantTimes.get(0);
             assertTrue(!firstRestaurantTime.isBefore(LocalTime.of(11, 30)));
             assertTrue(!firstRestaurantTime.isAfter(LocalTime.of(14, 0)));
+            LocalTime secondRestaurantTime = restaurantTimes.get(1);
+            assertTrue(!secondRestaurantTime.isBefore(LocalTime.of(17, 30)));
+            assertTrue(!secondRestaurantTime.isAfter(LocalTime.of(19, 30)));
 
             for (int index = 1; index < day.getPlaces().size(); index++) {
                 String previousCategory = day.getPlaces().get(index - 1)
@@ -688,22 +693,24 @@ class CourseRecommendationServiceTest {
             assertEquals(3, finalDay.getPlaces().size());
             assertTrue(finalDay.getPlaces().stream()
                     .noneMatch(place -> "HOTEL".equals(place.getCategory())));
+            assertTrue(!recommendationKeyPlaceIds(
+                    option.getRecommendationKey()
+            ).contains(optionHotelId));
             selectedHotelIds.add(optionHotelId);
         }
         assertEquals(3, selectedHotelIds.size());
     }
 
     @Test
-    @DisplayName("도보 20분 이내 숙소가 없으면 30분 이내 숙소를 마지막 날 전 DAY에 붙인다")
+    @DisplayName("숙소 출발은 20분 이내로 유지하며 도착만 30분까지 완화한다")
     void walkingHotelRelaxesUpToThirtyMinutes() {
         LocalDate firstDate = LocalDate.of(2026, 7, 20);
         LocalDate finalDate = LocalDate.of(2026, 7, 21);
-        List<Long> ordinaryIds = List.of(
-                1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L,
-                11L, 12L, 13L, 14L, 15L, 16L, 17L, 18L, 19L
+        List<Long> firstDayOrdinaryIds = List.of(
+                1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L
         );
         Map<String, Double> pairMinutes = new LinkedHashMap<>();
-        for (Long ordinaryId : ordinaryIds) {
+        for (Long ordinaryId : firstDayOrdinaryIds) {
             pairMinutes.put(pairKey(ordinaryId, 100L), 25.0);
         }
         CourseRecommendationService service = actualWalkingService(
@@ -773,6 +780,100 @@ class CourseRecommendationServiceTest {
     }
 
     @Test
+    @DisplayName("DAY2 첫 장소까지 20분을 넘는 숙소는 도보 코스에서 선택하지 않는다")
+    void walkingHotelDepartureOverTwentyMinutesIsRejected() {
+        LocalDate firstDate = LocalDate.of(2026, 7, 20);
+        LocalDate finalDate = LocalDate.of(2026, 7, 21);
+        List<Long> firstDayOrdinaryIds = List.of(
+                1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L
+        );
+        List<Long> secondDayOrdinaryIds = List.of(
+                11L, 12L, 13L, 14L, 15L, 16L, 17L, 18L, 19L
+        );
+        Map<String, Double> pairMinutes = new LinkedHashMap<>();
+        for (Long ordinaryId : firstDayOrdinaryIds) {
+            pairMinutes.put(pairKey(ordinaryId, 100L), 10.0);
+            pairMinutes.put(pairKey(ordinaryId, 101L), 10.0);
+        }
+        for (Long ordinaryId : secondDayOrdinaryIds) {
+            pairMinutes.put(pairKey(ordinaryId, 100L), 21.0);
+            pairMinutes.put(pairKey(ordinaryId, 101L), 10.0);
+        }
+
+        CourseRecommendationService service = actualWalkingService(
+                pairMinutes,
+                5.0
+        );
+        CourseRecommendRequest request = CourseRecommendRequest.builder()
+                .resultId(303L)
+                .travelCode("ATLSR")
+                .transportMode(TransportMode.WALKING)
+                .dailyStartTime(LocalTime.of(13, 0))
+                .hotelCandidates(List.of(
+                        candidate(100L, "출발 21분 숙소", "HOTEL",
+                                99.0, 37.60, 127.10),
+                        candidate(101L, "출발 10분 숙소", "HOTEL",
+                                80.0, 37.55, 127.05)
+                ))
+                .dailyPlans(List.of(
+                        DailyPlanRequest.builder()
+                                .visitDate(firstDate)
+                                .targetPlaceCount(3)
+                                .categoryTargets(Map.of("TOUR", 3))
+                                .placeCandidates(List.of(
+                                        candidate(1L, "첫날 관광지 1", "TOUR", 95.0, 37.50, 127.00),
+                                        candidate(2L, "첫날 관광지 2", "TOUR", 94.0, 37.51, 127.01),
+                                        candidate(3L, "첫날 관광지 3", "TOUR", 93.0, 37.52, 127.02),
+                                        candidate(4L, "첫날 관광지 4", "TOUR", 92.0, 37.53, 127.03),
+                                        candidate(5L, "첫날 관광지 5", "TOUR", 91.0, 37.54, 127.04),
+                                        candidate(6L, "첫날 관광지 6", "TOUR", 90.0, 37.55, 127.05),
+                                        candidate(7L, "첫날 관광지 7", "TOUR", 89.0, 37.56, 127.06),
+                                        candidate(8L, "첫날 관광지 8", "TOUR", 88.0, 37.57, 127.07),
+                                        candidate(9L, "첫날 관광지 9", "TOUR", 87.0, 37.58, 127.08)
+                                ))
+                                .build(),
+                        DailyPlanRequest.builder()
+                                .visitDate(finalDate)
+                                .targetPlaceCount(3)
+                                .categoryTargets(Map.of("TOUR", 3))
+                                .placeCandidates(List.of(
+                                        candidate(11L, "둘째날 관광지 1", "TOUR", 95.0, 37.50, 127.00),
+                                        candidate(12L, "둘째날 관광지 2", "TOUR", 94.0, 37.51, 127.01),
+                                        candidate(13L, "둘째날 관광지 3", "TOUR", 93.0, 37.52, 127.02),
+                                        candidate(14L, "둘째날 관광지 4", "TOUR", 92.0, 37.53, 127.03),
+                                        candidate(15L, "둘째날 관광지 5", "TOUR", 91.0, 37.54, 127.04),
+                                        candidate(16L, "둘째날 관광지 6", "TOUR", 90.0, 37.55, 127.05),
+                                        candidate(17L, "둘째날 관광지 7", "TOUR", 89.0, 37.56, 127.06),
+                                        candidate(18L, "둘째날 관광지 8", "TOUR", 88.0, 37.57, 127.07),
+                                        candidate(19L, "둘째날 관광지 9", "TOUR", 87.0, 37.58, 127.08)
+                                ))
+                                .build()
+                ))
+                .build();
+
+        CourseRecommendResponse response = service.recommend(request);
+
+        for (CourseOptionResponse option : response.getCourseOptions()) {
+            assertTrue(Boolean.TRUE.equals(option.getHotelIncluded()));
+            CourseDayResponse firstDay = option.getDays().get(0);
+            CourseDayResponse secondDay = option.getDays().get(1);
+            Long hotelId = firstDay.getPlaces()
+                    .get(firstDay.getPlaces().size() - 1)
+                    .getPlaceId();
+            Long secondDayFirstPlaceId = secondDay.getPlaces().get(0)
+                    .getPlaceId();
+
+            assertEquals(101L, hotelId);
+            assertTrue(
+                    pairMinutes.get(pairKey(
+                            hotelId,
+                            secondDayFirstPlaceId
+                    )) <= 20.0
+            );
+        }
+    }
+
+    @Test
     @DisplayName("도보 30분 이내 숙소가 없으면 숙소를 제외하고 안내를 반환한다")
     void walkingHotelOverThirtyMinutesReturnsNotice() {
         LocalDate firstDate = LocalDate.of(2026, 7, 20);
@@ -838,7 +939,9 @@ class CourseRecommendationServiceTest {
 
         for (CourseOptionResponse option : response.getCourseOptions()) {
             assertTrue(Boolean.FALSE.equals(option.getHotelIncluded()));
-            assertTrue(option.getHotelNotice().contains("도보 30분 이내 숙소"));
+            assertTrue(option.getHotelNotice().contains(
+                    "숙소 도착 30분·다음 DAY 출발 20분"
+            ));
             assertTrue(option.getDays().stream()
                     .flatMap(day -> day.getPlaces().stream())
                     .noneMatch(place -> "HOTEL".equals(place.getCategory())));
@@ -1145,6 +1248,49 @@ class CourseRecommendationServiceTest {
     }
 
     @Test
+    @DisplayName("도보 후보가 부족하면 중복을 최대 3곳까지만 단계적으로 완화한다")
+    void walkingOverlapRelaxationStopsAtThree() throws Exception {
+        CourseRecommendationService service = actualWalkingService(
+                Map.of(),
+                10.0
+        );
+        LocalDate visitDate = LocalDate.of(2026, 7, 28);
+
+        CourseRecommendRequest threeOverlapRequest =
+                CourseRecommendRequest.builder()
+                        .resultId(125L)
+                        .travelCode("ATLSP")
+                        .transportMode(TransportMode.WALKING)
+                        .dailyStartTime(LocalTime.of(11, 0))
+                        .dailyPlans(List.of(walkingPackedPlan(
+                                visitDate,
+                                walkingPackedOverlapCandidates(
+                                        0L,
+                                        5,
+                                        2
+                                )
+                        )))
+                        .build();
+
+        CourseRecommendResponse response =
+                service.recommend(threeOverlapRequest);
+
+        assertEquals(3, response.getOptionCount());
+        assertDailyOverlapAtMost(response, 3);
+        assertEquals(2, maximumFirstDayOptionOverlap(response));
+
+        java.lang.reflect.Field maximumOverlapField =
+                CourseRecommendationService.class.getDeclaredField(
+                        "MAX_WALKING_RELAXED_DAILY_OVERLAP_LIMIT"
+                );
+        maximumOverlapField.setAccessible(true);
+        assertEquals(
+                3,
+                maximumOverlapField.getInt(null)
+        );
+    }
+
+    @Test
     @DisplayName("확장 후보가 있으면 도보 재추천은 이전과 완전히 같은 코스를 반환하지 않는다")
     void recommendAgainOmitsExactDuplicateWhenExpandedCandidatesExist() {
         CourseRecommendationService service = actualWalkingService(
@@ -1421,6 +1567,98 @@ class CourseRecommendationServiceTest {
     }
 
     @Test
+    @DisplayName("실제 3곳 경로가 20분을 넘으면 최후 수단으로 2곳까지 줄여 반환한다")
+    void walkingRecommendationRepairsThreePlaceActualOverLimitToTwo() {
+        CourseRecommendationService service =
+                walkingServiceWithActualOverrides(
+                        Map.of(pairKey(1L, 2L), 20.9),
+                        10.0,
+                        10.0
+                );
+        CourseRecommendRequest request = CourseRecommendRequest.builder()
+                .resultId(127L)
+                .travelCode("ATLSP")
+                .transportMode(TransportMode.WALKING)
+                .dailyStartTime(LocalTime.of(11, 0))
+                .dailyPlans(List.of(walkingTourPlan(
+                        LocalDate.of(2026, 7, 28),
+                        3,
+                        walkingTourCandidates(12)
+                )))
+                .build();
+
+        CourseRecommendResponse response = service.recommend(request);
+
+        assertEquals(3, response.getOptionCount());
+        assertEquals(3, response.getCourseOptions().size());
+        assertTrue(response.getCourseOptions().stream()
+                .flatMap(option -> option.getDays().stream())
+                .anyMatch(day -> day.getPlaces().size() == 2));
+        for (CourseOptionResponse option : response.getCourseOptions()) {
+            for (CourseDayResponse day : option.getDays()) {
+                assertTrue(day.getPlaces().size() >= 2);
+                assertWalkingLimits(day);
+            }
+        }
+        assertAllOptionDayPairsOverlapAtMost(response, 1);
+    }
+
+    @Test
+    @DisplayName("실제 제한 실패가 여러 DAY에 남으면 한 곳씩 줄여 세 코스를 다시 고른다")
+    void walkingRecommendationRegeneratesAfterReducingFailedDays() {
+        CourseRecommendationService service =
+                walkingServiceWithActualDailyPlaceLimit(5);
+        List<PlaceCandidateDto> candidates = packedCandidates();
+        Map<String, Integer> categoryTargets = Map.of(
+                "TOUR", 6,
+                "RESTAURANT", 3,
+                "CAFE", 3,
+                "HOTEL", 0
+        );
+        CourseRecommendRequest request = CourseRecommendRequest.builder()
+                .resultId(128L)
+                .travelCode("ATLSP")
+                .transportMode(TransportMode.WALKING)
+                .dailyStartTime(LocalTime.of(11, 0))
+                .dailyPlans(List.of(
+                        DailyPlanRequest.builder()
+                                .visitDate(LocalDate.of(2026, 7, 28))
+                                .targetPlaceCount(6)
+                                .categoryTargets(categoryTargets)
+                                .placeCandidates(candidates)
+                                .build(),
+                        DailyPlanRequest.builder()
+                                .visitDate(LocalDate.of(2026, 7, 29))
+                                .targetPlaceCount(6)
+                                .categoryTargets(categoryTargets)
+                                .placeCandidates(candidates)
+                                .build()
+                ))
+                .build();
+
+        CourseRecommendResponse response = service.recommend(request);
+
+        assertEquals(3, response.getOptionCount());
+        assertEquals(3, response.getCourseOptions().size());
+        for (CourseOptionResponse option : response.getCourseOptions()) {
+            assertEquals(2, option.getDays().size());
+            for (CourseDayResponse day : option.getDays()) {
+                assertEquals(6, day.getRequestedPlaceCount());
+                assertEquals(5, day.getActualPlaceCount());
+                assertTrue(Boolean.TRUE.equals(
+                        day.getPlaceCountAdjusted()
+                ));
+                assertEquals(5, day.getPlaces().size());
+                assertEquals(2, countCategory(day, "TOUR"));
+                assertEquals(2, countCategory(day, "RESTAURANT"));
+                assertEquals(1, countCategory(day, "CAFE"));
+                assertWalkingLimits(day);
+            }
+        }
+        assertAllOptionDayPairsOverlapAtMost(response, 1);
+    }
+
+    @Test
     @DisplayName("ORS 실패 예상값도 도보 상한 안이면 예상 배지와 함께 반환한다")
     void walkingRecommendationUsesSafeEstimatedFallback() {
         CourseRecommendationService service = estimatedWalkingService(
@@ -1615,6 +1853,62 @@ class CourseRecommendationServiceTest {
                 .build();
     }
 
+    private DailyPlanRequest walkingPackedPlan(
+            LocalDate visitDate,
+            List<PlaceCandidateDto> candidates
+    ) {
+        return DailyPlanRequest.builder()
+                .visitDate(visitDate)
+                .targetPlaceCount(6)
+                .categoryTargets(Map.of(
+                        "TOUR", 3,
+                        "RESTAURANT", 2,
+                        "CAFE", 1,
+                        "HOTEL", 0
+                ))
+                .placeCandidates(candidates)
+                .build();
+    }
+
+    private List<PlaceCandidateDto> walkingPackedOverlapCandidates(
+            long idOffset,
+            int tourCount,
+            int cafeCount
+    ) {
+        List<PlaceCandidateDto> candidates = new ArrayList<>();
+        for (long index = 1; index <= tourCount; index++) {
+            candidates.add(candidate(
+                    idOffset + index,
+                    "도보 관광지 " + index,
+                    "TOUR",
+                    100.0 - index,
+                    37.50 + index * 0.0001,
+                    127.00 + index * 0.0001
+            ));
+        }
+        for (long index = 1; index <= 3; index++) {
+            candidates.add(candidate(
+                    idOffset + 10 + index,
+                    "도보 식당 " + index,
+                    "RESTAURANT",
+                    90.0 - index,
+                    37.51 + index * 0.0001,
+                    127.01 + index * 0.0001
+            ));
+        }
+        for (long index = 1; index <= cafeCount; index++) {
+            candidates.add(candidate(
+                    idOffset + 20 + index,
+                    "도보 카페 " + index,
+                    "CAFE",
+                    80.0 - index,
+                    37.52 + index * 0.0001,
+                    127.02 + index * 0.0001
+            ));
+        }
+        return candidates;
+    }
+
     private List<PlaceCandidateDto> walkingTourCandidates(int count) {
         List<PlaceCandidateDto> candidates = new ArrayList<>();
         for (long placeId = 1; placeId <= count; placeId++) {
@@ -1709,6 +2003,49 @@ class CourseRecommendationServiceTest {
         }
     }
 
+    private int maximumFirstDayOptionOverlap(
+            CourseRecommendResponse response
+    ) {
+        List<Set<Long>> optionPlaceIds = response.getCourseOptions().stream()
+                .map(option -> ordinaryPlaceIds(
+                        option.getDays().get(0)
+                ))
+                .toList();
+        int maximumOverlap = 0;
+        for (int left = 0; left < optionPlaceIds.size(); left++) {
+            for (int right = left + 1;
+                 right < optionPlaceIds.size();
+                 right++) {
+                Set<Long> overlap = new HashSet<>(
+                        optionPlaceIds.get(left)
+                );
+                overlap.retainAll(optionPlaceIds.get(right));
+                maximumOverlap = Math.max(
+                        maximumOverlap,
+                        overlap.size()
+                );
+            }
+        }
+        return maximumOverlap;
+    }
+
+    private Set<Long> recommendationKeyPlaceIds(
+            String recommendationKey
+    ) {
+        Set<Long> placeIds = new HashSet<>();
+        for (String token : recommendationKey.split(",")) {
+            int separatorIndex = token.lastIndexOf(':');
+            if (separatorIndex < 0
+                    || separatorIndex == token.length() - 1) {
+                continue;
+            }
+            placeIds.add(Long.parseLong(
+                    token.substring(separatorIndex + 1)
+            ));
+        }
+        return placeIds;
+    }
+
     private void assertAllOptionDayPairsOverlapAtMost(
             CourseRecommendResponse response,
             int limit
@@ -1789,6 +2126,68 @@ class CourseRecommendationServiceTest {
                     TransportMode transportMode
             ) {
                 return createMatrix(places, true);
+            }
+        };
+        return new CourseRecommendationService(
+                new CourseOptimizationService(
+                        distanceService,
+                        new VisitDurationService()
+                ),
+                distanceService
+        );
+    }
+
+    /**
+     * 후보 추정값은 항상 통과시키고, 실제 DAY가 기준 개수보다 많을 때만
+     * 21.7분을 반환해 전체 재선택 fallback을 재현한다.
+     */
+    private CourseRecommendationService
+    walkingServiceWithActualDailyPlaceLimit(
+            int maximumSafePlacesPerDay
+    ) {
+        DistanceService distanceService = new DistanceService() {
+            private RouteMatrix createMatrix(
+                    List<PlaceCandidateDto> places,
+                    double minutes
+            ) {
+                int size = places.size();
+                double[][] distances = new double[size][size];
+                double[][] travelTimes = new double[size][size];
+                for (int from = 0; from < size; from++) {
+                    for (int to = 0; to < size; to++) {
+                        if (from == to) {
+                            continue;
+                        }
+                        travelTimes[from][to] = minutes;
+                        distances[from][to] = minutes / 12.0;
+                    }
+                }
+                return new RouteMatrix(
+                        distances,
+                        travelTimes,
+                        false
+                );
+            }
+
+            @Override
+            public RouteMatrix calculateCandidatePoolMatrix(
+                    List<PlaceCandidateDto> places,
+                    TransportMode transportMode
+            ) {
+                return createMatrix(places, 10.0);
+            }
+
+            @Override
+            public RouteMatrix calculateRouteMatrix(
+                    List<PlaceCandidateDto> places,
+                    TransportMode transportMode
+            ) {
+                return createMatrix(
+                        places,
+                        places.size() <= maximumSafePlacesPerDay
+                                ? 10.0
+                                : 21.7
+                );
             }
         };
         return new CourseRecommendationService(

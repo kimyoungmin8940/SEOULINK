@@ -27,6 +27,8 @@ public class CourseRecommendationResponse {
 
     // 추천 카드와 목록 화면에 표시할 코스 기본 정보이다.
     private Long courseId;
+    private Long resultId;
+    private String recommendationKey;
     private String title;
     private String description;
     private String coverImageUrl;

@@ -1,7 +1,6 @@
 // CourseCard는 추천 코스 하나를 카드 형태로 보여주는 재사용 컴포넌트
 // RecommendSection에서 courses 배열을 map으로 돌리면서 이 컴포넌트에 course 데이터를 전달
-import { useState } from 'react';
-import { Bookmark, Clock3, MapPin } from 'lucide-react';
+import { Clock3, MapPin } from 'lucide-react';
 import { requireLogin } from '../../utils/authGuard';
 
 const COURSE_DETAIL_ENTRY_KEY = 'seoulinkCourseDetailEntry';
@@ -17,11 +16,11 @@ function getCourseId(course) {
     return Number.isInteger(courseId) && courseId > 0 ? courseId : null;
 }
 
-function CourseCard({ course, detailPath, requiresLogin = false }) {
-    const [isBookmarked, setIsBookmarked] = useState(
-        course.bookmarked ?? course.liked ?? false,
-    );
-
+function CourseCard({
+    course,
+    detailPath,
+    requiresLogin = false,
+}) {
     // 부모 컴포넌트가 전달한 상세 경로로 이동하고,
     // 경로가 없으면 일반 코스 상세 페이지로 이동
     const moveToRecommendedCourseDetail = () => {
@@ -75,30 +74,6 @@ function CourseCard({ course, detailPath, requiresLogin = false }) {
                 {course.imageUrl && (
                     <img src={course.imageUrl} alt={course.title} />
                 )}
-
-                {/*
-                    북마크 버튼
-                    현재는 디자인용 버튼이고, 나중에 로그인 사용자 북마크 API와 연결하면 됨
-                    카드 클릭 이벤트와 겹치지 않게 stopPropagation 처리함
-                */}
-                <button
-                    className={`bookmark-btn${isBookmarked ? ' is-bookmarked' : ''}`}
-                    type="button"
-                    aria-label={isBookmarked ? '북마크 해제' : '북마크 추가'}
-                    aria-pressed={isBookmarked}
-                    title={isBookmarked ? '북마크 해제' : '북마크 추가'}
-                    onClick={(event) => {
-                        event.stopPropagation();
-
-                        if (!requireLogin('북마크는 로그인 후 이용할 수 있습니다.')) {
-                            return;
-                        }
-
-                        setIsBookmarked((previous) => !previous);
-                    }}
-                >
-                    <Bookmark className="bookmark-icon" size={24} strokeWidth={1.85} />
-                </button>
             </div>
 
             {/* 코스 제목, 설명, 소요시간, 지역, 태그를 보여주는 정보 영역*/}

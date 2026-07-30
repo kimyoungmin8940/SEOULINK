@@ -82,13 +82,51 @@ function loadKakaoMaps(appKey) {
     return kakaoMapsLoaderPromise;
 }
 
+function isHotelCategory(category) {
+    const normalized = String(category || '').trim().toUpperCase();
+    return ['HOTEL', '숙소', '호텔', 'ACCOMMODATION', 'LODGING'].includes(normalized);
+}
+
+function getMarkerCategoryTone(place) {
+    if (place?.routeOrigin || isHotelCategory(place?.category)) {
+        return 'hotel';
+    }
+
+    const normalized = String(place?.category || '').trim().toUpperCase();
+
+    if (['RESTAURANT', '식당', '맛집', 'FOOD'].includes(normalized)) {
+        return 'restaurant';
+    }
+
+    if (['CAFE', '카페', 'COFFEE'].includes(normalized)) {
+        return 'cafe';
+    }
+
+    return 'tour';
+}
+
 function createNumberMarker(place, index) {
     const marker = document.createElement('div');
-    marker.className = `kakao-course-map-marker marker-${(index % 5) + 1}`;
-    marker.textContent = String(index + 1);
+    marker.className = `kakao-course-map-marker category-${getMarkerCategoryTone(place)}`;
+
+    const isRouteOrigin = Boolean(place?.routeOrigin);
+    const isHotel = isHotelCategory(place?.category);
+    const visitOrder = Number(place?.visitOrder);
+    const markerLabel = isRouteOrigin || isHotel
+        ? 'H'
+        : String(Number.isFinite(visitOrder) && visitOrder > 0
+            ? visitOrder
+            : index + 1);
+    const markerTitle = isRouteOrigin
+        ? `숙소 출발: ${place.placeName}`
+        : isHotel
+            ? `숙소 도착: ${place.placeName}`
+            : `${markerLabel}. ${place.placeName}`;
+
+    marker.textContent = markerLabel;
     marker.dataset.placeName = place.placeName;
-    marker.title = `${index + 1}. ${place.placeName}`;
-    marker.setAttribute('aria-label', marker.title);
+    marker.title = markerTitle;
+    marker.setAttribute('aria-label', markerTitle);
 
     return marker;
 }
@@ -148,6 +186,9 @@ function KakaoCourseMap({
             place.latitude,
             place.longitude,
             place.placeName,
+            place.category,
+            place.visitOrder,
+            Boolean(place.routeOrigin),
         ].join(':'))
         .join('|'), [mappablePlaces]);
     const appKey = import.meta.env.VITE_KAKAO_MAP_KEY?.trim();

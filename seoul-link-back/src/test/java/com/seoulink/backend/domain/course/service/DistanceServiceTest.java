@@ -25,6 +25,7 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -266,6 +267,7 @@ class DistanceServiceTest {
         );
 
         when(odsayClient.isConfigured()).thenReturn(true);
+        when(odsayClient.canAttemptRequest()).thenReturn(true);
         when(odsayClient.calculateRoute(
                 any(RouteCoordinate.class),
                 any(RouteCoordinate.class)
@@ -443,6 +445,7 @@ class DistanceServiceTest {
         );
 
         when(odsayClient.isConfigured()).thenReturn(true);
+        when(odsayClient.canAttemptRequest()).thenReturn(true);
         when(odsayClient.calculateRoute(
                 any(RouteCoordinate.class),
                 any(RouteCoordinate.class)
@@ -499,6 +502,7 @@ class DistanceServiceTest {
         );
 
         when(odsayClient.isConfigured()).thenReturn(true);
+        when(odsayClient.canAttemptRequest()).thenReturn(true);
         when(odsayClient.calculateRoute(
                 any(RouteCoordinate.class),
                 any(RouteCoordinate.class)
@@ -525,8 +529,8 @@ class DistanceServiceTest {
     }
 
     @Test
-    @DisplayName("ODsay 700m 이내 오류 구간은 도보 추정시간으로 처리한다")
-    void publicTransitUsesWalkingEstimateForShortOdsayLeg() {
+    @DisplayName("200m 이내 초단거리만 ODsay 호출 없이 도보 추정시간으로 처리한다")
+    void publicTransitSkipsOdsayOnlyForVeryShortLeg() {
         OdsayClient odsayClient = mock(OdsayClient.class);
         DistanceService serviceWithOdsay = new DistanceService(
                 null,
@@ -535,17 +539,11 @@ class DistanceServiceTest {
         );
         List<PlaceCandidateDto> candidates = List.of(
                 place(1L, "서울시청", 37.5665, 126.9780),
-                place(2L, "덕수궁", 37.5658, 126.9751)
+                place(2L, "시청광장 인근", 37.5665, 126.9790)
         );
 
         when(odsayClient.isConfigured()).thenReturn(true);
-        when(odsayClient.calculateRoute(
-                any(RouteCoordinate.class),
-                any(RouteCoordinate.class)
-        )).thenThrow(new OdsayApiException(
-                "-98",
-                "출, 도착지가 700m이내입니다."
-        ));
+        when(odsayClient.canAttemptRequest()).thenReturn(true);
 
         DistanceService.RouteMatrix matrix =
                 serviceWithOdsay.calculateRouteMatrix(
@@ -563,7 +561,47 @@ class DistanceServiceTest {
                 TransitPathType.WALKING,
                 matrix.getTransitPathType(0, 1)
         );
-        verify(odsayClient, times(2)).calculateRoute(
+        verify(odsayClient, never()).calculateRoute(
+                any(RouteCoordinate.class),
+                any(RouteCoordinate.class)
+        );
+    }
+
+    @Test
+    @DisplayName("200m 초과 700m 이내 구간도 ODsay를 먼저 조회한다")
+    void publicTransitAttemptsOdsayForMediumShortLeg() {
+        OdsayClient odsayClient = mock(OdsayClient.class);
+        DistanceService serviceWithOdsay = new DistanceService(
+                null,
+                odsayClient,
+                new RoutePairCache(100, Duration.ofHours(1))
+        );
+        List<PlaceCandidateDto> candidates = List.of(
+                place(1L, "서울시청", 37.5665, 126.9780),
+                place(2L, "덕수궁", 37.5658, 126.9751)
+        );
+
+        when(odsayClient.isConfigured()).thenReturn(true);
+        when(odsayClient.canAttemptRequest()).thenReturn(true);
+        when(odsayClient.calculateRoute(
+                any(RouteCoordinate.class),
+                any(RouteCoordinate.class)
+        )).thenReturn(new TransitRouteResult(
+                0.8,
+                7.0,
+                TransitPathType.BUS
+        ));
+
+        DistanceService.RouteMatrix matrix =
+                serviceWithOdsay.calculateRouteMatrix(
+                        candidates,
+                        TransportMode.PUBLIC_TRANSIT
+                );
+
+        assertFalse(matrix.estimatedTravelTimes());
+        assertEquals(7.0, matrix.getTravelTimeMinutes(0, 1), 0.000001);
+        assertEquals(TransitPathType.BUS, matrix.getTransitPathType(0, 1));
+        verify(odsayClient, times(1)).calculateRoute(
                 any(RouteCoordinate.class),
                 any(RouteCoordinate.class)
         );
@@ -585,6 +623,7 @@ class DistanceServiceTest {
         );
 
         when(odsayClient.isConfigured()).thenReturn(true);
+        when(odsayClient.canAttemptRequest()).thenReturn(true);
         when(odsayClient.calculateRoute(
                 any(RouteCoordinate.class),
                 any(RouteCoordinate.class)

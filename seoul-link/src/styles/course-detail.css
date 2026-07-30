@@ -83,6 +83,14 @@
   color: var(--primary-blue);
 }
 
+.course-detail-toolbar-actions button:disabled {
+  cursor: default;
+}
+
+.course-detail-toolbar-actions button:disabled:hover {
+  transform: none;
+}
+
 /* 상단 코스 소개 */
 .course-detail-hero {
   height: clamp(225px, 15vw, 245px);
@@ -624,11 +632,41 @@
   gap: 10px;
 }
 
-.course-detail-place-side img {
+.course-detail-place-image {
   width: 100%;
   height: 104px;
+  position: relative;
+  overflow: hidden;
   border-radius: 10px;
+  display: block;
+}
+
+.course-detail-place-image img {
+  width: 100%;
+  height: 100%;
   object-fit: cover;
+  display: block;
+}
+
+.course-detail-place-image-label {
+  position: absolute;
+  right: 7px;
+  bottom: 7px;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: rgba(24, 51, 74, 0.82);
+  color: #ffffff;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1.3;
+  letter-spacing: -0.1px;
+  box-shadow: 0 2px 7px rgba(10, 31, 48, 0.2);
+}
+
+.course-detail-place-image-empty {
+  width: 100%;
+  height: 104px;
   display: block;
 }
 
@@ -1229,7 +1267,11 @@
     grid-template-columns: minmax(0, 1fr) 90px;
   }
 
-  .course-detail-place-side img {
+  .course-detail-place-image {
+    height: 95px;
+  }
+
+  .course-detail-place-image-empty {
     height: 95px;
   }
 

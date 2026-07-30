@@ -11,6 +11,7 @@ import {
     getCurrentMemberId,
     normalizeRecommendedCourseList,
 } from '../../utils/courseHistory';
+import { syncStoredRecommendationHistory } from '../../utils/recommendationHistorySync';
 
 import { mockThemeCourseListResponse } from '../../mocks/homeMockData';
 import rainyCafeImage from '../../assets/images/moods/mood-rainy-cafe.png';
@@ -69,7 +70,7 @@ function RecommendSection() {
     );
 
     // 브라우저 임시 추천 코스를 먼저 표시하고,
-    // 백엔드에 실제 저장 코스가 있으면 서버 결과로 교체합니다.
+    // 백엔드에 추천받은 전체 이력이 있으면 서버 결과로 교체합니다.
     useEffect(() => {
         if (!isLoggedIn) {
             setMyRecommendedCourses([]);
@@ -88,21 +89,32 @@ function RecommendSection() {
 
         const controller = new AbortController();
 
-        getRecommendedCourses(memberId, { signal: controller.signal })
-            .then((response) => {
+        const loadRecommendedCourses = async () => {
+            try {
+                await syncStoredRecommendationHistory({
+                    signal: controller.signal,
+                });
+            } catch (error) {
+                if (error?.name === 'AbortError') return;
+                // 이전 세션 복구가 실패해도 서버에 이미 저장된 추천 이력은 조회합니다.
+            }
+
+            try {
+                const response = await getRecommendedCourses(memberId, {
+                    signal: controller.signal,
+                });
                 const serverCourses = normalizeRecommendedCourseList(response, {
                     fallbackImages,
                 });
 
-                // 실제 서버 데이터가 있을 때만 브라우저 임시 데이터를 교체합니다.
+                // 실제 추천 이력이 있을 때만 브라우저 임시 데이터를 교체합니다.
                 // 서버가 빈 배열을 반환하면 기존 로컬 추천 코스를 유지합니다.
                 if (serverCourses.length > 0) {
                     setMyRecommendedCourses(serverCourses);
                 } else if (localCourses.length === 0) {
                     setMyRecommendedCourses([]);
                 }
-            })
-            .catch((error) => {
+            } catch (error) {
                 if (error?.name === 'AbortError') return;
 
                 // test-token처럼 실제 인증이 되지 않아 API가 실패해도
@@ -110,7 +122,10 @@ function RecommendSection() {
                 if (localCourses.length === 0) {
                     setMyRecommendedCourses([]);
                 }
-            });
+            }
+        };
+
+        loadRecommendedCourses();
 
         return () => controller.abort();
     }, [isLoggedIn, memberId]);

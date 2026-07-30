@@ -38,6 +38,12 @@ public class CourseOptimizationService {
     // 외부 API의 부동소수점 오차 때문에 사실상 같은 경로 비용을 다르게 보지 않도록 한다.
     private static final double ROUTE_TIE_EPSILON = 0.000000001;
 
+    // 대중교통은 30분 이내 구간을 선호하고 40분을 넘는 구간만 반드시 교체한다.
+    private static final double PUBLIC_TRANSIT_PREFERRED_MAX_MINUTES = 30.0;
+    private static final double PUBLIC_TRANSIT_MAX_MINUTES = 40.0;
+    private static final double PUBLIC_TRANSIT_HOTEL_MAX_MINUTES = 40.0;
+    private static final int PUBLIC_TRANSIT_MAX_REPAIR_ALTERNATIVES = 8;
+
     private final DistanceService distanceService;
     private final VisitDurationService visitDurationService;
 
@@ -437,7 +443,8 @@ public class CourseOptimizationService {
                     .build();
         }
 
-        // 고정 경로 상세 조회는 이미 선택된 장소와 순서를 그대로 보존해야 한다.
+        // 고정 경로 상세 조회는 기본적으로 선택된 장소와 순서를 보존한다.
+        // 다만 실제 대중교통 상한 위반과 식당·카페 연속 배치는 최종 안전장치에서 보정한다.
         // 같은 placeId가 다른 날짜에 재사용된 경우도 별개의 방문이므로 제거하지 않는다.
         List<PlaceCandidateDto> candidates = new ArrayList<>(
                 requestedCandidates.size()
@@ -445,6 +452,14 @@ public class CourseOptimizationService {
         for (PlaceCandidateDto candidate : requestedCandidates) {
             validateCandidate(candidate);
             candidates.add(candidate);
+        }
+        List<PlaceCandidateDto> routeAlternatives = new ArrayList<>();
+        if (request.getAlternativeCandidates() != null) {
+            for (PlaceCandidateDto alternative
+                    : request.getAlternativeCandidates()) {
+                validateCandidate(alternative);
+                routeAlternatives.add(alternative);
+            }
         }
         Map<LocalDate, List<PlaceCandidateDto>> candidatesByDate =
                 new LinkedHashMap<>();
@@ -464,21 +479,34 @@ public class CourseOptimizationService {
 
         for (List<PlaceCandidateDto> dailyCandidates
                 : candidatesByDate.values()) {
-            List<Integer> routeIndexes = createIndexes(
-                    dailyCandidates.size()
-            );
-            RouteMatrix routeMatrix = resolveActualRouteLegs
-                    ? distanceService.calculateRouteLegMatrix(
-                            dailyCandidates,
-                            transportMode,
-                            routeIndexes
-                    )
-                    : distanceService.calculateCandidatePoolMatrix(
-                            dailyCandidates,
-                            transportMode
-                    );
+            List<PlaceCandidateDto> resolvedDailyCandidates = dailyCandidates;
+            RouteMatrix routeMatrix;
+            if (resolveActualRouteLegs
+                    && transportMode == TransportMode.PUBLIC_TRANSIT) {
+                PublicTransitRouteRepair repair =
+                        repairActualPublicTransitRoute(
+                                dailyCandidates,
+                                routeAlternatives
+                        );
+                resolvedDailyCandidates = repair.candidates();
+                routeMatrix = repair.routeMatrix();
+            } else {
+                List<Integer> routeIndexes = createIndexes(
+                        dailyCandidates.size()
+                );
+                routeMatrix = resolveActualRouteLegs
+                        ? distanceService.calculateRouteLegMatrix(
+                                dailyCandidates,
+                                transportMode,
+                                routeIndexes
+                        )
+                        : distanceService.calculateCandidatePoolMatrix(
+                                dailyCandidates,
+                                transportMode
+                        );
+            }
 
-            for (int index = 0; index < dailyCandidates.size(); index++) {
+            for (int index = 0; index < resolvedDailyCandidates.size(); index++) {
                 double distanceFromPreviousKm = 0.0;
                 double travelTimeFromPreviousMinutes = 0.0;
                 TransitPathType transitPathType = null;
@@ -506,7 +534,7 @@ public class CourseOptimizationService {
                 totalDistanceKm += distanceFromPreviousKm;
                 totalTravelTimeMinutes += travelTimeFromPreviousMinutes;
                 optimizedPlaces.add(toOptimizedPlace(
-                        dailyCandidates.get(index),
+                        resolvedDailyCandidates.get(index),
                         index + 1,
                         distanceFromPreviousKm,
                         travelTimeFromPreviousMinutes,
@@ -530,6 +558,469 @@ public class CourseOptimizationService {
                         totalVisitTimeMinutes + totalTravelTimeMinutes
                 )
                 .build();
+    }
+
+    /**
+     * 실제 ODsay 결과를 기준으로 40분 절대 상한을 적용한다.
+     * 추천 생성 단계에서 같은 카테고리 대체 후보를 먼저 적용하므로, 이 단계는 실제 시간 차이로
+     * 남은 위반 구간에만 사용하는 최종 안전장치이다. 숙소 도착 구간도 일반 구간과 동일하게 최대 40분까지만 허용한다.
+     */
+    private PublicTransitRouteRepair repairActualPublicTransitRoute(
+            List<PlaceCandidateDto> dailyCandidates,
+            List<PlaceCandidateDto> routeAlternatives
+    ) {
+        List<PlaceCandidateDto> repairedCandidates = new ArrayList<>(
+                dailyCandidates
+        );
+        Set<Long> attemptedAlternativeIds = new HashSet<>();
+        int guard = Math.max(24, repairedCandidates.size() * 12);
+
+        while (guard-- > 0) {
+            separateConsecutiveMealCategories(repairedCandidates);
+
+            List<Integer> routeIndexes = createIndexes(
+                    repairedCandidates.size()
+            );
+            RouteMatrix routeMatrix = distanceService.calculateRouteLegMatrix(
+                    repairedCandidates,
+                    TransportMode.PUBLIC_TRANSIT,
+                    routeIndexes
+            );
+            int violationIndex = findRemovablePublicTransitViolation(
+                    repairedCandidates,
+                    routeMatrix
+            );
+            if (violationIndex < 0) {
+                return new PublicTransitRouteRepair(
+                        List.copyOf(repairedCandidates),
+                        routeMatrix
+                );
+            }
+
+            PlaceCandidateDto replacement =
+                    selectPublicTransitRepairAlternative(
+                            repairedCandidates,
+                            violationIndex,
+                            routeAlternatives,
+                            attemptedAlternativeIds
+                    );
+            if (replacement != null) {
+                PlaceCandidateDto original =
+                        repairedCandidates.get(violationIndex);
+                attemptedAlternativeIds.add(replacement.getPlaceId());
+                repairedCandidates.set(
+                        violationIndex,
+                        copyRepairReplacement(replacement, original)
+                );
+                continue;
+            }
+
+            // 하드 제한은 장소 수보다 우선한다. 대체 후보가 없을 때만 문제 장소를
+            // 제거하고 실제 경로를 다시 계산한다. 최소 3곳에서 검사를 중단하지 않는다.
+            repairedCandidates.remove(violationIndex);
+        }
+
+        throw new IllegalStateException(
+                "대중교통 이동 제한을 만족하는 경로를 만들지 못했습니다."
+        );
+    }
+
+    /**
+     * 실제 경로 위반 장소와 같은 날짜·카테고리의 대체 후보를 고른다.
+     * 후보 선택 자체는 추정 행렬로 빠르게 비교하고, 교체 후 다음 반복에서 ODsay
+     * 실제 경로를 다시 조회해 40분 절대 상한을 최종 검증한다.
+     */
+    private PlaceCandidateDto selectPublicTransitRepairAlternative(
+            List<PlaceCandidateDto> candidates,
+            int targetIndex,
+            List<PlaceCandidateDto> routeAlternatives,
+            Set<Long> attemptedAlternativeIds
+    ) {
+        PlaceCandidateDto target = candidates.get(targetIndex);
+        Set<Long> currentPlaceIds = candidates.stream()
+                .map(PlaceCandidateDto::getPlaceId)
+                .collect(java.util.stream.Collectors.toSet());
+
+        Map<Long, PlaceCandidateDto> uniqueAlternatives =
+                new LinkedHashMap<>();
+        for (PlaceCandidateDto alternative : alternativesOf(target)) {
+            if (alternative != null) {
+                uniqueAlternatives.putIfAbsent(
+                        alternative.getPlaceId(),
+                        inheritVisitDate(alternative, target.getVisitDate())
+                );
+            }
+        }
+        for (PlaceCandidateDto alternative : routeAlternatives) {
+            if (alternative != null
+                    && target.getVisitDate().equals(alternative.getVisitDate())
+                    && isSameCategory(
+                            alternative.getCategory(),
+                            target.getCategory()
+                    )) {
+                uniqueAlternatives.putIfAbsent(
+                        alternative.getPlaceId(),
+                        alternative
+                );
+            }
+        }
+
+        List<PlaceCandidateDto> eligibleAlternatives = uniqueAlternatives.values()
+                .stream()
+                .filter(alternative -> isSameCategory(
+                        alternative.getCategory(),
+                        target.getCategory()
+                ))
+                .filter(alternative -> target.getVisitDate().equals(
+                        alternative.getVisitDate()
+                ))
+                .filter(alternative -> !currentPlaceIds.contains(
+                        alternative.getPlaceId()
+                ))
+                .filter(alternative -> !attemptedAlternativeIds.contains(
+                        alternative.getPlaceId()
+                ))
+                .sorted(Comparator
+                        .comparing(PlaceCandidateDto::getRecommendationScore)
+                        .reversed()
+                        .thenComparing(PlaceCandidateDto::getPlaceId))
+                .limit(PUBLIC_TRANSIT_MAX_REPAIR_ALTERNATIVES)
+                .toList();
+        if (eligibleAlternatives.isEmpty()) {
+            return null;
+        }
+
+        PlaceCandidateDto previous = targetIndex > 0
+                ? candidates.get(targetIndex - 1)
+                : null;
+        PlaceCandidateDto next = targetIndex + 1 < candidates.size()
+                ? candidates.get(targetIndex + 1)
+                : null;
+        List<PlaceCandidateDto> matrixCandidates = new ArrayList<>();
+        int previousIndex = -1;
+        if (previous != null) {
+            previousIndex = matrixCandidates.size();
+            matrixCandidates.add(previous);
+        }
+        int alternativeStartIndex = matrixCandidates.size();
+        matrixCandidates.addAll(eligibleAlternatives);
+        int nextIndex = -1;
+        if (next != null) {
+            nextIndex = matrixCandidates.size();
+            matrixCandidates.add(next);
+        }
+
+        RouteMatrix estimatedMatrix =
+                distanceService.calculateCandidatePoolMatrix(
+                        matrixCandidates,
+                        TransportMode.PUBLIC_TRANSIT
+                );
+        PlaceCandidateDto selected = null;
+        int selectedLongLegCount = Integer.MAX_VALUE;
+        double selectedMaxMinutes = Double.MAX_VALUE;
+        double selectedTotalMinutes = Double.MAX_VALUE;
+        double selectedTotalDistance = Double.MAX_VALUE;
+
+        for (int offset = 0; offset < eligibleAlternatives.size(); offset++) {
+            PlaceCandidateDto alternative = eligibleAlternatives.get(offset);
+            int matrixIndex = alternativeStartIndex + offset;
+            double previousMinutes = previousIndex >= 0
+                    ? estimatedMatrix.getTravelTimeMinutes(
+                            previousIndex,
+                            matrixIndex
+                    )
+                    : 0.0;
+            double nextMinutes = nextIndex >= 0
+                    ? estimatedMatrix.getTravelTimeMinutes(
+                            matrixIndex,
+                            nextIndex
+                    )
+                    : 0.0;
+            double previousDistance = previousIndex >= 0
+                    ? estimatedMatrix.getDistanceKm(previousIndex, matrixIndex)
+                    : 0.0;
+            double nextDistance = nextIndex >= 0
+                    ? estimatedMatrix.getDistanceKm(matrixIndex, nextIndex)
+                    : 0.0;
+
+            if (previousIndex >= 0
+                    && previousMinutes > maxPublicTransitMinutesForDestination(
+                            alternative
+                    )) {
+                continue;
+            }
+            if (nextIndex >= 0
+                    && nextMinutes > maxPublicTransitMinutesForDestination(
+                            next
+                    )) {
+                continue;
+            }
+
+            int longLegCount = 0;
+            if (previousIndex >= 0
+                    && previousMinutes > PUBLIC_TRANSIT_PREFERRED_MAX_MINUTES) {
+                longLegCount++;
+            }
+            if (nextIndex >= 0
+                    && nextMinutes > PUBLIC_TRANSIT_PREFERRED_MAX_MINUTES) {
+                longLegCount++;
+            }
+            double maxMinutes = Math.max(previousMinutes, nextMinutes);
+            double totalMinutes = previousMinutes + nextMinutes;
+            double totalDistance = previousDistance + nextDistance;
+            boolean better = longLegCount < selectedLongLegCount
+                    || (longLegCount == selectedLongLegCount
+                    && maxMinutes < selectedMaxMinutes - ROUTE_TIE_EPSILON)
+                    || (longLegCount == selectedLongLegCount
+                    && Math.abs(maxMinutes - selectedMaxMinutes)
+                    <= ROUTE_TIE_EPSILON
+                    && totalMinutes < selectedTotalMinutes
+                    - ROUTE_TIE_EPSILON)
+                    || (longLegCount == selectedLongLegCount
+                    && Math.abs(maxMinutes - selectedMaxMinutes)
+                    <= ROUTE_TIE_EPSILON
+                    && Math.abs(totalMinutes - selectedTotalMinutes)
+                    <= ROUTE_TIE_EPSILON
+                    && totalDistance < selectedTotalDistance
+                    - ROUTE_TIE_EPSILON);
+            if (selected == null || better) {
+                selected = alternative;
+                selectedLongLegCount = longLegCount;
+                selectedMaxMinutes = maxMinutes;
+                selectedTotalMinutes = totalMinutes;
+                selectedTotalDistance = totalDistance;
+            }
+        }
+
+        return selected;
+    }
+
+    private double maxPublicTransitMinutesForDestination(
+            PlaceCandidateDto destination
+    ) {
+        return isHotelCategory(destination.getCategory())
+                ? PUBLIC_TRANSIT_HOTEL_MAX_MINUTES
+                : PUBLIC_TRANSIT_MAX_MINUTES;
+    }
+
+    /** 교체 후보에 남은 대체 후보 풀을 이어 붙여 실제 검증 실패 시 다음 후보도 시도한다. */
+    private PlaceCandidateDto copyRepairReplacement(
+            PlaceCandidateDto replacement,
+            PlaceCandidateDto original
+    ) {
+        Map<Long, PlaceCandidateDto> remainingAlternatives =
+                new LinkedHashMap<>();
+        for (PlaceCandidateDto alternative : alternativesOf(original)) {
+            if (alternative != null
+                    && !replacement.getPlaceId().equals(
+                            alternative.getPlaceId()
+                    )) {
+                remainingAlternatives.putIfAbsent(
+                        alternative.getPlaceId(),
+                        alternative
+                );
+            }
+        }
+        for (PlaceCandidateDto alternative : alternativesOf(replacement)) {
+            if (alternative != null
+                    && !replacement.getPlaceId().equals(
+                            alternative.getPlaceId()
+                    )) {
+                remainingAlternatives.putIfAbsent(
+                        alternative.getPlaceId(),
+                        alternative
+                );
+            }
+        }
+
+        return PlaceCandidateDto.builder()
+                .placeId(replacement.getPlaceId())
+                .placeName(replacement.getPlaceName())
+                .category(replacement.getCategory())
+                .region(replacement.getRegion())
+                .address(replacement.getAddress())
+                .roadAddress(replacement.getRoadAddress())
+                .imageUrl(replacement.getImageUrl())
+                .recommendationScore(replacement.getRecommendationScore())
+                .latitude(replacement.getLatitude())
+                .longitude(replacement.getLongitude())
+                .visitDate(original.getVisitDate())
+                .themePalaceCultureYn(replacement.getThemePalaceCultureYn())
+                .themeNatureHangangYn(replacement.getThemeNatureHangangYn())
+                .themeDateYn(replacement.getThemeDateYn())
+                .themeFoodTourYn(replacement.getThemeFoodTourYn())
+                .themeCafeTourYn(replacement.getThemeCafeTourYn())
+                .themeShoppingHotplaceYn(
+                        replacement.getThemeShoppingHotplaceYn()
+                )
+                .themeNightViewYn(replacement.getThemeNightViewYn())
+                .themeHotelStayYn(replacement.getThemeHotelStayYn())
+                .alternativeCandidates(
+                        new ArrayList<>(remainingAlternatives.values())
+                )
+                .build();
+    }
+
+    /**
+     * 실제 대중교통 경로에서 교체하거나 제거할 장소 인덱스를 찾는다.
+     * 일반 장소와 숙소 도착 모두 40분을 절대 상한으로 유지한다.
+     * 30분 초과 구간은 후보 정렬에서만 불리하게 평가하고 교체·삭제 사유로 삼지 않는다.
+     */
+    private int findRemovablePublicTransitViolation(
+            List<PlaceCandidateDto> candidates,
+            RouteMatrix routeMatrix
+    ) {
+        // 먼저 실제 ODsay 절대 상한을 처리한다. API 실패로 남은 추정값은
+        // 실제 위반으로 단정할 수 없으므로 장소 교체·제거와 추가 호출을 만들지 않는다.
+        for (int index = 1; index < candidates.size(); index++) {
+            if (routeMatrix.isEstimated(index - 1, index)) {
+                continue;
+            }
+            PlaceCandidateDto destination = candidates.get(index);
+            double travelMinutes = routeMatrix.getTravelTimeMinutes(
+                    index - 1,
+                    index
+            );
+            if (isHotelCategory(destination.getCategory())) {
+                if (travelMinutes > PUBLIC_TRANSIT_HOTEL_MAX_MINUTES) {
+                    int removableIndex = previousOrdinaryPlaceIndex(
+                            candidates,
+                            index
+                    );
+                    if (removableIndex >= 0) {
+                        return removableIndex;
+                    }
+                }
+                continue;
+            }
+            if (travelMinutes > PUBLIC_TRANSIT_MAX_MINUTES) {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
+    /** 숙소는 유지하고 숙소 바로 전의 일반 장소를 제거 대상으로 선택한다. */
+    private int previousOrdinaryPlaceIndex(
+            List<PlaceCandidateDto> candidates,
+            int hotelIndex
+    ) {
+        for (int index = hotelIndex - 1; index >= 0; index--) {
+            if (!isHotelCategory(candidates.get(index).getCategory())) {
+                return index;
+            }
+        }
+        return -1;
+    }
+
+    private boolean isHotelCategory(String category) {
+        return category != null && "hotel".equals(normalizeCategory(category));
+    }
+
+    /**
+     * 실제 경로 보정 과정에서 장소가 제거되더라도 식당 또는 카페가 같은 카테고리끼리
+     * 연속되지 않도록 비식음 장소를 사이로 이동한다.
+     *
+     * <p>첫 장소와 마지막 숙소는 고정하고, 가능한 경우 뒤쪽의 비식음 장소를 먼저
+     * 끼워 넣는다. 뒤쪽에 없으면 첫 장소를 제외한 앞쪽 장소를 사용한다.</p>
+     */
+    private void separateConsecutiveMealCategories(
+            List<PlaceCandidateDto> candidates
+    ) {
+        if (candidates.size() < 3) {
+            return;
+        }
+
+        int guard = candidates.size() * 3;
+        while (guard-- > 0) {
+            int secondMealIndex = findConsecutiveMealSecondIndex(candidates);
+            if (secondMealIndex < 0) {
+                return;
+            }
+
+            String mealCategory = normalizeCategory(
+                    candidates.get(secondMealIndex).getCategory()
+            );
+            int separatorIndex = findSeparatorAfter(
+                    candidates,
+                    secondMealIndex,
+                    mealCategory
+            );
+            if (separatorIndex >= 0) {
+                PlaceCandidateDto separator = candidates.remove(separatorIndex);
+                candidates.add(secondMealIndex, separator);
+                continue;
+            }
+
+            separatorIndex = findSeparatorBefore(
+                    candidates,
+                    secondMealIndex,
+                    mealCategory
+            );
+            if (separatorIndex >= 0) {
+                PlaceCandidateDto separator = candidates.remove(separatorIndex);
+                candidates.add(secondMealIndex - 1, separator);
+                continue;
+            }
+
+            return;
+        }
+    }
+
+    private int findConsecutiveMealSecondIndex(
+            List<PlaceCandidateDto> candidates
+    ) {
+        for (int index = 1; index < candidates.size(); index++) {
+            String previousCategory = normalizeCategory(
+                    candidates.get(index - 1).getCategory()
+            );
+            String currentCategory = normalizeCategory(
+                    candidates.get(index).getCategory()
+            );
+            boolean mealCategory = "restaurant".equals(currentCategory)
+                    || "cafe".equals(currentCategory);
+            if (mealCategory && currentCategory.equals(previousCategory)) {
+                return index;
+            }
+        }
+        return -1;
+    }
+
+    private int findSeparatorAfter(
+            List<PlaceCandidateDto> candidates,
+            int secondMealIndex,
+            String mealCategory
+    ) {
+        for (int index = secondMealIndex + 1;
+                index < candidates.size();
+                index++) {
+            String category = normalizeCategory(
+                    candidates.get(index).getCategory()
+            );
+            if (!mealCategory.equals(category)
+                    && !"hotel".equals(category)) {
+                return index;
+            }
+        }
+        return -1;
+    }
+
+    private int findSeparatorBefore(
+            List<PlaceCandidateDto> candidates,
+            int secondMealIndex,
+            String mealCategory
+    ) {
+        for (int index = secondMealIndex - 2; index > 0; index--) {
+            String category = normalizeCategory(
+                    candidates.get(index).getCategory()
+            );
+            if (!mealCategory.equals(category)
+                    && !"hotel".equals(category)) {
+                return index;
+            }
+        }
+        return -1;
     }
 
     /** 교체가 반영된 후보 목록을 날짜별 방문 순서로 정렬하고 합계를 다시 계산한다. */
@@ -863,6 +1354,14 @@ public class CourseOptimizationService {
         if (travelTimeMinutes > maxTravelMinutes) {
             return true;
         }
+
+        // 대중교통의 30분 기준은 선호 조건일 뿐 강제 교체 사유가 아니다.
+        // 40분 이하 장소 조합은 유지하고 실제 경로 보정에서 이동시간이 짧은
+        // 대체 후보를 우선 평가한다.
+        if (transportMode == TransportMode.PUBLIC_TRANSIT) {
+            return false;
+        }
+
         return distanceKm > maxDistanceKm(transportMode)
                 && travelTimeMinutes > maxTravelMinutes * 0.75;
     }
@@ -880,7 +1379,7 @@ public class CourseOptimizationService {
     private double maxTravelMinutes(TransportMode transportMode) {
         return switch (transportMode) {
             case WALKING -> 30.0;
-            case PUBLIC_TRANSIT -> 45.0;
+            case PUBLIC_TRANSIT -> PUBLIC_TRANSIT_MAX_MINUTES;
             case DRIVING -> 40.0;
         };
     }
@@ -1346,6 +1845,13 @@ public class CourseOptimizationService {
     private record RouteCost(
             double travelTimeMinutes,
             double distanceKm
+    ) {
+    }
+
+    /** 실제 대중교통 상한 보정 후의 고정 후보와 경로 행렬이다. */
+    private record PublicTransitRouteRepair(
+            List<PlaceCandidateDto> candidates,
+            RouteMatrix routeMatrix
     ) {
     }
 

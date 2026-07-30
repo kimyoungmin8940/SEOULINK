@@ -11,6 +11,7 @@ import com.seoulink.backend.domain.course.dto.response.CourseSaveResponse;
 import com.seoulink.backend.domain.course.model.TransportMode;
 import com.seoulink.backend.domain.course.service.CourseDraftService;
 import com.seoulink.backend.domain.course.service.CourseOptimizationService;
+import com.seoulink.backend.domain.course.service.CourseRecommendationHistoryService;
 import com.seoulink.backend.domain.course.service.CourseRecommendationService;
 import com.seoulink.backend.domain.course.service.CourseSaveService;
 import com.seoulink.backend.domain.course.service.CourseService;
@@ -27,6 +28,7 @@ import java.util.NoSuchElementException;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -42,6 +44,8 @@ class CourseControllerTest {
 
     private MockMvc mockMvc;
     private CourseRecommendationService courseRecommendationService;
+    private CourseRecommendationHistoryService
+            courseRecommendationHistoryService;
     private CourseSaveService courseSaveService;
     private CourseService courseService;
 
@@ -56,12 +60,15 @@ class CourseControllerTest {
                 );
         courseSaveService = mock(CourseSaveService.class);
         courseRecommendationService = mock(CourseRecommendationService.class);
+        courseRecommendationHistoryService =
+                mock(CourseRecommendationHistoryService.class);
         courseService = mock(CourseService.class);
 
         mockMvc = standaloneSetup(new CourseController(
                         mock(CourseDraftService.class),
                         optimizationService,
                         courseRecommendationService,
+                        courseRecommendationHistoryService,
                         courseSaveService,
                         courseService
                 ))
@@ -543,6 +550,8 @@ class CourseControllerTest {
                         .value("https://example.com/gyeongbokgung.jpg"))
                 .andExpect(jsonPath("$.courseOptions[0].days[0].places[0].visitTime")
                         .value("10:00"));
+
+        verify(courseRecommendationHistoryService).record(any(), any());
     }
 
     private CourseOptionResponse option(
@@ -686,6 +695,26 @@ class CourseControllerTest {
                 .andExpect(jsonPath("$[0].courseId").value(20))
                 .andExpect(jsonPath("$[0].title").value("서울 추천 코스"))
                 .andExpect(jsonPath("$[0].placeCount").value(3));
+    }
+
+    @Test
+    @DisplayName("브라우저에 남은 추천 응답을 추천 이력으로 복구한다")
+    void recordRecommendedCourseHistory() throws Exception {
+        mockMvc.perform(post("/api/courses/recommended/history")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "resultId": 101,
+                                  "travelCode": "ATLSR",
+                                  "transportMode": "WALKING",
+                                  "courseOptions": []
+                                }
+                                """))
+                .andExpect(status().isNoContent());
+
+        verify(courseRecommendationHistoryService).record(
+                any(CourseRecommendResponse.class)
+        );
     }
 
     @Test

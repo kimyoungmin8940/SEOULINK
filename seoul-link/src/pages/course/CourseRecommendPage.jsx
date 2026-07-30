@@ -1,8 +1,6 @@
 import {
-    startTransition,
     useCallback,
     useEffect,
-    useEffectEvent,
     useMemo,
     useRef,
     useState,
@@ -33,6 +31,7 @@ import {
     recommendCourse,
     refreshCourseDraft,
     resolveCourseRouteDetails,
+    getMyCourses,
     saveCourse,
     saveCourses,
 } from '../../api/courseApi';
@@ -41,59 +40,37 @@ import {
     buildCourseRecommendAgainRequest,
     COURSE_RECOMMEND_REQUEST_KEY,
     COURSE_RECOMMEND_RESPONSE_KEY,
+    deriveRecommendationKey,
 } from '../../utils/courseRecommendationHandoff';
 import {
+    getRouteCorrectionOverlapLimit,
     getTransportMeta,
     normalizeTransitPathType,
     normalizeTransportMode,
     resolveTransportMode,
 } from '../../utils/courseTransport';
 import { rememberCourseTravelCode } from '../../utils/courseTravelCode';
+import { normalizeMyCourseList } from '../../utils/courseHistory';
 import recommendationPreview from '../../mocks/courseRecommendation.json';
 import heroSeoulImage from '../../assets/images/hero-seoul-main.png';
-import hanokImage from '../../assets/images/moods/mood-hanok-photo.png';
-import walkingImage from '../../assets/images/moods/mood-walking-alley.png';
-import sunsetImage from '../../assets/images/moods/mood-sunset-seoul.png';
 
-const fallbackImages = [hanokImage, walkingImage, sunsetImage];
 const COURSE_RECOMMEND_HISTORY_KEY = 'seoulinkCourseRecommendHistory';
 const RECOMMENDATION_BASE_TIMEOUT_MS = 45_000;
 const RECOMMENDATION_TIMEOUT_PER_EXTRA_DAY_MS = 15_000;
 const RECOMMENDATION_MAX_TIMEOUT_MS = 150_000;
 const ROUTE_DETAILS_REQUEST_TIMEOUT_MS = 30_000;
+// 백엔드는 ODsay 28회/60초 호출 창이 가득 차면 실제 경로를 포기하지 않고
+// 대기한 뒤 이어서 조회한다. 고정 90초에서 브라우저가 먼저 요청을 취소하면
+// 정상 응답도 화면에 합쳐지지 않으므로 대기 창과 구간 수를 함께 반영한다.
+const PUBLIC_TRANSIT_ROUTE_DETAILS_BASE_TIMEOUT_MS = 120_000;
+const PUBLIC_TRANSIT_ROUTE_DETAILS_TIMEOUT_PER_LEG_MS = 15_000;
+const PUBLIC_TRANSIT_ROUTE_DETAILS_MAX_TIMEOUT_MS = 240_000;
 const ROUTE_RESULTS_IDLE_TIMEOUT_MS = 800;
 // 개발 모드의 중복 effect나 빠른 재시도로 같은 추천 요청이 겹치지 않도록 Promise를 재사용합니다.
 const recommendationPromiseCache = new Map();
 const routeDetailsPromiseCache = new Map();
 // 이전·다음 결과 전환이나 카드 재마운트에서도 같은 DAY 상세를 다시 요청하지 않습니다.
 const routeDetailsResultCache = new Map();
-
-/**
- * DAY 버튼으로 바뀐 카드가 먼저 화면에 그려진 뒤 실제 경로 요청을 시작합니다.
- * 두 번의 animation frame을 사용해 현재 클릭 프레임과 다음 페인트를 모두 양보합니다.
- */
-function scheduleAfterNextPaint(callback) {
-    if (typeof window === 'undefined') {
-        return () => {};
-    }
-
-    if (typeof window.requestAnimationFrame !== 'function') {
-        const timeoutId = window.setTimeout(callback, 0);
-        return () => window.clearTimeout(timeoutId);
-    }
-
-    let secondFrameId = null;
-    const firstFrameId = window.requestAnimationFrame(() => {
-        secondFrameId = window.requestAnimationFrame(callback);
-    });
-
-    return () => {
-        window.cancelAnimationFrame(firstFrameId);
-        if (secondFrameId !== null) {
-            window.cancelAnimationFrame(secondFrameId);
-        }
-    };
-}
 
 /** 브라우저 유휴 시간에 작업을 예약하고 필요하면 실행 전 취소할 수 있게 합니다. */
 function scheduleBrowserIdleTask(callback, timeoutMs = ROUTE_RESULTS_IDLE_TIMEOUT_MS) {
@@ -102,32 +79,49 @@ function scheduleBrowserIdleTask(callback, timeoutMs = ROUTE_RESULTS_IDLE_TIMEOU
         return () => {};
     }
 
-    if (typeof window.requestIdleCallback === 'function') {
-        const idleCallbackId = window.requestIdleCallback(callback, {
-            timeout: timeoutMs,
-        });
+    let idleCallbackId = null;
+    const delayId = window.setTimeout(() => {
+        if (typeof window.requestIdleCallback === 'function') {
+            idleCallbackId = window.requestIdleCallback(callback, {
+                timeout: timeoutMs,
+            });
+            return;
+        }
+        callback();
+    }, timeoutMs);
 
-        return () => {
-            if (typeof window.cancelIdleCallback === 'function') {
-                window.cancelIdleCallback(idleCallbackId);
-            }
-        };
-    }
-
-    const timeoutId = window.setTimeout(callback, 0);
-    return () => window.clearTimeout(timeoutId);
-}
-
-/** 실제 경로 결과 병합처럼 긴급하지 않은 상태 갱신은 브라우저 유휴 시간까지 기다립니다. */
-function waitForBrowserIdle(timeoutMs = ROUTE_RESULTS_IDLE_TIMEOUT_MS) {
-    return new Promise((resolve) => {
-        scheduleBrowserIdleTask(resolve, timeoutMs);
-    });
+    return () => {
+        window.clearTimeout(delayId);
+        if (
+            idleCallbackId != null
+            && typeof window.cancelIdleCallback === 'function'
+        ) {
+            window.cancelIdleCallback(idleCallbackId);
+        }
+    };
 }
 
 /** 재추천 전·후에 optionNo가 반복되므로 저장 선택 상태는 결과 묶음까지 포함해 구분합니다. */
 function getSaveSelectionKey(recommendationKey, optionNo) {
     return `${recommendationKey}:${optionNo}`;
+}
+
+/** 설문 결과와 서버 발급 추천 키를 묶어 저장 여부를 새로고침 뒤에도 식별합니다. */
+function getSavedRecommendationIdentity(resultId, recommendationKey) {
+    const normalizedResultId = Number(resultId);
+    const normalizedRecommendationKey = String(
+        recommendationKey || '',
+    ).trim();
+
+    if (
+        !Number.isInteger(normalizedResultId)
+        || normalizedResultId < 1
+        || !normalizedRecommendationKey
+    ) {
+        return null;
+    }
+
+    return `${normalizedResultId}:${normalizedRecommendationKey}`;
 }
 
 /** 기존 배치 저장 API의 한 번당 최대 3개 제한을 지키면서 최대 6개까지 순서대로 저장합니다. */
@@ -282,20 +276,47 @@ function normalizeOptionStayTimes(option) {
 /** 현재의 3개 옵션 응답과 이전 단일 코스 응답을 화면 공통 구조로 맞춥니다. */
 function normalizeRecommendationResponse(data) {
     if (Array.isArray(data?.courseOptions)) {
+        const normalizedTransportMode = normalizeTransportMode(
+            data.transportMode,
+        );
         const courseOptions = data.courseOptions.map((option) => {
             const normalizedOption = normalizeOptionStayTimes(option);
+            const days = (normalizedOption.days || []).map((day) => {
+                const places = Array.isArray(day?.places) ? day.places : [];
+                const hasEstimatedLeg = places.some((place, index) => (
+                    index > 0 && Boolean(place?.routeEstimated)
+                ));
 
-            return {
+                // 실패·추정 상세 결과를 세션에 저장했더라도 다음 화면 진입에서는
+                // 실제 ODsay 경로를 다시 시도할 수 있도록 완료 표시를 해제합니다.
+                if (hasEstimatedLeg || day?.routeDetailsError) {
+                    return {
+                        ...day,
+                        routeDetailsAttempted: false,
+                    };
+                }
+                return day;
+            });
+            const optionWithNormalizedDays = {
                 ...normalizedOption,
+                days,
                 estimatedTravelTimes: option?.estimatedTravelTimes == null
                     ? Boolean(data.estimatedTravelTimes)
                     : Boolean(option.estimatedTravelTimes),
+            };
+
+            return {
+                ...optionWithNormalizedDays,
+                recommendationKey: deriveRecommendationKey(
+                    optionWithNormalizedDays,
+                    normalizedTransportMode,
+                ),
             };
         });
 
         return {
             ...data,
-            transportMode: normalizeTransportMode(data.transportMode),
+            transportMode: normalizedTransportMode,
             estimatedTravelTimes: Boolean(
                 data.estimatedTravelTimes
                 || courseOptions.some((option) => option.estimatedTravelTimes),
@@ -306,6 +327,9 @@ function normalizeRecommendationResponse(data) {
 
     // 이전 백엔드 응답(단일 저장 코스)도 화면에서 한 개 옵션으로 볼 수 있게 유지합니다.
     if (Array.isArray(data?.days)) {
+        const normalizedTransportMode = normalizeTransportMode(
+            data.transportMode,
+        );
         const normalizedOption = normalizeOptionStayTimes({
             optionNo: 1,
             optionType: 'BALANCED',
@@ -319,13 +343,20 @@ function normalizeRecommendationResponse(data) {
             estimatedTravelTimes: Boolean(data.estimatedTravelTimes),
             days: data.days,
         });
+        const optionWithRecommendationKey = {
+            ...normalizedOption,
+            recommendationKey: deriveRecommendationKey(
+                normalizedOption,
+                normalizedTransportMode,
+            ),
+        };
 
         return {
             resultId: data.resultId ?? null,
             travelCode: data.travelCode ?? null,
-            transportMode: normalizeTransportMode(data.transportMode),
+            transportMode: normalizedTransportMode,
             estimatedTravelTimes: Boolean(data.estimatedTravelTimes),
-            courseOptions: [normalizedOption],
+            courseOptions: [optionWithRecommendationKey],
         };
     }
 
@@ -388,32 +419,73 @@ function requestRecommendationOnce(request) {
     return recommendationPromiseCache.get(cacheKey);
 }
 
-/** 동일 코스·DAY 상세 요청과 완료 결과를 공유하고 자동 재시도 없이 30초에 중단합니다. */
+/** 이동수단과 실제 조회할 인접 구간 수에 맞춰 상세 요청 제한시간을 계산합니다. */
+function getRouteDetailsRequestTimeoutMs(request) {
+    if (normalizeTransportMode(request?.transportMode) !== 'PUBLIC_TRANSIT') {
+        return ROUTE_DETAILS_REQUEST_TIMEOUT_MS;
+    }
+
+    const placeCount = Array.isArray(request?.placeCandidates)
+        ? request.placeCandidates.length
+        : 0;
+    const routeLegCount = Math.max(1, placeCount - 1);
+
+    return Math.min(
+        PUBLIC_TRANSIT_ROUTE_DETAILS_MAX_TIMEOUT_MS,
+        PUBLIC_TRANSIT_ROUTE_DETAILS_BASE_TIMEOUT_MS
+            + (routeLegCount
+                * PUBLIC_TRANSIT_ROUTE_DETAILS_TIMEOUT_PER_LEG_MS),
+    );
+}
+
+function hasEstimatedRouteDetailsResponse(routeDetails) {
+    const resolvedPlaces = Array.isArray(routeDetails?.optimizedPlaces)
+        ? routeDetails.optimizedPlaces
+        : [];
+
+    return Boolean(routeDetails?.estimatedTravelTimes)
+        || resolvedPlaces.some((place, index) => (
+            index > 0 && Boolean(place?.routeEstimated)
+        ));
+}
+
+/** 동일 코스·DAY 상세 요청과 완료 결과를 공유하고 이동수단별 제한 시간까지 기다립니다. */
 function requestRouteDetailsOnce(cacheKey, request) {
     if (routeDetailsResultCache.has(cacheKey)) {
-        return Promise.resolve(routeDetailsResultCache.get(cacheKey));
+        const cachedResult = routeDetailsResultCache.get(cacheKey);
+        if (!hasEstimatedRouteDetailsResponse(cachedResult)) {
+            return Promise.resolve(cachedResult);
+        }
+        routeDetailsResultCache.delete(cacheKey);
     }
 
     if (!routeDetailsPromiseCache.has(cacheKey)) {
         const controller = new AbortController();
+        const timeoutMs = getRouteDetailsRequestTimeoutMs(request);
         let timedOut = false;
         const timeoutId = window.setTimeout(() => {
             timedOut = true;
             controller.abort();
-        }, ROUTE_DETAILS_REQUEST_TIMEOUT_MS);
+        }, timeoutMs);
         const pendingRequest = resolveCourseRouteDetails(request, {
             signal: controller.signal,
         })
             .catch((error) => {
                 if (timedOut || error?.name === 'AbortError') {
                     throw new Error(
-                        '교통편 확인이 30초를 넘겨 중단됐어요.',
+                        `교통편 확인이 ${Math.round(timeoutMs / 1000)}초를 넘겨 중단됐어요.`,
                     );
                 }
                 throw error;
             })
             .then((routeDetails) => {
-                routeDetailsResultCache.set(cacheKey, routeDetails);
+                // 예상값 응답을 캐시하면 ODsay가 복구된 뒤에도 같은 DAY가
+                // 영구적으로 예상값만 재사용되므로 실제 경로 응답만 보관합니다.
+                if (hasEstimatedRouteDetailsResponse(routeDetails)) {
+                    routeDetailsResultCache.delete(cacheKey);
+                } else {
+                    routeDetailsResultCache.set(cacheKey, routeDetails);
+                }
                 return routeDetails;
             })
             .finally(() => {
@@ -621,8 +693,12 @@ function formatMinutes(value) {
 
 /** 모든 코스 카드·지도·비교 패널이 같은 DAY를 바라보도록 첫 일차 번호를 구합니다. */
 function getFirstDayNo(data) {
-    return data?.courseOptions?.find((option) => Array.isArray(option?.days) && option.days.length > 0)
-        ?.days?.[0]?.dayNo ?? 1;
+    const firstDayNo = data?.courseOptions?.find(
+        (option) => Array.isArray(option?.days) && option.days.length > 0,
+    )?.days?.[0]?.dayNo;
+    const normalizedDayNo = Number(firstDayNo);
+
+    return Number.isFinite(normalizedDayNo) ? normalizedDayNo : 1;
 }
 
 /** 결과를 전환할 때 현재 DAY가 있으면 유지하고, 없을 때만 첫 DAY로 보정합니다. */
@@ -640,7 +716,72 @@ function getAvailableDayNo(data, preferredDayNo) {
 /** 옵션에서 현재 선택한 일차를 찾고 없으면 첫 일차를 사용합니다. */
 function getOptionDay(option, activeDayNo) {
     const days = Array.isArray(option?.days) ? option.days : [];
-    return days.find((day) => day?.dayNo === activeDayNo) || days[0] || null;
+    return days.find(
+        (day) => Number(day?.dayNo) === Number(activeDayNo),
+    ) || days[0] || null;
+}
+
+/** 지정한 DAY에 실제 경로 조회가 필요한 옵션이 하나라도 있는지 확인합니다. */
+function hasUnresolvedRoutesForDay(responseData, requestedDayNo) {
+    return (responseData?.courseOptions || []).some((option) => {
+        const day = (option?.days || []).find(
+            (candidate) => Number(candidate?.dayNo) === Number(requestedDayNo),
+        );
+        return Boolean(day && !day.routeDetailsAttempted);
+    });
+}
+
+/**
+ * 현재 DAY 다음 일차부터 아직 실제 경로를 받지 않은 DAY를 찾습니다.
+ * 마지막 DAY까지 준비됐으면 앞쪽의 미완료 DAY로 돌아가 한 번에 하나씩 처리합니다.
+ */
+function getNextUnresolvedDayNo(responseData, activeDayNo) {
+    const orderedDayNos = [
+        ...new Set(
+            (responseData?.courseOptions || []).flatMap((option) => (
+                (option?.days || [])
+                    .map((day) => Number(day?.dayNo))
+                    .filter(Number.isFinite)
+            )),
+        ),
+    ].sort((left, right) => left - right);
+
+    if (orderedDayNos.length <= 1) {
+        return null;
+    }
+
+    const activeIndex = orderedDayNos.findIndex(
+        (dayNo) => dayNo === Number(activeDayNo),
+    );
+    const prioritizedDayNos = activeIndex >= 0
+        ? [
+            ...orderedDayNos.slice(activeIndex + 1),
+            ...orderedDayNos.slice(0, activeIndex),
+        ]
+        : orderedDayNos;
+
+    return prioritizedDayNos.find(
+        (dayNo) => hasUnresolvedRoutesForDay(responseData, dayNo),
+    ) ?? null;
+}
+
+function getPreviousDayHotelOrigin(option, day) {
+    const days = Array.isArray(option?.days) ? option.days : [];
+    const dayIndex = days.findIndex(
+        (candidate) => Number(candidate?.dayNo) === Number(day?.dayNo),
+    );
+
+    if (dayIndex <= 0) {
+        return null;
+    }
+
+    const previousPlaces = Array.isArray(days[dayIndex - 1]?.places)
+        ? days[dayIndex - 1].places
+        : [];
+
+    return [...previousPlaces].reverse().find(
+        (place) => isHotelCategory(place?.category),
+    ) || null;
 }
 
 /** 현재 카드들에 실제로 표시 중인 DAY의 추정 경로 개수만 셉니다. */
@@ -649,15 +790,153 @@ function countEstimatedLegs(courseOptions, activeDayNo) {
         (total, option) => {
             const day = getOptionDay(option, activeDayNo);
             return total + (day?.places || []).filter(
-                (place, index) => index > 0 && Boolean(place.routeEstimated),
+                (place, index) => (
+                    (index > 0 || Boolean(day?.routeOriginPlace))
+                    && Boolean(place.routeEstimated)
+                ),
             ).length;
         },
         0,
     );
 }
 
+/** 경로 상세 후보를 비교할 때 사용하는 카테고리 키입니다. */
+function normalizeRouteCategory(category) {
+    return String(category || '').trim().toUpperCase();
+}
+
+/** 같은 DAY의 원본 후보 풀을 추천 요청에서 다시 찾습니다. */
+function getRouteDailyPlanCandidates(recommendRequest, day) {
+    const dailyPlans = Array.isArray(recommendRequest?.dailyPlans)
+        ? recommendRequest.dailyPlans
+        : [];
+    const dailyPlan = dailyPlans.find(
+        (candidateDay) => candidateDay?.visitDate === day?.visitDate,
+    );
+
+    return Array.isArray(dailyPlan?.placeCandidates)
+        ? dailyPlan.placeCandidates
+        : [];
+}
+
+/**
+ * 현재 추천 결과의 모든 옵션·모든 DAY에서 사용 중인 일반 장소를 모읍니다.
+ * 실제 경로 보정으로 다른 날짜의 코스와 다시 겹치는 부분 롤백을 막기 위해
+ * 같은 날짜뿐 아니라 전체 DAY를 대체 후보 우선순위에 반영합니다.
+ */
+function getReservedRecommendationPlaceIds(response) {
+    const reservedIds = new Set();
+
+    (response?.courseOptions || []).forEach((option) => {
+        (option?.days || []).forEach((optionDay) => {
+            (optionDay?.places || []).forEach((place) => {
+                if (isHotelCategory(place?.category)) return;
+                const placeId = Number(place?.placeId);
+                if (Number.isInteger(placeId)) reservedIds.add(placeId);
+            });
+        });
+    });
+
+    return reservedIds;
+}
+
+/**
+ * 같은 추천 옵션의 다른 DAY에서 이미 사용 중인 일반 장소를 모읍니다.
+ * 실제 경로 보정 후보에서는 이 장소들을 후순위로도 다시 허용하지 않습니다.
+ */
+function getSameOptionOtherDayPlaceIds(option, currentDayNo) {
+    const forbiddenIds = new Set();
+
+    (option?.days || []).forEach((optionDay) => {
+        if (Number(optionDay?.dayNo) === Number(currentDayNo)) return;
+
+        (optionDay?.places || []).forEach((place) => {
+            if (isHotelCategory(place?.category)) return;
+            const placeId = Number(place?.placeId);
+            if (Number.isInteger(placeId)) forbiddenIds.add(placeId);
+        });
+    });
+
+    return forbiddenIds;
+}
+
+/** 장소 ID 기준으로 후보를 중복 제거하며 입력 순서를 유지합니다. */
+function uniqueRouteCandidates(candidates) {
+    const unique = new Map();
+
+    (Array.isArray(candidates) ? candidates : []).forEach((candidate) => {
+        const placeId = Number(candidate?.placeId);
+        if (Number.isInteger(placeId) && !unique.has(placeId)) {
+            unique.set(placeId, candidate);
+        }
+    });
+
+    return [...unique.values()];
+}
+
+/**
+ * 실제 ODsay 경로가 제한을 넘을 때 사용할 같은 날짜·카테고리 대체 후보를 만듭니다.
+ * 원래 후보에 연결된 alternativeCandidates를 먼저 사용하고, 부족하면 같은 DAY 후보 풀로
+ * 보완합니다. 다른 추천 옵션에서 아직 사용하지 않은 장소를 우선합니다.
+ */
+function buildRouteAlternatives(
+    place,
+    dailyCandidates,
+    currentRoutePlaceIds,
+    reservedRecommendationPlaceIds,
+    forbiddenSameOptionOtherDayPlaceIds,
+) {
+    const placeId = Number(place?.placeId);
+    const category = normalizeRouteCategory(place?.category);
+    if (!Number.isInteger(placeId) || !category || isHotelCategory(category)) {
+        return [];
+    }
+
+    const sourceCandidate = dailyCandidates.find(
+        (candidate) => Number(candidate?.placeId) === placeId,
+    );
+    const explicitAlternatives = Array.isArray(
+        sourceCandidate?.alternativeCandidates,
+    )
+        ? sourceCandidate.alternativeCandidates
+        : [];
+    const sameCategoryCandidates = dailyCandidates.filter(
+        (candidate) => (
+            normalizeRouteCategory(candidate?.category) === category
+            && Number(candidate?.placeId) !== placeId
+        ),
+    );
+    const allCandidates = uniqueRouteCandidates([
+        ...explicitAlternatives,
+        ...sameCategoryCandidates,
+    ]).filter((candidate) => (
+        !currentRoutePlaceIds.has(Number(candidate?.placeId))
+        && !forbiddenSameOptionOtherDayPlaceIds.has(
+            Number(candidate?.placeId),
+        )
+    ));
+    const unusedCandidates = allCandidates.filter(
+        (candidate) => !reservedRecommendationPlaceIds.has(Number(candidate?.placeId)),
+    );
+    const alreadyUsedElsewhere = allCandidates.filter(
+        (candidate) => reservedRecommendationPlaceIds.has(Number(candidate?.placeId)),
+    );
+
+    const byRecommendationScore = (left, right) => (
+        (Number(right?.recommendationScore) || 0)
+        - (Number(left?.recommendationScore) || 0)
+    );
+
+    // 같은 옵션의 다른 DAY 장소는 위에서 완전히 제외한다. 다른 옵션에서 사용한
+    // 장소만 기존 코스 간 중복 허용 범위 안에서 후순위 후보로 유지한다.
+    return [
+        ...unusedCandidates.sort(byRecommendationScore),
+        ...alreadyUsedElsewhere.sort(byRecommendationScore),
+    ].slice(0, 8);
+}
+
 /** 추천 응답의 장소 한 건을 고정 순서 경로 조회 입력으로 변환합니다. */
-function toRouteDetailsCandidate(place, visitDate) {
+function toRouteDetailsCandidate(place, visitDate, alternatives = []) {
     return {
         placeId: Number(place.placeId),
         placeName: place.placeName,
@@ -678,7 +957,13 @@ function toRouteDetailsCandidate(place, visitDate) {
         themeShoppingHotplaceYn: place.themeShoppingHotplaceYn || 'N',
         themeNightViewYn: place.themeNightViewYn || 'N',
         themeHotelStayYn: place.themeHotelStayYn || 'N',
-        alternativeCandidates: [],
+        alternativeCandidates: uniqueRouteCandidates(alternatives).map(
+            (alternative) => toRouteDetailsCandidate(
+                alternative,
+                visitDate,
+                [],
+            ),
+        ),
     };
 }
 
@@ -696,6 +981,51 @@ function buildRouteDetailsRequest(
         throw new Error('교통편을 확인할 코스 정보가 없습니다.');
     }
 
+    const previousHotel = getPreviousDayHotelOrigin(option, day);
+    const routePlaces = previousHotel
+        ? [
+            {
+                ...previousHotel,
+                visitDate: day.visitDate,
+            },
+            ...places,
+        ]
+        : places;
+    const dailyCandidates = getRouteDailyPlanCandidates(
+        recommendRequest,
+        day,
+    );
+    const currentRoutePlaceIds = new Set(
+        routePlaces.map((place) => Number(place?.placeId)),
+    );
+    const reservedRecommendationPlaceIds =
+        getReservedRecommendationPlaceIds(response);
+    const forbiddenSameOptionOtherDayPlaceIds =
+        getSameOptionOtherDayPlaceIds(option, day.dayNo);
+    const byRecommendationScore = (left, right) => (
+        (Number(right?.recommendationScore) || 0)
+        - (Number(left?.recommendationScore) || 0)
+    );
+    const remainingDayCandidates = uniqueRouteCandidates(dailyCandidates)
+        .filter((candidate) => (
+            !currentRoutePlaceIds.has(Number(candidate?.placeId))
+            && !forbiddenSameOptionOtherDayPlaceIds.has(
+                Number(candidate?.placeId),
+            )
+        ));
+    const allUnusedDayCandidates = [
+        ...remainingDayCandidates
+            .filter((candidate) => !reservedRecommendationPlaceIds.has(
+                Number(candidate?.placeId),
+            ))
+            .sort(byRecommendationScore),
+        ...remainingDayCandidates
+            .filter((candidate) => reservedRecommendationPlaceIds.has(
+                Number(candidate?.placeId),
+            ))
+            .sort(byRecommendationScore),
+    ].slice(0, 24);
+
     return {
         resultId: response?.resultId ?? null,
         travelCode: response?.travelCode ?? null,
@@ -703,10 +1033,33 @@ function buildRouteDetailsRequest(
         dailyStartTime: response?.dailyStartTime
             ?? recommendRequest?.dailyStartTime
             ?? null,
-        placeCandidates: places.map((place) => (
-            toRouteDetailsCandidate(place, day.visitDate)
-        )),
-        alternativeCandidates: [],
+        placeCandidates: routePlaces.map((place, index) => {
+            const isHotelOrigin = Boolean(previousHotel) && index === 0;
+            const alternatives = isHotelOrigin
+                ? []
+                : buildRouteAlternatives(
+                    place,
+                    dailyCandidates,
+                    currentRoutePlaceIds,
+                    reservedRecommendationPlaceIds,
+                    forbiddenSameOptionOtherDayPlaceIds,
+                );
+
+            return toRouteDetailsCandidate(
+                place,
+                day.visitDate,
+                alternatives,
+            );
+        }),
+        // 중첩 후보가 없는 구버전 데이터도 백엔드에서 같은 날짜·카테고리 후보를
+        // 찾을 수 있도록 DAY 후보 풀을 최상위 호환 필드에도 전달합니다.
+        alternativeCandidates: allUnusedDayCandidates.map(
+            (candidate) => toRouteDetailsCandidate(
+                candidate,
+                day.visitDate,
+                [],
+            ),
+        ),
     };
 }
 
@@ -734,7 +1087,11 @@ function formatClockMinutes(value) {
  * 실제 인접 구간 이동시간을 누적해 카드 아래에 보이는 장소별 도착 시각도 다시 계산합니다.
  * 첫 장소의 기존 시각을 우선해 사용하므로 백엔드 추천 당시의 일정 시작 시각을 유지합니다.
  */
-function recalculateVisitTimes(places, dailyStartTime) {
+function recalculateVisitTimes(
+    places,
+    dailyStartTime,
+    startsFromHiddenHotel = false,
+) {
     if (!Array.isArray(places) || places.length === 0) {
         return [];
     }
@@ -748,7 +1105,7 @@ function recalculateVisitTimes(places, dailyStartTime) {
         ?? 10 * 60;
 
     return places.map((place, index) => {
-        if (index > 0) {
+        if (index > 0 || (index === 0 && startsFromHiddenHotel)) {
             currentMinutes += Math.round(
                 Number(place.travelTimeFromPreviousMinutes) || 0,
             );
@@ -768,6 +1125,91 @@ function recalculateVisitTimes(places, dailyStartTime) {
     });
 }
 
+/** 실제 경로 응답에서 DAY2 이후 숨겨진 출발 숙소를 제외한 표시 장소를 분리합니다. */
+function getVisibleResolvedRoutePlaces(routeDetails, routeOriginPlace = null) {
+    const resolvedPlaces = Array.isArray(routeDetails?.optimizedPlaces)
+        ? routeDetails.optimizedPlaces
+        : [];
+    const routeOriginPlaceId = Number(routeOriginPlace?.placeId);
+    const hasPlannedHotelOrigin = Number.isFinite(routeOriginPlaceId);
+    const responseIncludesHotelOrigin = hasPlannedHotelOrigin
+        && Number(resolvedPlaces[0]?.placeId) === routeOriginPlaceId;
+
+    return {
+        resolvedPlaces,
+        hasPlannedHotelOrigin,
+        responseIncludesHotelOrigin,
+        visibleResolvedPlaces: responseIncludesHotelOrigin
+            ? resolvedPlaces.slice(1)
+            : resolvedPlaces,
+    };
+}
+
+function ordinaryRoutePlaceIds(places) {
+    return new Set(
+        (Array.isArray(places) ? places : [])
+            .filter((place) => !isHotelCategory(place?.category))
+            .map((place) => Number(place?.placeId))
+            .filter(Number.isInteger),
+    );
+}
+
+/**
+ * 실제 경로 보정이 추천 생성 단계의 중복 제한을 다시 깨지 않는지 확인합니다.
+ * 같은 옵션의 다른 DAY는 중복 0개를 유지합니다. 다른 옵션은 도보만 최대
+ * 3곳까지, 대중교통·자동차는 최대 1곳까지 허용하며 하루 구성이 완전히 같은
+ * 경우는 이동수단과 무관하게 끝까지 막습니다.
+ */
+function getRouteDetailOverlapViolation(
+    responseData,
+    currentOptionNo,
+    currentDayNo,
+    visibleResolvedPlaces,
+    transportMode,
+) {
+    const currentIds = ordinaryRoutePlaceIds(visibleResolvedPlaces);
+    if (currentIds.size === 0) return '';
+    const maximumCrossOptionOverlap =
+        getRouteCorrectionOverlapLimit(transportMode);
+
+    for (const option of responseData?.courseOptions || []) {
+        for (const day of option?.days || []) {
+            if (
+                Number(option?.optionNo) === Number(currentOptionNo)
+                && Number(day?.dayNo) === Number(currentDayNo)
+            ) {
+                continue;
+            }
+
+            const otherIds = ordinaryRoutePlaceIds(day?.places);
+            if (otherIds.size === 0) continue;
+            const overlap = [...currentIds].filter((placeId) => (
+                otherIds.has(placeId)
+            ));
+            const sameOption = Number(option?.optionNo)
+                === Number(currentOptionNo);
+
+            if (sameOption && overlap.length > 0) {
+                return `같은 코스의 다른 DAY와 장소 ${overlap.length}곳이 겹쳐 기존 예상 경로를 유지합니다.`;
+            }
+
+            const identicalComposition = currentIds.size === otherIds.size
+                && overlap.length === currentIds.size;
+            if (!sameOption && identicalComposition) {
+                return '다른 추천 코스의 DAY와 장소 구성이 완전히 같아 기존 예상 경로를 유지합니다.';
+            }
+            if (
+                !sameOption
+                && overlap.length > maximumCrossOptionOverlap
+            ) {
+                return `다른 추천 코스의 DAY와 장소 ${overlap.length}곳이 겹쳐 기존 예상 경로를 유지합니다.`;
+            }
+        }
+    }
+
+    return '';
+}
+
 /** 실제 경로 응답을 해당 옵션·DAY에만 합치고 시각·합계·예상 여부를 다시 계산합니다. */
 function mergeRouteDetails(
     currentResponse,
@@ -775,40 +1217,71 @@ function mergeRouteDetails(
     dayNo,
     routeDetails,
     dailyStartTime,
+    routeOriginPlace = null,
     errorMessage = '',
 ) {
     if (!currentResponse) return currentResponse;
 
-    const optimizedByPlaceId = new Map(
-        (routeDetails?.optimizedPlaces || []).map((place) => [
-            Number(place.placeId),
-            place,
-        ]),
-    );
+    const {
+        visibleResolvedPlaces,
+        hasPlannedHotelOrigin,
+        responseIncludesHotelOrigin,
+    } = getVisibleResolvedRoutePlaces(routeDetails, routeOriginPlace);
     const courseOptions = (currentResponse.courseOptions || []).map((option) => {
-        if (option.optionNo !== optionNo) return option;
+        if (Number(option.optionNo) !== Number(optionNo)) return option;
 
         const days = (option.days || []).map((day) => {
-            if (day.dayNo !== dayNo) return day;
+            if (Number(day.dayNo) !== Number(dayNo)) return day;
 
-            const mergedPlaces = (day.places || []).map((place) => {
-                const resolved = optimizedByPlaceId.get(Number(place.placeId));
-                if (!resolved) return place;
+            const originalPlaces = Array.isArray(day.places)
+                ? day.places
+                : [];
+            const originalByPlaceId = new Map(
+                originalPlaces.map((place) => [Number(place.placeId), place]),
+            );
+            const hasResolvedRoute = Array.isArray(
+                routeDetails?.optimizedPlaces,
+            );
+            const mergedPlaces = hasResolvedRoute
+                ? visibleResolvedPlaces.map((resolved, index) => {
+                    const original = originalByPlaceId.get(
+                        Number(resolved.placeId),
+                    ) || originalPlaces[index] || {};
 
-                return {
-                    ...place,
-                    distanceFromPreviousKm: resolved.distanceFromPreviousKm,
-                    travelTimeFromPreviousMinutes:
-                    resolved.travelTimeFromPreviousMinutes,
-                    transitPathType: normalizeTransitPathType(
-                        resolved.transitPathType,
-                    ),
-                    routeEstimated: Boolean(resolved.routeEstimated),
-                };
-            });
+                    return {
+                        ...original,
+                        ...resolved,
+                        transitPathType: normalizeTransitPathType(
+                            resolved.transitPathType,
+                        ),
+                        routeEstimated: Boolean(resolved.routeEstimated),
+                    };
+                })
+                : originalPlaces;
+            const storedOriginalPlaceCount = Number(
+                day.routeOriginalPlaceCount,
+            );
+            const routeOriginalPlaceCount = Number.isFinite(
+                storedOriginalPlaceCount,
+            )
+                ? Math.max(
+                    storedOriginalPlaceCount,
+                    originalPlaces.length,
+                )
+                : originalPlaces.length;
+            const routeRemovedPlaceCount = hasResolvedRoute
+                ? Math.max(
+                    0,
+                    routeOriginalPlaceCount - mergedPlaces.length,
+                )
+                : Math.max(
+                    0,
+                    Number(day.routeRemovedPlaceCount) || 0,
+                );
             const places = recalculateVisitTimes(
                 mergedPlaces,
                 dailyStartTime,
+                responseIncludesHotelOrigin,
             );
             const dailyDistanceKm = sumPlaces(
                 places,
@@ -831,6 +1304,21 @@ function mergeRouteDetails(
                 dailyVisitTimeMinutes,
                 dailyCourseTimeMinutes:
                     dailyVisitTimeMinutes + dailyTravelTimeMinutes,
+                // 실제 대중교통 보정 전·후 개수를 남겨 카드에서 장소가
+                // 줄어든 이유와 제외된 개수를 사용자에게 설명합니다.
+                routeOriginalPlaceCount,
+                routeRemovedPlaceCount,
+                routeOriginPlace: hasPlannedHotelOrigin
+                    ? {
+                        ...routeOriginPlace,
+                        routeOrigin: true,
+                        expectedVisitMinutes: 0,
+                        expectedVisitTimeHHmm: dailyStartTime || '10:00',
+                        visitTime: dailyStartTime || '10:00',
+                        travelTimeFromPreviousMinutes: 0,
+                        distanceFromPreviousKm: 0,
+                    }
+                    : null,
                 routeDetailsAttempted: true,
                 routeDetailsError: errorMessage || null,
             };
@@ -849,7 +1337,7 @@ function mergeRouteDetails(
             0,
         );
 
-        return {
+        const updatedOption = {
             ...option,
             days,
             totalDistanceKm,
@@ -859,6 +1347,14 @@ function mergeRouteDetails(
                 totalVisitTimeMinutes + totalTravelTimeMinutes,
             estimatedTravelTimes: allPlaces.some(
                 (place) => Boolean(place.routeEstimated),
+            ),
+        };
+        return {
+            ...updatedOption,
+            // 실제 경로 보정으로 교체·삭제된 장소를 반영하고 숙소는 제외한다.
+            recommendationKey: deriveRecommendationKey(
+                updatedOption,
+                currentResponse.transportMode,
             ),
         };
     });
@@ -872,18 +1368,177 @@ function mergeRouteDetails(
     };
 }
 
-function getRouteDetailsKey(option, day, transportMode) {
+function getRouteDetailsKey(responseData, option, day, transportMode) {
     const orderedPlaceIds = (day?.places || [])
         .map((place) => Number(place?.placeId) || 'place')
         .join('>');
+    const routeOriginPlace = getPreviousDayHotelOrigin(option, day);
+    const originKey = routeOriginPlace?.placeId
+        ? `hotel-${routeOriginPlace.placeId}`
+        : 'daily-start';
 
     return [
+        responseData?.resultId ?? 'result',
         transportMode || 'transport',
         option?.recommendationKey || option?.optionNo || 'option',
         day?.dayNo || 'day',
         day?.visitDate || 'date',
+        originKey,
         orderedPlaceIds || 'route',
     ].join(':');
+}
+
+
+/**
+ * 요청한 DAY의 세 옵션 경로를 순차 조회해 응답에 합칩니다.
+ * 앞 옵션의 장소 교체 결과를 다음 옵션의 중복 회피에 즉시 반영하고,
+ * 완료된 경로는 Promise·결과 캐시에 남겨 같은 DAY를 다시 열어도 재호출하지 않습니다.
+ */
+async function prepareVisibleRoutesBeforeDisplay(
+    responseData,
+    recommendRequest,
+    requestedDayNo,
+    transportMode,
+    shouldContinue = null,
+) {
+    if (!responseData || !transportMode) {
+        return {
+            response: responseData,
+            buildError: '',
+            interrupted: false,
+        };
+    }
+
+    let preparedResponse = responseData;
+    let firstBuildError = '';
+    let interrupted = false;
+    const optionNos = (responseData.courseOptions || [])
+        .map((option) => option?.optionNo)
+        .filter((optionNo) => optionNo != null);
+
+    // 요청을 미리 전부 만들지 않고 옵션별로 하나씩 생성·병합한다.
+    // 앞 옵션에서 실제 경로 보정으로 교체된 장소도 다음 옵션의 예약 장소에 즉시 반영된다.
+    for (const optionNo of optionNos) {
+        if (
+            typeof shouldContinue === 'function'
+            && !shouldContinue()
+        ) {
+            interrupted = true;
+            break;
+        }
+
+        const option = (preparedResponse.courseOptions || []).find(
+            (candidate) => Number(candidate?.optionNo) === Number(optionNo),
+        );
+        const day = getOptionDay(option, requestedDayNo);
+        if (!day || day.routeDetailsAttempted) {
+            continue;
+        }
+
+        const cacheKey = getRouteDetailsKey(
+            preparedResponse,
+            option,
+            day,
+            transportMode,
+        );
+        const routeOriginPlace = getPreviousDayHotelOrigin(option, day);
+        const expectedPlaceCount = day.places.length
+            + (routeOriginPlace ? 1 : 0);
+        let request;
+
+        try {
+            request = buildRouteDetailsRequest(
+                option,
+                day,
+                preparedResponse,
+                recommendRequest,
+                transportMode,
+            );
+        } catch (error) {
+            const errorMessage = error?.message
+                || '교통편 요청을 만들지 못했습니다.';
+            firstBuildError ||= errorMessage;
+            preparedResponse = mergeRouteDetails(
+                preparedResponse,
+                option.optionNo,
+                day.dayNo,
+                null,
+                preparedResponse?.dailyStartTime
+                    ?? recommendRequest?.dailyStartTime,
+                routeOriginPlace,
+                errorMessage,
+            );
+            continue;
+        }
+
+        try {
+            const routeDetails = await requestRouteDetailsOnce(
+                cacheKey,
+                request,
+            );
+            if (
+                !Array.isArray(routeDetails?.optimizedPlaces)
+                || routeDetails.optimizedPlaces.length === 0
+                || routeDetails.optimizedPlaces.length > expectedPlaceCount
+            ) {
+                throw new Error('교통편 응답의 장소 구성을 확인할 수 없습니다.');
+            }
+
+            const { visibleResolvedPlaces } = getVisibleResolvedRoutePlaces(
+                routeDetails,
+                routeOriginPlace,
+            );
+            const overlapViolation = getRouteDetailOverlapViolation(
+                preparedResponse,
+                option.optionNo,
+                day.dayNo,
+                visibleResolvedPlaces,
+                transportMode,
+            );
+            if (overlapViolation) {
+                preparedResponse = mergeRouteDetails(
+                    preparedResponse,
+                    option.optionNo,
+                    day.dayNo,
+                    null,
+                    preparedResponse?.dailyStartTime
+                        ?? recommendRequest?.dailyStartTime,
+                    routeOriginPlace,
+                    overlapViolation,
+                );
+                continue;
+            }
+
+            preparedResponse = mergeRouteDetails(
+                preparedResponse,
+                option.optionNo,
+                day.dayNo,
+                routeDetails,
+                preparedResponse?.dailyStartTime
+                    ?? recommendRequest?.dailyStartTime,
+                routeOriginPlace,
+                '',
+            );
+        } catch (error) {
+            preparedResponse = mergeRouteDetails(
+                preparedResponse,
+                option.optionNo,
+                day.dayNo,
+                null,
+                preparedResponse?.dailyStartTime
+                    ?? recommendRequest?.dailyStartTime,
+                routeOriginPlace,
+                error?.message
+                    || '교통편을 일시적으로 확인할 수 없습니다.',
+            );
+        }
+    }
+
+    return {
+        response: preparedResponse,
+        buildError: firstBuildError,
+        interrupted,
+    };
 }
 
 function getCourseTip(transport, travelCode) {
@@ -894,7 +1549,14 @@ function getCourseTip(transport, travelCode) {
     return transport ? `${transport.tip} ${densityTip}` : densityTip;
 }
 
-/** 사용자가 고른 옵션에서 COURSE와 COURSE_DETAILS 저장에 필요한 값만 추립니다. */
+/**
+ * 사용자가 고른 옵션에서 COURSE와 COURSE_DETAILS 저장에 필요한 값만 추립니다.
+ *
+ * <p>DAY 2 이후 화면은 전날 숙소를 지도용 출발점(H)으로만 덧붙이기 때문에
+ * 실제 장소의 표시 순서가 2부터 시작할 수 있다. 출발 숙소는 저장 장소가
+ * 아니므로, 저장 요청에서는 날짜별 실제 장소를 다시 1부터 연속 번호로
+ * 정규화하고 새 첫 장소의 이전 구간 값도 비운다.</p>
+ */
 function buildSaveRequest(option, response, profile, travelCode, transportMode) {
     if (!transportMode) {
         throw new Error('추천 결과의 이동수단을 확인할 수 없습니다. 다시 추천받아 주세요.');
@@ -902,18 +1564,32 @@ function buildSaveRequest(option, response, profile, travelCode, transportMode) 
 
     // 구간별 경로 종류도 도착 장소에 귀속된 값이므로 거리·시간과 함께 저장 요청에 유지합니다.
     const places = (option.days || []).flatMap((day) => (
-        (day.places || []).map((place, index) => ({
-            placeId: place.placeId,
-            category: place.category,
-            visitDate: place.visitDate || day.visitDate,
-            visitOrder: place.visitOrder ?? index + 1,
-            visitTime: place.visitTime || place.expectedVisitTimeHHmm || null,
-            expectedVisitMinutes: Number(place.expectedVisitMinutes) || 0,
-            distanceFromPreviousKm: Number(place.distanceFromPreviousKm) || 0,
-            travelTimeFromPreviousMinutes: Number(place.travelTimeFromPreviousMinutes) || 0,
-            transitPathType: normalizeTransitPathType(place.transitPathType),
-            routeEstimated: Boolean(place.routeEstimated),
-        }))
+        (day.places || [])
+            .filter((place) => !place?.routeOrigin)
+            .map((place, index) => {
+                const isFirstSavedPlace = index === 0;
+
+                return {
+                    placeId: place.placeId,
+                    category: place.category,
+                    visitDate: place.visitDate || day.visitDate,
+                    visitOrder: index + 1,
+                    visitTime: place.visitTime || place.expectedVisitTimeHHmm || null,
+                    expectedVisitMinutes: Number(place.expectedVisitMinutes) || 0,
+                    distanceFromPreviousKm: isFirstSavedPlace
+                        ? 0
+                        : Number(place.distanceFromPreviousKm) || 0,
+                    travelTimeFromPreviousMinutes: isFirstSavedPlace
+                        ? 0
+                        : Number(place.travelTimeFromPreviousMinutes) || 0,
+                    transitPathType: isFirstSavedPlace
+                        ? null
+                        : normalizeTransitPathType(place.transitPathType),
+                    routeEstimated: isFirstSavedPlace
+                        ? false
+                        : Boolean(place.routeEstimated),
+                };
+            })
     ));
 
     return {
@@ -1014,6 +1690,7 @@ function ComparisonPanel({ options, selectedCourseKeys, activeDayNo, onRemove, o
 function CourseRecommendPage() {
     const [initialState] = useState(getInitialRecommendationPageState);
     const [response, setResponse] = useState(initialState.response);
+    const responseRef = useRef(initialState.response);
     const [status, setStatus] = useState(initialState.status);
     const [source, setSource] = useState(initialState.source);
     const [requestError, setRequestError] = useState('');
@@ -1026,8 +1703,27 @@ function CourseRecommendPage() {
     const [notice, setNotice] = useState(null);
     const [recommendRequest, setRecommendRequest] = useState(initialState.request);
     const [isRecommendingAgain, setIsRecommendingAgain] = useState(false);
-    const routeDetailsInFlightKeysRef = useRef(new Set());
+    // 최초 추천·재추천은 현재 DAY의 실제 경로 상세까지 합쳐진 뒤 로딩창을 닫습니다.
+    const [isPreparingVisibleRoutes, setIsPreparingVisibleRoutes] = useState(() => {
+        if (initialState.status === 'loading') {
+            return true;
+        }
+        if (initialState.status !== 'success' || initialState.source === 'preview') {
+            return false;
+        }
+
+        const initialDayNo = getFirstDayNo(initialState.response);
+        return (initialState.response?.courseOptions || []).some((option) => {
+            const day = getOptionDay(option, initialDayNo);
+            return Boolean(day && !day.routeDetailsAttempted);
+        });
+    });
+    const [pendingDayNo, setPendingDayNo] = useState(null);
+    const dayRouteRequestRef = useRef(null);
+    const queuedDayActivationRef = useRef(null);
+    const foregroundRoutePriorityRef = useRef(false);
     const pageMountedRef = useRef(true);
+    const [routePreparationRevision, setRoutePreparationRevision] = useState(0);
     const [activeDayNo, setActiveDayNo] = useState(() => getFirstDayNo(initialState.response));
     const [previousRecommendation, setPreviousRecommendation] = useState(() => (
         initialState.history?.previous || (initialState.response
@@ -1064,6 +1760,21 @@ function CourseRecommendPage() {
                 : nextRecommendation,
         }] : []),
     ].filter(({ entry }) => Array.isArray(entry?.response?.courseOptions));
+    const savedStatusTargetJson = JSON.stringify(
+        saveRecommendationEntries.flatMap(({ key, entry }) => (
+            entry.response.courseOptions.flatMap((option) => {
+                const identity = getSavedRecommendationIdentity(
+                    entry.response.resultId,
+                    option.recommendationKey,
+                );
+
+                return identity ? [{
+                    selectionKey: getSaveSelectionKey(key, option.optionNo),
+                    identity,
+                }] : [];
+            })
+        )),
+    );
     const availableSaveCourseCount = saveRecommendationEntries.reduce(
         (count, { entry }) => count + entry.response.courseOptions.length,
         0,
@@ -1090,21 +1801,29 @@ function CourseRecommendPage() {
     const hasEstimatedTravelTimes = estimatedLegCount > 0;
     const focusedOption = options.find((option) => option.optionNo === focusedOptionNo) || options[0];
 
+    /** 비동기 경로 조회가 화면 전환 뒤의 응답을 덮어쓰지 않도록 최신 응답도 함께 기록합니다. */
+    const updateResponse = useCallback((nextResponse) => {
+        responseRef.current = nextResponse;
+        setResponse(nextResponse);
+    }, []);
+
     const requestRecommendation = useCallback(async () => {
         const request = recommendRequest
             || window.history.state?.courseRecommendRequest
             || readStoredObject([COURSE_RECOMMEND_REQUEST_KEY, 'courseRecommendRequest']);
 
         if (!request) {
-            setResponse(recommendationPreview);
+            updateResponse(recommendationPreview);
             setSource('preview');
             setStatus('success');
             setRequestError('');
+            setIsPreparingVisibleRoutes(false);
             return;
         }
 
         setStatus('loading');
         setRequestError('');
+        setIsPreparingVisibleRoutes(true);
 
         try {
             const data = normalizeRecommendationResponse(await requestRecommendationOnce(request));
@@ -1113,21 +1832,75 @@ function CourseRecommendPage() {
                 throw new Error('추천 결과 형식을 확인할 수 없습니다.');
             }
 
-            sessionStorage.setItem(COURSE_RECOMMEND_RESPONSE_KEY, JSON.stringify(data));
+            const hasPlaces = hasRecommendationPlaces(data);
+            if (!hasPlaces) {
+                sessionStorage.setItem(
+                    COURSE_RECOMMEND_RESPONSE_KEY,
+                    JSON.stringify(data),
+                );
+                sessionStorage.removeItem(COURSE_RECOMMEND_HISTORY_KEY);
+                updateResponse(data);
+                setSource('api');
+                setFocusedOptionNo(data.courseOptions[0]?.optionNo ?? null);
+                setActiveDayNo(getFirstDayNo(data));
+                setPreviousRecommendation({
+                    response: data,
+                    request,
+                    source: 'api',
+                });
+                setNextRecommendation(null);
+                setShowingNextRecommendation(false);
+                setStatus('empty');
+                setIsPreparingVisibleRoutes(false);
+                return;
+            }
+
+            const resolvedTransportMode = resolveTransportMode(
+                data?.transportMode,
+                request?.transportMode,
+            );
+            const initialDayNo = getFirstDayNo(data);
+            const preparedResult = await prepareVisibleRoutesBeforeDisplay(
+                data,
+                request,
+                initialDayNo,
+                resolvedTransportMode,
+            );
+            const preparedData = preparedResult.response;
+
+            sessionStorage.setItem(
+                COURSE_RECOMMEND_RESPONSE_KEY,
+                JSON.stringify(preparedData),
+            );
             sessionStorage.removeItem(COURSE_RECOMMEND_HISTORY_KEY);
-            setResponse(data);
+            updateResponse(preparedData);
             setSource('api');
-            setFocusedOptionNo(data.courseOptions[0]?.optionNo ?? null);
-            setActiveDayNo(getFirstDayNo(data));
-            setPreviousRecommendation({ response: data, request, source: 'api' });
+            setFocusedOptionNo(
+                preparedData.courseOptions[0]?.optionNo ?? null,
+            );
+            setActiveDayNo(initialDayNo);
+            setPreviousRecommendation({
+                response: preparedData,
+                request,
+                source: 'api',
+            });
             setNextRecommendation(null);
             setShowingNextRecommendation(false);
-            setStatus(hasRecommendationPlaces(data) ? 'success' : 'empty');
+            setStatus('success');
+            setIsPreparingVisibleRoutes(false);
+
+            if (preparedResult.buildError) {
+                setNotice({
+                    tone: 'error',
+                    message: preparedResult.buildError,
+                });
+            }
         } catch (error) {
             setStatus('error');
             setRequestError(error?.message || '추천 코스를 불러오지 못했습니다.');
+            setIsPreparingVisibleRoutes(false);
         }
-    }, [recommendRequest]);
+    }, [recommendRequest, updateResponse]);
 
     // 추천 요청 데이터가 앞 단계에서 전달된 경우에만 백엔드 추천 API를 실행합니다.
     useEffect(() => {
@@ -1172,6 +1945,63 @@ function CourseRecommendPage() {
         }, 1_200);
     }, [response, source, status]);
 
+    /**
+     * 내 코스 목록의 resultId·recommendationKey를 현재 추천 옵션과 대조해
+     * 새로고침하거나 이전·다음 추천을 전환해도 저장됨 상태를 복원합니다.
+     */
+    useEffect(() => {
+        const targets = JSON.parse(savedStatusTargetJson);
+
+        if (!profile.memberId || targets.length === 0) {
+            setSavedCourseIdsBySelectionKey({});
+            return undefined;
+        }
+
+        const controller = new AbortController();
+
+        getMyCourses(profile.memberId, { signal: controller.signal })
+            .then((myCoursesResponse) => {
+                const savedCourseIdByIdentity = new Map(
+                    normalizeMyCourseList(myCoursesResponse)
+                        .map((savedCourse) => [
+                            getSavedRecommendationIdentity(
+                                savedCourse.resultId,
+                                savedCourse.recommendationKey,
+                            ),
+                            savedCourse.courseId,
+                        ])
+                        .filter(([identity, savedCourseId]) => (
+                            identity
+                            && Number.isInteger(Number(savedCourseId))
+                            && Number(savedCourseId) > 0
+                        )),
+                );
+                const nextSavedCourseIds = {};
+
+                targets.forEach(({ selectionKey, identity }) => {
+                    const savedCourseId = Number(
+                        savedCourseIdByIdentity.get(identity),
+                    );
+                    if (Number.isInteger(savedCourseId) && savedCourseId > 0) {
+                        nextSavedCourseIds[selectionKey] = savedCourseId;
+                    }
+                });
+
+                setSavedCourseIdsBySelectionKey(nextSavedCourseIds);
+                setSelectedSaveCourseKeys((previous) => previous.filter(
+                    (selectionKey) => !nextSavedCourseIds[selectionKey],
+                ));
+            })
+            .catch((error) => {
+                if (error?.name !== 'AbortError') {
+                    // 저장 여부 조회 실패만으로 추천 결과 화면을 막지는 않습니다.
+                    setSavedCourseIdsBySelectionKey({});
+                }
+            });
+
+        return () => controller.abort();
+    }, [profile.memberId, savedStatusTargetJson]);
+
     const toggleCompare = (comparisonKey) => {
         setComparedCourseKeys((previous) => (
             previous.includes(comparisonKey)
@@ -1181,187 +2011,299 @@ function CourseRecommendPage() {
     };
 
     /**
-     * 현재 DAY의 세 옵션은 예상값으로 먼저 표시하고 실제 경로는 동시에 조회합니다.
-     * 각 응답이 도착할 때마다 화면을 다시 그리지 않고 모두 끝난 뒤 한 번만 합칩니다.
+     * 대상 DAY의 세 옵션 경로를 순차 조회해 합칩니다.
+     * 사용자가 누른 DAY는 준비 후 전환하고, 백그라운드 선조회는 현재 화면을 막지 않습니다.
      */
-    const requestVisibleRouteDetails = useEffectEvent(async (requestedDayNo) => {
+    const prepareDayBeforeDisplay = useCallback(async (
+        requestedDayNo,
+        activateAfterLoad = false,
+        backgroundPrefetch = false,
+    ) => {
+        if (status !== 'success' || !response) {
+            return;
+        }
+
+        const availableDayNo = getAvailableDayNo(response, requestedDayNo);
+        const shouldResolveRoutes = source !== 'preview'
+            && Boolean(transportMode)
+            && hasUnresolvedRoutesForDay(response, availableDayNo);
+
+        if (!shouldResolveRoutes) {
+            if (activateAfterLoad) {
+                if (
+                    Number(queuedDayActivationRef.current)
+                    === Number(availableDayNo)
+                ) {
+                    queuedDayActivationRef.current = null;
+                }
+                setActiveDayNo(availableDayNo);
+            }
+            if (!backgroundPrefetch) {
+                setPendingDayNo(null);
+                setIsPreparingVisibleRoutes(false);
+            }
+            return;
+        }
+
+        if (activateAfterLoad) {
+            queuedDayActivationRef.current = availableDayNo;
+            setPendingDayNo(availableDayNo);
+            setIsPreparingVisibleRoutes(true);
+        }
+
+        if (dayRouteRequestRef.current) {
+            return;
+        }
+
+        const requestToken = Symbol(`day-${availableDayNo}`);
+        const responseAtRequestStart = response;
+        let resolveCompletion;
+        const completion = new Promise((resolve) => {
+            resolveCompletion = resolve;
+        });
+        dayRouteRequestRef.current = {
+            token: requestToken,
+            dayNo: availableDayNo,
+            backgroundPrefetch,
+            completion,
+        };
+
+        if (!backgroundPrefetch) {
+            setPendingDayNo(availableDayNo);
+            setIsPreparingVisibleRoutes(true);
+        }
+
+        try {
+            const preparedResult = await prepareVisibleRoutesBeforeDisplay(
+                response,
+                recommendRequest,
+                availableDayNo,
+                transportMode,
+                backgroundPrefetch
+                    ? () => {
+                        const queuedDay = queuedDayActivationRef.current;
+                        if (queuedDay != null) {
+                            // 사용자가 지금 선조회 중인 DAY를 눌렀다면
+                            // 진행 중 요청을 그대로 전면 요청으로 승격합니다.
+                            return Number(queuedDay)
+                                === Number(availableDayNo);
+                        }
+
+                        // 재추천이 시작되면 현재 옵션까지만 마치고
+                        // 남은 백그라운드 옵션은 다음 유휴 시간으로 미룹니다.
+                        return !foregroundRoutePriorityRef.current;
+                    }
+                    : null,
+            );
+
+            if (
+                !pageMountedRef.current
+                || dayRouteRequestRef.current?.token !== requestToken
+                || responseRef.current !== responseAtRequestStart
+            ) {
+                return;
+            }
+
+            const preparedResponse = preparedResult.response;
+            const queuedDayNo = Number(queuedDayActivationRef.current);
+            const shouldActivatePreparedDay = Number.isFinite(queuedDayNo)
+                && queuedDayNo === Number(availableDayNo);
+            const preparedEntry = {
+                response: preparedResponse,
+                request: recommendRequest,
+                source,
+            };
+            let updatedPreviousRecommendation = previousRecommendation;
+            let updatedNextRecommendation = nextRecommendation;
+
+            if (activeRecommendationKey === 'next') {
+                updatedNextRecommendation = preparedEntry;
+                setNextRecommendation(preparedEntry);
+            } else {
+                updatedPreviousRecommendation = preparedEntry;
+                setPreviousRecommendation(preparedEntry);
+            }
+
+            updateResponse(preparedResponse);
+            if (shouldActivatePreparedDay) {
+                queuedDayActivationRef.current = null;
+                setActiveDayNo(availableDayNo);
+            }
+            if (
+                shouldActivatePreparedDay
+                || (!backgroundPrefetch && queuedDayActivationRef.current == null)
+            ) {
+                setPendingDayNo(null);
+                setIsPreparingVisibleRoutes(false);
+            }
+
+            sessionStorage.setItem(
+                COURSE_RECOMMEND_RESPONSE_KEY,
+                JSON.stringify(preparedResponse),
+            );
+            persistRecommendationHistory(
+                updatedPreviousRecommendation,
+                updatedNextRecommendation,
+                showingNextRecommendation,
+            );
+
+            if (
+                preparedResult.buildError
+                && (!backgroundPrefetch || shouldActivatePreparedDay)
+            ) {
+                setNotice({
+                    tone: 'error',
+                    message: preparedResult.buildError,
+                });
+            }
+        } catch (error) {
+            if (
+                pageMountedRef.current
+                && dayRouteRequestRef.current?.token === requestToken
+            ) {
+                const queuedDayNo = Number(queuedDayActivationRef.current);
+                const failedRequestedDay = Number.isFinite(queuedDayNo)
+                    && queuedDayNo === Number(availableDayNo);
+
+                if (failedRequestedDay) {
+                    queuedDayActivationRef.current = null;
+                }
+                if (
+                    failedRequestedDay
+                    || (!backgroundPrefetch && queuedDayActivationRef.current == null)
+                ) {
+                    setPendingDayNo(null);
+                    setIsPreparingVisibleRoutes(false);
+                }
+                if (!backgroundPrefetch || failedRequestedDay) {
+                    setNotice({
+                        tone: 'error',
+                        message: error?.message
+                            || `DAY ${availableDayNo}의 교통편을 확인하지 못했습니다.`,
+                    });
+                }
+            }
+        } finally {
+            if (dayRouteRequestRef.current?.token === requestToken) {
+                dayRouteRequestRef.current = null;
+            }
+            resolveCompletion();
+            if (pageMountedRef.current) {
+                setRoutePreparationRevision((current) => current + 1);
+            }
+        }
+    }, [
+        activeRecommendationKey,
+        nextRecommendation,
+        previousRecommendation,
+        recommendRequest,
+        response,
+        showingNextRecommendation,
+        source,
+        status,
+        transportMode,
+        updateResponse,
+    ]);
+
+    /** 이전 저장본에서 현재 DAY 경로가 비어 있을 때도 화면을 보여주기 전에 한 번만 준비합니다. */
+    useEffect(() => {
         if (
             status !== 'success'
-            || source === 'preview'
-            || !transportMode
+            || pendingDayNo !== null
+            || dayRouteRequestRef.current
         ) {
             return;
         }
 
-        const visibleOptions = Array.isArray(response?.courseOptions)
-            ? response.courseOptions
-            : [];
-        const jobs = visibleOptions.flatMap((option) => {
-            const day = getOptionDay(option, requestedDayNo);
-            if (!day || day.routeDetailsAttempted) {
-                return [];
+        if (
+            source === 'preview'
+            || !transportMode
+            || !hasUnresolvedRoutesForDay(response, activeDayNo)
+        ) {
+            if (isPreparingVisibleRoutes) {
+                setIsPreparingVisibleRoutes(false);
             }
-
-            const cacheKey = getRouteDetailsKey(option, day, transportMode);
-            if (routeDetailsInFlightKeysRef.current.has(cacheKey)) {
-                return [];
-            }
-
-            try {
-                return [{
-                    optionNo: option.optionNo,
-                    dayNo: day.dayNo,
-                    expectedPlaceCount: day.places.length,
-                    cacheKey,
-                    request: buildRouteDetailsRequest(
-                        option,
-                        day,
-                        response,
-                        recommendRequest,
-                        transportMode,
-                    ),
-                    buildError: null,
-                }];
-            } catch (error) {
-                return [{
-                    optionNo: option.optionNo,
-                    dayNo: day.dayNo,
-                    expectedPlaceCount: day.places.length,
-                    cacheKey,
-                    request: null,
-                    buildError: error?.message
-                        || '교통편 요청을 만들지 못했습니다.',
-                }];
-            }
-        });
-
-        if (jobs.length === 0) {
             return;
         }
 
-        jobs.forEach((job) => {
-            routeDetailsInFlightKeysRef.current.add(job.cacheKey);
-        });
-
-        try {
-            const results = await Promise.all(jobs.map(async (job) => {
-                if (job.buildError) {
-                    return {
-                        ...job,
-                        routeDetails: null,
-                        errorMessage: job.buildError,
-                    };
-                }
-
-                try {
-                    const routeDetails = await requestRouteDetailsOnce(
-                        job.cacheKey,
-                        job.request,
-                    );
-                    if (
-                        !Array.isArray(routeDetails?.optimizedPlaces)
-                        || routeDetails.optimizedPlaces.length
-                            !== job.expectedPlaceCount
-                    ) {
-                        throw new Error(
-                            '교통편 응답의 장소 수가 일치하지 않습니다.',
-                        );
-                    }
-
-                    return {
-                        ...job,
-                        routeDetails,
-                        errorMessage: '',
-                    };
-                } catch (error) {
-                    return {
-                        ...job,
-                        routeDetails: null,
-                        errorMessage: error?.message
-                            || '교통편을 일시적으로 확인할 수 없습니다.',
-                    };
-                }
-            }));
-
-            await waitForBrowserIdle();
-            if (!pageMountedRef.current) {
-                return;
-            }
-
-            startTransition(() => {
-                setResponse((currentResponse) => {
-                    let nextResponse = currentResponse;
-                    let hasMergedResult = false;
-
-                    results.forEach((result) => {
-                        const currentOption = nextResponse?.courseOptions?.find(
-                            (candidate) => candidate.optionNo === result.optionNo,
-                        );
-                        const currentDay = getOptionDay(
-                            currentOption,
-                            result.dayNo,
-                        );
-
-                        if (
-                            !currentDay
-                            || getRouteDetailsKey(
-                                currentOption,
-                                currentDay,
-                                transportMode,
-                            ) !== result.cacheKey
-                        ) {
-                            return;
-                        }
-
-                        nextResponse = mergeRouteDetails(
-                            nextResponse,
-                            result.optionNo,
-                            result.dayNo,
-                            result.routeDetails,
-                            nextResponse?.dailyStartTime
-                                ?? recommendRequest?.dailyStartTime,
-                            result.errorMessage,
-                        );
-                        hasMergedResult = true;
-                    });
-
-                    return hasMergedResult ? nextResponse : currentResponse;
-                });
-            });
-
-            const buildFailure = results.find((result) => result.buildError);
-            if (buildFailure) {
-                setNotice({
-                    tone: 'error',
-                    message: buildFailure.errorMessage,
-                });
-            }
-        } finally {
-            jobs.forEach((job) => {
-                routeDetailsInFlightKeysRef.current.delete(job.cacheKey);
-            });
-        }
-    });
-
-    /**
-     * 접힌 카드에도 장소별 시간이 이미 노출되므로 현재 선택된 DAY는 세 옵션 모두
-     * 자동 보정합니다. 다른 DAY는 사용자가 탭을 눌렀을 때만 같은 방식으로 조회합니다.
-     */
-    useEffect(() => {
-        if (status !== 'success' || source === 'preview' || !transportMode) {
-            return undefined;
-        }
-
-        return scheduleAfterNextPaint(() => {
-            void requestVisibleRouteDetails(activeDayNo);
-        });
+        void prepareDayBeforeDisplay(activeDayNo);
     }, [
         activeDayNo,
         activeRecommendationKey,
+        isPreparingVisibleRoutes,
+        pendingDayNo,
+        prepareDayBeforeDisplay,
+        response,
         source,
         status,
         transportMode,
     ]);
+
+    /**
+     * 현재 화면이 열린 뒤 다음 DAY부터 실제 경로를 하나씩 미리 준비합니다.
+     * 사용자가 준비 중인 DAY를 누르면 해당 요청을 재사용하고, 다른 DAY를 누르면 다음 순서로 우선 처리합니다.
+     */
+    useEffect(() => {
+        if (
+            status !== 'success'
+            || !response
+            || source === 'preview'
+            || !transportMode
+            || dayRouteRequestRef.current
+        ) {
+            return undefined;
+        }
+
+        if (queuedDayActivationRef.current != null) {
+            void prepareDayBeforeDisplay(
+                queuedDayActivationRef.current,
+                true,
+            );
+            return undefined;
+        }
+
+        if (isPreparingVisibleRoutes || isRecommendingAgain) {
+            return undefined;
+        }
+
+        const nextDayNo = getNextUnresolvedDayNo(response, activeDayNo);
+        if (nextDayNo == null) {
+            return undefined;
+        }
+
+        return scheduleBrowserIdleTask(() => {
+            if (
+                !pageMountedRef.current
+                || dayRouteRequestRef.current
+                || queuedDayActivationRef.current != null
+                || responseRef.current !== response
+            ) {
+                return;
+            }
+
+            void prepareDayBeforeDisplay(nextDayNo, false, true);
+        });
+    }, [
+        activeDayNo,
+        activeRecommendationKey,
+        isPreparingVisibleRoutes,
+        isRecommendingAgain,
+        prepareDayBeforeDisplay,
+        response,
+        routePreparationRevision,
+        source,
+        status,
+        transportMode,
+    ]);
+
+    const handleActiveDayChange = (requestedDayNo) => {
+        const availableDayNo = getAvailableDayNo(response, requestedDayNo);
+        if (availableDayNo === activeDayNo) {
+            return;
+        }
+
+        void prepareDayBeforeDisplay(availableDayNo, true);
+    };
 
     const handleRecommendAgain = async () => {
         // 도보는 짧은 이동시간과 코스 간 중복 제한을 동시에 만족하는 추가 후보가 부족해
@@ -1404,7 +2346,21 @@ function CourseRecommendPage() {
             return;
         }
 
+        /*
+         * 재추천 API와 실제 경로 조회가 끝날 때까지 우선 DAY를 고정합니다.
+         * 기존 DAY 전환이 아직 진행 중이면 activeDayNo는 이전 DAY일 수 있으므로,
+         * 사용자가 마지막으로 누른 대기 DAY를 우선합니다.
+         */
+        const preferredDayNo = getAvailableDayNo(
+            responseRef.current || response,
+            queuedDayActivationRef.current ?? activeDayNo,
+        );
+
+        queuedDayActivationRef.current = null;
+        foregroundRoutePriorityRef.current = true;
+        setPendingDayNo(null);
         setIsRecommendingAgain(true);
+        setIsPreparingVisibleRoutes(true);
         setNotice(null);
 
         try {
@@ -1428,38 +2384,63 @@ function CourseRecommendPage() {
                 );
             }
 
+            const nextActiveDayNo = getAvailableDayNo(data, preferredDayNo);
+            const nextTransportMode = resolveTransportMode(
+                data?.transportMode,
+                nextRequest?.transportMode,
+            );
+            const activeBackgroundRequest = dayRouteRequestRef.current;
+            if (activeBackgroundRequest?.backgroundPrefetch) {
+                // 진행 중인 옵션 하나가 끝나는 즉시 백그라운드 작업이 양보합니다.
+                // 그 완료를 확인한 뒤 새 추천의 현재 DAY를 최우선으로 조회합니다.
+                await activeBackgroundRequest.completion;
+            }
+            const preparedResult = await prepareVisibleRoutesBeforeDisplay(
+                data,
+                nextRequest,
+                nextActiveDayNo,
+                nextTransportMode,
+            );
+            const preparedData = preparedResult.response;
+
             sessionStorage.setItem(COURSE_RECOMMEND_REQUEST_KEY, JSON.stringify(nextRequest));
-            sessionStorage.setItem(COURSE_RECOMMEND_RESPONSE_KEY, JSON.stringify(data));
+            sessionStorage.setItem(COURSE_RECOMMEND_RESPONSE_KEY, JSON.stringify(preparedData));
             const previousEntry = {
-                response,
+                response: responseRef.current || response,
                 request,
                 source,
             };
-            const nextEntry = { response: data, request: nextRequest, source: 'api' };
+            const nextEntry = { response: preparedData, request: nextRequest, source: 'api' };
             setPreviousRecommendation(previousEntry);
             setNextRecommendation(nextEntry);
             setShowingNextRecommendation(true);
             persistRecommendationHistory(previousEntry, nextEntry, true);
             setRecommendRequest(nextRequest);
-            setResponse(data);
+            updateResponse(preparedData);
             setSource('api');
             setStatus('success');
             setRequestError('');
-            setFocusedOptionNo(data.courseOptions[0]?.optionNo ?? null);
-            setActiveDayNo((currentDayNo) => (
-                getAvailableDayNo(data, currentDayNo)
-            ));
+            setFocusedOptionNo(preparedData.courseOptions[0]?.optionNo ?? null);
+            setActiveDayNo(nextActiveDayNo);
             setLastSavedCourseIds([]);
-            setNotice({
-                tone: 'success',
-                message: '같은 취향을 바탕으로 다른 추천 코스를 새로 준비했어요.',
-            });
+            setIsPreparingVisibleRoutes(false);
+            setNotice(preparedResult.buildError
+                ? {
+                    tone: 'error',
+                    message: preparedResult.buildError,
+                }
+                : {
+                    tone: 'success',
+                    message: '같은 취향을 바탕으로 다른 추천 코스와 현재 DAY의 실제 이동시간을 준비했어요.',
+                });
         } catch (error) {
+            setIsPreparingVisibleRoutes(false);
             setNotice({
                 tone: 'error',
                 message: error?.message || '다른 추천 코스를 만들지 못했습니다. 잠시 후 다시 시도해주세요.',
             });
         } finally {
+            foregroundRoutePriorityRef.current = false;
             setIsRecommendingAgain(false);
         }
     };
@@ -1482,7 +2463,10 @@ function CourseRecommendPage() {
 
         setPreviousRecommendation(updatedPreviousRecommendation);
         setNextRecommendation(updatedNextRecommendation);
-        setResponse(entry.response);
+        queuedDayActivationRef.current = null;
+        setPendingDayNo(null);
+        setIsPreparingVisibleRoutes(false);
+        updateResponse(entry.response);
         setRecommendRequest(entry.request);
         setSource(entry.source || 'api');
         setShowingNextRecommendation(showNext);
@@ -1601,12 +2585,7 @@ function CourseRecommendPage() {
             }));
             setLastSavedCourseIds(savedCourses.map((savedCourse) => savedCourse.courseId));
             setSelectedSaveCourseKeys([]);
-            setNotice({
-                tone: 'success',
-                message: selectedCourses.length === 1
-                    ? '선택한 코스를 내 코스에 담았습니다.'
-                    : `선택한 코스 ${selectedCourses.length}개를 각각 내 코스에 담았습니다.`,
-            });
+            window.location.href = '/mypage/courses';
         } catch (error) {
             const partiallySavedCourses = Array.isArray(error?.savedCourses)
                 ? error.savedCourses
@@ -1656,13 +2635,29 @@ function CourseRecommendPage() {
         });
     };
 
-    const isRecommendationLoading = status === 'loading' || isRecommendingAgain;
-    const loadingTitle = isRecommendingAgain
-        ? '새로운 추천 코스를 만들고 있어요'
-        : '맞춤 추천 코스를 만들고 있어요';
-    const loadingDescription = isRecommendingAgain
-        ? '기존 코스와 겹치지 않도록 다른 장소 조합과 이동 순서를 계산하고 있어요.'
-        : '취향 점수와 이동 거리, 방문 순서를 함께 계산하고 있어요.';
+    const isDaySwitchLoading = isPreparingVisibleRoutes
+        && status === 'success'
+        && pendingDayNo != null
+        && Number(pendingDayNo) !== Number(activeDayNo);
+    const isResolvingVisibleRoutes = isPreparingVisibleRoutes
+        && status === 'success'
+        && !isDaySwitchLoading
+        && !isRecommendingAgain;
+    const isRecommendationLoading = status === 'loading'
+        || isRecommendingAgain
+        || isResolvingVisibleRoutes;
+    const loadingTitle = isResolvingVisibleRoutes
+        ? pendingDayNo
+            ? `DAY ${pendingDayNo} 실제 이동시간을 확인하고 있어요`
+            : '실제 이동시간을 확인하고 있어요'
+        : isRecommendingAgain
+            ? '새로운 추천 코스를 만들고 있어요'
+            : '맞춤 추천 코스를 만들고 있어요';
+    const loadingDescription = isResolvingVisibleRoutes
+        ? `${transport?.label || '이동수단'} 기준 경로 확인이 끝난 뒤 DAY 화면을 전환할게요.`
+        : isRecommendingAgain
+            ? '기존 코스와 겹치지 않도록 다른 장소 조합과 이동 순서를 계산하고 있어요.'
+            : '취향 점수와 이동 거리, 방문 순서를 함께 계산하고 있어요.';
 
     return (
         <div className="page course-result-page">
@@ -1670,7 +2665,10 @@ function CourseRecommendPage() {
                 active={isRecommendationLoading}
                 title={loadingTitle}
                 description={loadingDescription}
-                longWaitDescription="추천 가능한 장소 조합을 꼼꼼히 비교하고 있어 평소보다 조금 더 걸리고 있어요. 계산은 정상적으로 진행 중입니다."
+                longWaitDescription={isResolvingVisibleRoutes
+                    ? `${transport?.label || '이동수단'} 경로 API 응답을 기다리고 있어요. 완료되는 즉시 추천 코스를 보여드릴게요.`
+                    : "추천 가능한 장소 조합을 꼼꼼히 비교하고 있어 평소보다 조금 더 걸리고 있어요. 계산은 정상적으로 진행 중입니다."}
+                delay={pendingDayNo ? 0 : 450}
             />
             <Header variant="default" />
 
@@ -1858,7 +2856,7 @@ function CourseRecommendPage() {
                                 className="secondary"
                                 type="button"
                                 onClick={() => {
-                                    setResponse(recommendationPreview);
+                                    updateResponse(recommendationPreview);
                                     setSource('preview');
                                     setStatus('success');
                                 }}
@@ -1881,7 +2879,7 @@ function CourseRecommendPage() {
                 {status === 'success' && options.length > 0 && (
                     <div className="course-result-layout">
                         <section className="course-result-list" aria-label="맞춤 추천 코스 목록">
-                            {options.map((option, index) => {
+                            {options.map((option) => {
                                 const saveSelectionKey = getSaveSelectionKey(
                                     activeRecommendationKey,
                                     option.optionNo,
@@ -1891,7 +2889,6 @@ function CourseRecommendPage() {
                                     <CourseRecommendationCard
                                         option={option}
                                         transportMode={transportMode}
-                                        fallbackImage={fallbackImages[index % fallbackImages.length]}
                                         activeDayNo={activeDayNo}
                                         isEstimatedTravelTime={Boolean(
                                             getOptionDay(option, activeDayNo)
@@ -1915,7 +2912,7 @@ function CourseRecommendPage() {
                                             toggleSaveSelection(activeRecommendationKey, optionNo)
                                         )}
                                         onFocusOption={(nextOption) => setFocusedOptionNo(nextOption.optionNo)}
-                                        onActiveDayChange={setActiveDayNo}
+                                        onActiveDayChange={handleActiveDayChange}
                                         key={`${activeRecommendationKey}-${option.optionNo ?? option.optionType}`}
                                     />
                                 );
@@ -1946,6 +2943,21 @@ function CourseRecommendPage() {
             </main>
 
             <Footer />
+
+            {isDaySwitchLoading && (
+                <div
+                    className={`course-result-toast course-result-route-loading-toast${notice ? ' has-notice' : ''}`}
+                    role="status"
+                    aria-live="polite"
+                    aria-busy="true"
+                >
+                    <span><RefreshCw size={18} aria-hidden="true" /></span>
+                    <p>
+                        DAY {pendingDayNo} 실제 이동시간을 준비 중이에요.
+                        준비되면 자동으로 전환돼요.
+                    </p>
+                </div>
+            )}
 
             {notice && (
                 <div className={`course-result-toast ${notice.tone}`} role="status">

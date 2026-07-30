@@ -728,6 +728,8 @@ CREATE TABLE TRAVEL_COURSES (
 
                                 VIEW_COUNT NUMBER DEFAULT 0 NOT NULL,
 
+                                IS_SAVED CHAR(1) DEFAULT 'Y' NOT NULL,
+
                                 TOTAL_DISTANCE_KM NUMBER(12, 3) DEFAULT 0 NOT NULL,
                                 TOTAL_TRAVEL_MINUTES NUMBER(12, 2) DEFAULT 0 NOT NULL,
                                 TOTAL_VISIT_MINUTES NUMBER DEFAULT 0 NOT NULL,
@@ -761,6 +763,9 @@ CREATE TABLE TRAVEL_COURSES (
 
                                 CONSTRAINT CK_COURSE_VIEW_COUNT
                                     CHECK (VIEW_COUNT >= 0),
+
+                                CONSTRAINT CK_COURSE_SAVED
+                                    CHECK (IS_SAVED IN ('Y', 'N')),
 
                                 CONSTRAINT CK_COURSE_TOTAL_DISTANCE
                                     CHECK (TOTAL_DISTANCE_KM >= 0),
@@ -1258,6 +1263,7 @@ COMMENT ON COLUMN TRAVEL_COURSES.COURSE_TYPE IS '코스 생성 방식, CUSTOM/SU
 COMMENT ON COLUMN TRAVEL_COURSES.REGION IS '코스의 주요 여행 지역';
 COMMENT ON COLUMN TRAVEL_COURSES.IS_PUBLIC IS '코스 공개 여부, Y/N';
 COMMENT ON COLUMN TRAVEL_COURSES.VIEW_COUNT IS '코스 조회 수';
+COMMENT ON COLUMN TRAVEL_COURSES.IS_SAVED IS '추천 이력 중 사용자가 내 코스에 저장했는지 여부, Y/N';
 COMMENT ON COLUMN TRAVEL_COURSES.TOTAL_DISTANCE_KM IS '코스 전체 이동거리 합계, km 단위';
 COMMENT ON COLUMN TRAVEL_COURSES.TOTAL_TRAVEL_MINUTES IS '코스 전체 이동시간 합계, 분 단위';
 COMMENT ON COLUMN TRAVEL_COURSES.TOTAL_VISIT_MINUTES IS '코스 전체 예상 방문시간 합계, 분 단위';

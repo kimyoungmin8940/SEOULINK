@@ -214,15 +214,17 @@ function normalizeHotelCandidates(value) {
     return hotelCandidates;
 }
 
-/** 서버 키가 없는 구버전 응답도 장소 구성만으로 같은 코스를 식별합니다. */
-function deriveRecommendationKey(option, transportMode) {
-    if (typeof option?.recommendationKey === 'string' && option.recommendationKey.trim()) {
-        return option.recommendationKey.trim();
-    }
-
+/**
+ * 숙소가 바뀌거나 실제 경로 보정으로 장소가 교체돼도 현재 화면의 일반 장소
+ * 구성만 재추천 제외 기준으로 사용합니다. 장소는 ID순으로 정렬해 방문 순서가
+ * 달라도 같은 장소 집합이면 같은 코스로 판단합니다.
+ */
+export function deriveRecommendationKey(option, transportMode) {
+    const normalizedTransportMode = normalizeTransportMode(transportMode);
     const composition = [...(option?.days ?? [])]
         .sort((left, right) => String(left?.visitDate).localeCompare(String(right?.visitDate)))
         .map((day) => [...(day?.places ?? [])]
+            .filter((place) => String(place?.category || '').trim().toUpperCase() !== 'HOTEL')
             .filter((place) => Number.isInteger(Number(place?.placeId)))
             .sort((left, right) => Number(left.placeId) - Number(right.placeId))
             .map((place) => `${day.visitDate}:${Number(place.placeId)}`)
@@ -230,7 +232,13 @@ function deriveRecommendationKey(option, transportMode) {
         .filter(Boolean)
         .join(',');
 
-    return composition ? `${transportMode}:${composition}` : '';
+    if (composition && normalizedTransportMode) {
+        return `${normalizedTransportMode}:${composition}`;
+    }
+
+    return typeof option?.recommendationKey === 'string'
+        ? option.recommendationKey.trim()
+        : '';
 }
 
 /** 다른 담당 화면에서 받은 값을 코스 추천 API의 최종 요청 계약으로 정규화합니다. */

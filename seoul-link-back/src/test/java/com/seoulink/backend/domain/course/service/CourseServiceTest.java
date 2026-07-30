@@ -114,6 +114,7 @@ class CourseServiceTest {
         CourseDetailResponse response = courseService.getCourse(10L);
 
         assertEquals(10L, response.getCourseId());
+        assertEquals(5L, response.getResultId());
         assertEquals("서울 궁궐 코스", response.getTitle());
         assertEquals(TransportMode.PUBLIC_TRANSIT, response.getTransportMode());
         assertEquals("palace.jpg", response.getCoverImageUrl());
@@ -315,6 +316,11 @@ class CourseServiceTest {
 
         assertEquals(1, response.size());
         assertEquals(20L, response.get(0).getCourseId());
+        assertEquals(20L, response.get(0).getResultId());
+        assertEquals(
+                "PUBLIC_TRANSIT:2026-07-20:1,2026-07-21:2",
+                response.get(0).getRecommendationKey()
+        );
         assertEquals(
                 TransportMode.PUBLIC_TRANSIT,
                 response.get(0).getTransportMode()
@@ -327,7 +333,7 @@ class CourseServiceTest {
     }
 
     @Test
-    @DisplayName("회원의 모든 유형 코스를 최신순으로 조회한다")
+    @DisplayName("회원이 저장한 모든 유형의 코스만 최신순으로 조회한다")
     void getMemberCourses() {
         TravelCourse custom = TravelCourse.builder()
                 .courseId(30L)
@@ -336,7 +342,8 @@ class CourseServiceTest {
                 .courseType("CUSTOM")
                 .build();
 
-        when(travelCourseRepository.findByMemberIdOrderByCreatedAtDesc(1L))
+        when(travelCourseRepository
+                .findByMemberIdAndSavedStatusOrderByCreatedAtDesc(1L, "Y"))
                 .thenReturn(List.of(custom));
         when(courseDetailRepository
                 .findByCourseIdOrderByDayNoAscPlaceOrderAsc(30L))

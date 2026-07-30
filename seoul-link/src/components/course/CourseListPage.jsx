@@ -21,6 +21,7 @@ import {
     getCurrentMemberId,
     normalizeRecommendedCourseList,
 } from '../../utils/courseHistory';
+import { syncStoredRecommendationHistory } from '../../utils/recommendationHistorySync';
 import { requireLogin } from '../../utils/authGuard';
 import {
     isTemporaryLogin,
@@ -336,8 +337,21 @@ function RecommendedCourseHistoryPage() {
 
         const controller = new AbortController();
 
-        getRecommendedCourses(initialState.memberId, { signal: controller.signal })
-            .then((response) => {
+        const loadRecommendedCourseHistory = async () => {
+            try {
+                await syncStoredRecommendationHistory({
+                    signal: controller.signal,
+                });
+            } catch (error) {
+                if (error?.name === 'AbortError') return;
+                // 세션 복구가 실패해도 기존 서버 추천 이력은 계속 조회합니다.
+            }
+
+            try {
+                const response = await getRecommendedCourses(
+                    initialState.memberId,
+                    { signal: controller.signal },
+                );
                 const normalizedCourses = normalizeRecommendedCourseList(response, {
                     fallbackImages,
                 });
@@ -362,8 +376,7 @@ function RecommendedCourseHistoryPage() {
                 setStatus('empty');
                 setDataSource('server');
                 setErrorMessage('');
-            })
-            .catch((error) => {
+            } catch (error) {
                 if (error?.name === 'AbortError') return;
 
                 if (fallbackPreviewCourses.length > 0 && isTemporaryLogin()) {
@@ -376,7 +389,10 @@ function RecommendedCourseHistoryPage() {
 
                 setErrorMessage(error?.message || '추천받은 코스 목록을 불러오지 못했습니다.');
                 setStatus('error');
-            });
+            }
+        };
+
+        loadRecommendedCourseHistory();
 
         return () => controller.abort();
     }, [initialState, reloadKey]);
@@ -471,7 +487,7 @@ function RecommendedCourseHistoryPage() {
                     <section className="recommended-history-state">
                         <Sparkles size={30} aria-hidden="true" />
                         <h2>아직 추천받은 코스가 없어요</h2>
-                        <p>취향 검사 후 마음에 드는 코스를 선택하면 이곳에 차곡차곡 모입니다.</p>
+                        <p>취향 검사를 바탕으로 추천받은 모든 코스가 이곳에 차곡차곡 모입니다.</p>
                         <a href="/travel-info"><Route size={16} aria-hidden="true" /> 첫 코스 추천받기</a>
                     </section>
                 )}

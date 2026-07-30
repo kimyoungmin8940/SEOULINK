@@ -74,6 +74,14 @@ public class TravelCourse {
     @Column(name = "VIEW_COUNT", nullable = false)
     private Long viewCount = 0L;
 
+    /*
+     * 추천 이력과 사용자가 실제로 보관한 내 코스를 같은 코스 행으로 관리한다.
+     * 추천 생성 직후에는 N, 사용자가 저장을 누르면 Y로 바뀐다.
+     */
+    @Builder.Default
+    @Column(name = "IS_SAVED", nullable = false, length = 1)
+    private String savedStatus = "Y";
+
     // COURSE_DETAILS의 장소별 값을 합산한 코스 전체 거리·시간 정보이다.
     @Builder.Default
     @Column(name = "TOTAL_DISTANCE_KM", nullable = false)
@@ -99,4 +107,14 @@ public class TravelCourse {
     @UpdateTimestamp
     @Column(name = "UPDATED_AT", nullable = false)
     private LocalDateTime updatedAt;
+
+    /** 추천 이력 코스를 내 코스에 담을 때 같은 행을 저장 상태로 전환한다. */
+    public void markSaved() {
+        this.savedStatus = "Y";
+    }
+
+    /** 내 코스 목록에 포함되는 저장 완료 행인지 반환한다. */
+    public boolean isSaved() {
+        return "Y".equalsIgnoreCase(savedStatus);
+    }
 }

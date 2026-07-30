@@ -16,12 +16,19 @@ import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.util.UriBuilder;
 
 import java.net.URI;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.ArrayDeque;
 import java.util.Comparator;
+import java.util.Deque;
+import java.util.HexFormat;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
+import java.util.Locale;
 
 /**
  * ODsay 대중교통 길찾기 API를 호출해 두 장소 사이의 거리와 이동시간을 조회한다.
@@ -38,27 +45,43 @@ public class OdsayClient {
     );
     public static final String WITHIN_WALKING_DISTANCE_CODE = "-98";
 
+    private static final String DEFAULT_BASE_URL = "https://api.odsay.com/v1/api";
     private static final String ROUTE_SEARCH_PATH = "/searchPubTransPathT";
     private static final int RECOMMENDED_ROUTE_ORDER = 0;
     private static final int INTRA_CITY_SEARCH = 0;
     private static final int ALL_TRANSIT_PATHS = 0;
     private static final ZoneId ODSAY_RESET_ZONE =
             ZoneId.of("Asia/Seoul");
+    // ODsay는 초당 호출 제한이 있으므로 요청 시작 간격을 직렬로 보장한다.
+    private static final long MINIMUM_REQUEST_INTERVAL_MILLIS = 1_100L;
+    // 최초 추천 직후 여러 DAY를 자동 선조회해도 짧은 시간에 호출이 몰리지 않도록
+    // 60초 구간에서 최대 50건만 시작한다. 창이 가득 차면 예상값으로 포기하지 않고
+    // 가장 오래된 호출이 만료될 때까지만 기다렸다가 실제 경로 조회를 이어간다.
+    private static final int REQUEST_WINDOW_MAX_CALLS = 50;
+    private static final long REQUEST_WINDOW_MILLIS = 60_000L;
+    private static final long REQUEST_WINDOW_WAKEUP_MARGIN_MILLIS = 25L;
 
     private final RestClient restClient;
     private final String apiKey;
+    private final String baseUrl;
     private final int dailyCallBudget;
 
     private LocalDate usageDate;
     private int reservedCalls;
     private LocalDate blockedDate;
+    private String blockedErrorCode;
+    private String blockedErrorMessage;
+    private long lastRequestStartedAtMillis;
+    private final Deque<Long> requestStartedAtMillis = new ArrayDeque<>();
 
     @Autowired
     public OdsayClient(
             @Qualifier("odsayRestClient") RestClient restClient,
             @Value("${external.odsay.api-key:}") String apiKey,
             @Value("${external.odsay.daily-call-budget:900}")
-            int dailyCallBudget
+            int dailyCallBudget,
+            @Value("${external.odsay.base-url:https://api.odsay.com/v1/api}")
+            String baseUrl
     ) {
         if (dailyCallBudget < 0) {
             throw new IllegalArgumentException(
@@ -66,19 +89,49 @@ public class OdsayClient {
             );
         }
         this.restClient = restClient;
-        this.apiKey = apiKey == null ? "" : apiKey.trim();
+        this.apiKey = normalizeApiKey(apiKey);
+        this.baseUrl = normalizeBaseUrl(baseUrl);
         this.dailyCallBudget = dailyCallBudget;
         this.usageDate = currentUsageDate();
+        log.info(
+                "ODsay 설정 로드: configured={}, keyLength={}, keyFingerprint={}, uriTemplateEncoding=true, dailyCallBudget={}, minimumRequestIntervalMillis={}, requestWindow={}/{}ms",
+                !this.apiKey.isBlank(),
+                this.apiKey.length(),
+                apiKeyFingerprint(this.apiKey),
+                this.dailyCallBudget,
+                MINIMUM_REQUEST_INTERVAL_MILLIS,
+                REQUEST_WINDOW_MAX_CALLS,
+                REQUEST_WINDOW_MILLIS
+        );
     }
 
     /** 기존 단위 테스트와 수동 생성 코드에서 사용하는 호환 생성자이다. */
     public OdsayClient(RestClient restClient, String apiKey) {
-        this(restClient, apiKey, 900);
+        this(restClient, apiKey, 900, DEFAULT_BASE_URL);
+    }
+
+    /** 일일 예산을 직접 지정하던 기존 테스트용 호환 생성자이다. */
+    public OdsayClient(RestClient restClient, String apiKey, int dailyCallBudget) {
+        this(restClient, apiKey, dailyCallBudget, DEFAULT_BASE_URL);
     }
 
     /** 실제 ODsay 요청을 보낼 수 있도록 API 키가 설정되었는지 확인한다. */
     public boolean isConfigured() {
         return !apiKey.isBlank();
+    }
+
+    /**
+     * 현재 날짜의 로컬 호출 예산과 차단 상태를 확인한다.
+     * PublicTransitRouteCalculator의 기존 사전 검사와 호환하기 위한 메서드다.
+     */
+    public synchronized boolean canAttemptRequest() {
+        LocalDate today = currentUsageDate();
+        resetDailyStateIfNeeded(today);
+        long now = System.currentTimeMillis();
+        removeExpiredRequestStarts(now);
+        return isConfigured()
+                && !today.equals(blockedDate)
+                && reservedCalls < dailyCallBudget;
     }
 
     /**
@@ -88,7 +141,7 @@ public class OdsayClient {
      * @param to 도착지 경도·위도
      * @return 총 이동거리(km), 총 소요시간(분), 지하철·버스·혼합 경로 종류
      */
-    public TransitRouteResult calculateRoute(
+    public synchronized TransitRouteResult calculateRoute(
             RouteCoordinate from,
             RouteCoordinate to
     ) {
@@ -96,6 +149,10 @@ public class OdsayClient {
         if (sameCoordinate(from, to)) {
             return new TransitRouteResult(0.0, 0.0, null);
         }
+
+        ensureRequestCanStart();
+        waitForRequestWindowCapacity();
+        waitForMinimumRequestInterval();
         reserveDailyCall();
 
         try {
@@ -103,20 +160,35 @@ public class OdsayClient {
                     .uri(uriBuilder -> createRequestUri(uriBuilder, from, to))
                     .retrieve()
                     .body(OdsayResponse.class);
-            return convertResponse(response);
+            TransitRouteResult result = convertResponse(response);
+            log.info(
+                    "ODsay 경로 조회 성공: distanceKm={}, travelMinutes={}, pathType={}",
+                    result.distanceKm(),
+                    result.travelTimeMinutes(),
+                    result.transitPathType()
+            );
+            return result;
         } catch (OdsayApiException exception) {
-            blockForTodayIfQuotaOrAuthenticationFailure(exception);
+            // 인증 오류 한 번으로 뒤의 모든 구간을 로컬에서 차단하지 않는다.
+            // ODsay 쪽의 순간적인 인증/호출창 오류일 수 있으므로 다음 구간은
+            // 기존 호출 간격과 60초 창 제한을 지키며 다시 실제 요청한다.
+            blockForTodayIfQuotaFailure(exception);
             throw exception;
         } catch (RestClientResponseException exception) {
-            if (exception.getStatusCode().value() == 429
-                    || exception.getStatusCode().value() == 401
-                    || exception.getStatusCode().value() == 403) {
+            int statusCode = exception.getStatusCode().value();
+            if (statusCode == 429) {
                 OdsayApiException apiException = new OdsayApiException(
-                        "HTTP_" + exception.getStatusCode().value(),
-                        "ODsay 요청 한도 또는 인증 상태를 확인해주세요."
+                        "HTTP_429",
+                        "ODsay 요청 한도에 도달했습니다."
                 );
-                blockForToday();
+                blockForToday(apiException);
                 throw apiException;
+            }
+            if (statusCode == 401 || statusCode == 403) {
+                throw new OdsayApiException(
+                        "HTTP_" + statusCode,
+                        "ODsay API 키 또는 등록 플랫폼·IP를 확인해주세요."
+                );
             }
             throw new IllegalStateException(
                     "ODsay 대중교통 경로 요청에 실패했습니다. HTTP "
@@ -131,6 +203,97 @@ public class OdsayClient {
         }
     }
 
+    /** 인증 회로·60초 호출 창·일일 예산을 실제 외부 요청 전에 다시 확인한다. */
+    private void ensureRequestCanStart() {
+        LocalDate today = currentUsageDate();
+        resetDailyStateIfNeeded(today);
+        long now = System.currentTimeMillis();
+        removeExpiredRequestStarts(now);
+
+        if (today.equals(blockedDate)) {
+            throw new OdsayApiException(
+                    blockedErrorCode,
+                    blockedErrorMessage
+            );
+        }
+        if (reservedCalls >= dailyCallBudget) {
+            OdsayApiException exception = new OdsayApiException(
+                    "LOCAL_DAILY_LIMIT",
+                    "서버에서 정한 ODsay 일일 호출 예산에 도달했습니다."
+            );
+            blockForToday(exception);
+            throw exception;
+        }
+    }
+
+    /**
+     * 60초 호출 창이 가득 찼으면 가장 오래된 요청이 만료될 때까지만 기다린다.
+     * 이전 구현은 canAttemptRequest()에서 false를 반환해 이후 구간을 전부 예상값으로
+     * 처리했기 때문에, 5일 일정 자동 선조회에서 실제 ODsay 경로가 대량 누락될 수 있었다.
+     */
+    private void waitForRequestWindowCapacity() {
+        while (true) {
+            long now = System.currentTimeMillis();
+            removeExpiredRequestStarts(now);
+            if (requestStartedAtMillis.size() < REQUEST_WINDOW_MAX_CALLS) {
+                return;
+            }
+
+            Long oldestStartedAt = requestStartedAtMillis.peekFirst();
+            if (oldestStartedAt == null) {
+                return;
+            }
+            long waitMillis = Math.max(
+                    1L,
+                    oldestStartedAt + REQUEST_WINDOW_MILLIS
+                            - now + REQUEST_WINDOW_WAKEUP_MARGIN_MILLIS
+            );
+            log.info(
+                    "ODsay 60초 호출 창이 가득 차 {}ms 대기 후 실제 경로 조회를 계속합니다. currentCalls={}/{}",
+                    waitMillis,
+                    requestStartedAtMillis.size(),
+                    REQUEST_WINDOW_MAX_CALLS
+            );
+            sleep(waitMillis);
+        }
+    }
+
+    /** 초당 제한을 피하기 위해 요청 시작 간격을 직렬로 보장한다. */
+    private void waitForMinimumRequestInterval() {
+        long now = System.currentTimeMillis();
+        long waitMillis = Math.max(
+                0L,
+                MINIMUM_REQUEST_INTERVAL_MILLIS
+                        - (now - lastRequestStartedAtMillis)
+        );
+        if (waitMillis > 0L) {
+            sleep(waitMillis);
+        }
+        long startedAt = System.currentTimeMillis();
+        requestStartedAtMillis.addLast(startedAt);
+        lastRequestStartedAtMillis = startedAt;
+    }
+
+    private void removeExpiredRequestStarts(long now) {
+        long threshold = now - REQUEST_WINDOW_MILLIS;
+        while (!requestStartedAtMillis.isEmpty()
+                && requestStartedAtMillis.peekFirst() <= threshold) {
+            requestStartedAtMillis.removeFirst();
+        }
+    }
+
+    private void sleep(long waitMillis) {
+        try {
+            Thread.sleep(waitMillis);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(
+                    "ODsay 호출 간격 대기 중 스레드가 중단되었습니다.",
+                    exception
+            );
+        }
+    }
+
     /**
      * ODsay Basic 1,000건을 전부 쓰기 전에 서버 자체 예산에서 호출을 차단한다.
      * 날짜가 바뀌면 카운터와 외부 오류 차단 상태를 함께 초기화한다.
@@ -139,13 +302,19 @@ public class OdsayClient {
         LocalDate today = currentUsageDate();
         resetDailyStateIfNeeded(today);
 
-        if (today.equals(blockedDate)
-                || reservedCalls >= dailyCallBudget) {
-            blockedDate = today;
+        if (today.equals(blockedDate)) {
             throw new OdsayApiException(
+                    blockedErrorCode,
+                    blockedErrorMessage
+            );
+        }
+        if (reservedCalls >= dailyCallBudget) {
+            OdsayApiException exception = new OdsayApiException(
                     "LOCAL_DAILY_LIMIT",
                     "서버에서 정한 ODsay 일일 호출 예산에 도달했습니다."
             );
+            blockForToday(exception);
+            throw exception;
         }
         reservedCalls++;
         log.info(
@@ -156,10 +325,12 @@ public class OdsayClient {
         );
     }
 
-    private synchronized void blockForToday() {
+    private synchronized void blockForToday(OdsayApiException exception) {
         LocalDate today = currentUsageDate();
         resetDailyStateIfNeeded(today);
         blockedDate = today;
+        blockedErrorCode = exception.getErrorCode();
+        blockedErrorMessage = exception.getApiMessage();
     }
 
     private synchronized void resetDailyStateIfNeeded(LocalDate today) {
@@ -167,6 +338,10 @@ public class OdsayClient {
             usageDate = today;
             reservedCalls = 0;
             blockedDate = null;
+            blockedErrorCode = null;
+            blockedErrorMessage = null;
+            requestStartedAtMillis.clear();
+            lastRequestStartedAtMillis = 0L;
         }
     }
 
@@ -175,10 +350,11 @@ public class OdsayClient {
     }
 
     /**
-     * 쿼터 초과·앱 정지·키 인증 오류는 다른 장소 쌍에서도 반복되므로 당일 재호출하지 않는다.
-     * 단순 ODsay 서버 내부 오류는 일시적일 수 있어 현재 요청에서만 중단한다.
+     * 실제 쿼터 초과·앱 정지 오류만 당일 차단한다.
+     * 인증 오류는 일시적인 플랫폼 전파·복수 출구 IP 문제일 수도 있으므로
+     * 한 번의 실패로 남은 모든 구간을 당일 차단하지 않는다.
      */
-    private void blockForTodayIfQuotaOrAuthenticationFailure(
+    private void blockForTodayIfQuotaFailure(
             OdsayApiException exception
     ) {
         if (exception.isPairSpecific()) {
@@ -193,19 +369,67 @@ public class OdsayClient {
                 || message.contains("exceed")
                 || message.contains("suspend")
                 || message.contains("blocked")
-                || message.contains("authentication")
-                || message.contains("api key")
-                || message.contains("apikey")
                 || message.contains("호출 한도")
                 || message.contains("사용량")
                 || message.contains("초과")
                 || message.contains("제한")
                 || message.contains("정지")) {
-            blockForToday();
+            blockForToday(exception);
         }
     }
 
-    /** API 키만 엄격하게 인코딩되도록 URI 변수 확장 방식으로 요청 주소를 만든다. */
+
+    /**
+     * ODsay 콘솔에서 복사한 키가 이미 URL 인코딩된 형태여도 내부에서는 원문 키로 통일한다.
+     * 이후 URI 템플릿이 정확히 한 번만 인코딩하므로 {@code %2B -> %252B} 같은
+     * 이중 인코딩으로 인한 {@code ApiKeyAuthFailed}를 방지한다.
+     */
+    private static String normalizeApiKey(String apiKey) {
+        String normalized = apiKey == null ? "" : apiKey.trim();
+        if (normalized.length() >= 2
+                && ((normalized.startsWith("\"")
+                && normalized.endsWith("\""))
+                || (normalized.startsWith("'")
+                && normalized.endsWith("'")))) {
+            normalized = normalized.substring(1, normalized.length() - 1)
+                    .trim();
+        }
+        if (!normalized.contains("%")) {
+            return normalized;
+        }
+
+        try {
+            // URLDecoder가 원래 키의 '+'를 공백으로 바꾸지 않도록 먼저 보호한다.
+            return URLDecoder.decode(
+                    normalized.replace("+", "%2B"),
+                    StandardCharsets.UTF_8
+            );
+        } catch (IllegalArgumentException exception) {
+            // 잘못된 퍼센트 표기가 섞였으면 원문을 유지해 설정 오류를 숨기지 않는다.
+            return normalized;
+        }
+    }
+
+
+    /** 실제 키를 노출하지 않고 실행 설정이 바뀌었는지 확인할 수 있는 짧은 지문을 만든다. */
+    private static String apiKeyFingerprint(String apiKey) {
+        if (apiKey == null || apiKey.isBlank()) {
+            return "none";
+        }
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(apiKey.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest, 0, 4);
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256을 사용할 수 없습니다.", exception);
+        }
+    }
+
+    /**
+     * 정상 동작하던 버전과 동일하게 Spring URI 변수 확장에 원문 키를 전달한다.
+     * 키를 직접 URLEncoder로 가공한 뒤 URI.create()에 붙이면 RestClient의 기존
+     * 인코딩 경로와 달라져 같은 키도 ODsay에서 인증 실패로 처리될 수 있다.
+     */
     private URI createRequestUri(
             UriBuilder uriBuilder,
             RouteCoordinate from,
@@ -230,6 +454,16 @@ public class OdsayClient {
                         "searchPathType", ALL_TRANSIT_PATHS,
                         "apiKey", apiKey
                 ));
+    }
+
+    private static String normalizeBaseUrl(String baseUrl) {
+        String normalized = baseUrl == null || baseUrl.isBlank()
+                ? DEFAULT_BASE_URL
+                : baseUrl.trim();
+        while (normalized.endsWith("/")) {
+            normalized = normalized.substring(0, normalized.length() - 1);
+        }
+        return normalized;
     }
 
     /** ODsay 오류 또는 경로 목록을 검증하고 최단시간 결과의 단위를 변환한다. */

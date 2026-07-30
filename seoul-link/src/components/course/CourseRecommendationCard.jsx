@@ -1,8 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
     ArrowRight,
     BedDouble,
-    Bookmark,
     CalendarDays,
     Check,
     ChevronDown,
@@ -55,6 +54,17 @@ function isHotelCategory(category) {
     return ['HOTEL', '숙소', '호텔', 'ACCOMMODATION', 'LODGING'].includes(normalized);
 }
 
+function getScheduleOrderLabel(place, index) {
+    if (place?.routeOrigin || isHotelCategory(place?.category)) {
+        return 'H';
+    }
+
+    const visitOrder = Number(place?.visitOrder);
+    return Number.isFinite(visitOrder) && visitOrder > 0
+        ? visitOrder
+        : index + 1;
+}
+
 function formatMinutes(value) {
     const minutes = Math.max(0, Math.round(Number(value) || 0));
     const hours = Math.floor(minutes / 60);
@@ -71,8 +81,109 @@ function formatMinutes(value) {
     return `${hours}시간 ${restMinutes}분`;
 }
 
+function getPlaceReductionNotice(day, transportMode) {
+    if (
+        String(transportMode || '').trim().toUpperCase()
+        !== 'PUBLIC_TRANSIT'
+    ) {
+        return null;
+    }
+
+    const places = Array.isArray(day?.places) ? day.places : [];
+    const ordinaryPlaceCount = places.filter(
+        (place) => !isHotelCategory(place?.category),
+    ).length;
+    const removedPlaceCount = Math.max(
+        0,
+        Number(day?.routeRemovedPlaceCount) || 0,
+    );
+
+    if (removedPlaceCount > 0) {
+        return {
+            title: `이동 조건 때문에 장소 ${removedPlaceCount}곳을 제외했어요`,
+            description:
+                '실제 대중교통 이동이 40분을 넘었고, 40분 이내 이동과 DAY·코스 간 중복 제한을 함께 만족하는 대체 장소가 부족했습니다.',
+        };
+    }
+
+    if (ordinaryPlaceCount <= 2) {
+        return {
+            title: ordinaryPlaceCount > 0
+                ? `이번 DAY는 가능한 장소가 ${ordinaryPlaceCount}곳뿐이에요`
+                : '이번 DAY는 조건에 맞는 일반 장소를 찾지 못했어요',
+            description:
+                '대중교통 40분 이내 이동과 DAY·코스 간 중복 제한을 우선 적용해 현재 후보 중 가능한 장소만 담았습니다.',
+        };
+    }
+
+    return null;
+}
+
+function PlaceReductionNotice({ notice, compact = false }) {
+    if (!notice) return null;
+
+    return (
+        <div
+            className={`course-result-place-reduction-notice${compact ? ' compact' : ''}`}
+            role="status"
+        >
+            <TriangleAlert size={14} aria-hidden="true" />
+            <span>
+                <strong>{notice.title}</strong>
+                <small>{notice.description}</small>
+            </span>
+        </div>
+    );
+}
+
+function normalizeImageUrl(value) {
+    if (typeof value !== 'string') {
+        return null;
+    }
+
+    const normalized = value.trim();
+    const lowerCaseValue = normalized.toLowerCase();
+
+    if (
+        !normalized
+        || lowerCaseValue === 'null'
+        || lowerCaseValue === 'undefined'
+        || lowerCaseValue === 'none'
+    ) {
+        return null;
+    }
+
+    return normalized;
+}
+
 function getPlaceImage(place) {
-    return place?.imageUrl || place?.placeImageUrl || place?.thumbnailUrl || null;
+    return normalizeImageUrl(
+        place?.imageUrl || place?.placeImageUrl || place?.thumbnailUrl,
+    );
+}
+
+/**
+ * 코스 방문 순서대로 실제 장소 사진 후보를 만든다.
+ * 서버가 내려 준 대표 사진은 장소별 사진 정보가 없는 구버전 응답에서만 마지막 후보로 쓴다.
+ */
+function getCoverImageCandidates(option, places) {
+    const candidates = [];
+    const added = new Set();
+
+    const addCandidate = (value) => {
+        const imageUrl = normalizeImageUrl(value);
+        if (!imageUrl || added.has(imageUrl)) {
+            return;
+        }
+
+        added.add(imageUrl);
+        candidates.push(imageUrl);
+    };
+
+    places.forEach((place) => addCandidate(getPlaceImage(place)));
+    addCandidate(option?.coverImageUrl);
+
+    return candidates;
 }
 
 function getAverageScore(places) {
@@ -108,10 +219,15 @@ function getThemeTags(option, places) {
 }
 
 /** 카드에 항상 표시하는 하루 동선의 장소명과 실제 경로 기준 도착 시각입니다. */
-function RouteStop({ place, fallbackImage, hasPrevious }) {
+function RouteStop({ place, hasPrevious }) {
     const meta = categoryMeta[place.category] || categoryMeta.TOUR;
     const Icon = meta.Icon;
     const imageUrl = getPlaceImage(place);
+    const [imageFailed, setImageFailed] = useState(false);
+
+    useEffect(() => {
+        setImageFailed(false);
+    }, [imageUrl]);
 
     return (
         <li className="course-result-stop">
@@ -126,7 +242,7 @@ function RouteStop({ place, fallbackImage, hasPrevious }) {
 
             <div className="course-result-stop-main">
                 <span className={`course-result-stop-visual ${meta.tone}`}>
-                    {imageUrl ? (
+                    {imageUrl && !imageFailed ? (
                         <img
                             src={imageUrl}
                             alt=""
@@ -134,11 +250,7 @@ function RouteStop({ place, fallbackImage, hasPrevious }) {
                             decoding="async"
                             fetchPriority="low"
                             data-photo-filter="off"
-                            onError={(event) => {
-                                if (fallbackImage && event.currentTarget.src !== fallbackImage) {
-                                    event.currentTarget.src = fallbackImage;
-                                }
-                            }}
+                            onError={() => setImageFailed(true)}
                         />
                     ) : (
                         <Icon size={20} strokeWidth={1.9} aria-hidden="true" />
@@ -147,7 +259,11 @@ function RouteStop({ place, fallbackImage, hasPrevious }) {
 
                 <span className="course-result-stop-copy">
                     <strong>{place.placeName || '장소 정보 준비 중'}</strong>
-                    <small>{place.expectedVisitTimeHHmm || place.visitTime || '시간 미정'}</small>
+                    <small>
+                        {place.routeOrigin
+                            ? `숙소 출발 · ${place.expectedVisitTimeHHmm || place.visitTime || '시간 미정'}`
+                            : place.expectedVisitTimeHHmm || place.visitTime || '시간 미정'}
+                    </small>
                 </span>
             </div>
 
@@ -160,11 +276,25 @@ function ExpandedSchedule({ days, transportMode }) {
     return (
         <div className="course-result-expanded">
             {days.map((day) => {
+                const routeOriginPlace = day?.routeOriginPlace
+                    ? { ...day.routeOriginPlace, routeOrigin: true }
+                    : null;
+                const schedulePlaces = routeOriginPlace
+                    ? [routeOriginPlace, ...(day.places || [])]
+                    : (day.places || []);
                 const hasEstimatedLeg = (day.places || []).some(
-                    (place, index) => index > 0 && place.routeEstimated,
+                    (place, index) => (index > 0 || Boolean(routeOriginPlace))
+                        && place.routeEstimated,
                 );
                 const routeDetailsUnavailable = day.routeDetailsAttempted
                     && Boolean(day.routeDetailsError);
+                const routeDetailsErrorMessage = String(
+                    day.routeDetailsError || '',
+                ).trim();
+                const placeReductionNotice = getPlaceReductionNotice(
+                    day,
+                    transportMode,
+                );
 
                 return (
                     <section className="course-result-expanded-day" key={`${day.dayNo}-${day.visitDate}`}>
@@ -175,8 +305,8 @@ function ExpandedSchedule({ days, transportMode }) {
 
                     {routeDetailsUnavailable && (
                         <p className="course-route-detail-state unavailable" role="status">
-                            이동 경로를 일시적으로 확인할 수 없습니다.
-                            현재는 예상 거리와 시간으로 표시합니다.
+                            {routeDetailsErrorMessage
+                                || '이동 경로를 일시적으로 확인할 수 없습니다. 현재는 예상 거리와 시간으로 표시합니다.'}
                         </p>
                     )}
                     {!routeDetailsUnavailable
@@ -188,10 +318,16 @@ function ExpandedSchedule({ days, transportMode }) {
                         </p>
                     )}
 
+                    <PlaceReductionNotice
+                        notice={placeReductionNotice}
+                        compact
+                    />
+
                     <ol>
-                        {(day.places || []).map((place, index) => {
+                        {schedulePlaces.map((place, index) => {
                             const meta = categoryMeta[place.category] || categoryMeta.TOUR;
                             const Icon = meta.Icon;
+                            const isRouteOrigin = Boolean(place.routeOrigin);
                             // 거리·시간·경로 종류는 현재 장소로 들어오는 이전 구간의 정보입니다.
                             const legTransport = getTravelLegMeta(
                                 transportMode,
@@ -201,7 +337,7 @@ function ExpandedSchedule({ days, transportMode }) {
                             return (
                                 <li
                                     className={index > 0 ? 'has-transfer' : undefined}
-                                    key={`${day.dayNo}-${place.placeId}-${place.visitOrder ?? index}`}
+                                    key={`${day.dayNo}-${isRouteOrigin ? 'origin' : 'place'}-${place.placeId}-${place.visitOrder ?? index}`}
                                 >
                                     {index > 0 && (
                                         <span className="course-result-expanded-move">
@@ -228,16 +364,20 @@ function ExpandedSchedule({ days, transportMode }) {
                                             </span>
                                         </span>
                                     )}
-                                    <span className="course-result-expanded-order">{index + 1}</span>
+                                    <span className="course-result-expanded-order">
+                                        {getScheduleOrderLabel(place, index)}
+                                    </span>
                                     <span className={`course-result-expanded-icon ${meta.tone}`}>
                                         <Icon size={17} strokeWidth={1.9} aria-hidden="true" />
                                     </span>
                                     <span className="course-result-expanded-place">
                                         <strong>{place.placeName || '장소 정보 준비 중'}</strong>
                                         <small>
-                                            {isHotelCategory(place.category)
-                                                ? meta.label
-                                                : `${meta.label} · 예상 체류 ${formatMinutes(place.expectedVisitMinutes)}`}
+                                            {isRouteOrigin
+                                                ? '숙소에서 일정 출발'
+                                                : isHotelCategory(place.category)
+                                                    ? meta.label
+                                                    : `${meta.label} · 예상 체류 ${formatMinutes(place.expectedVisitMinutes)}`}
                                         </small>
                                     </span>
                                     <span className="course-result-expanded-time">
@@ -258,7 +398,6 @@ function ExpandedSchedule({ days, transportMode }) {
 function CourseRecommendationCard({
     option,
     transportMode,
-    fallbackImage,
     activeDayNo,
     isEstimatedTravelTime,
     isCompared,
@@ -275,20 +414,41 @@ function CourseRecommendationCard({
         () => (Array.isArray(option.days) ? option.days : []),
         [option.days],
     );
-    // 북마크 API는 회원 기능 담당 범위이므로 연동 전까지 카드 안에서만 임시 토글합니다.
-    const [isBookmarked, setIsBookmarked] = useState(false);
     const [isExpanded, setIsExpanded] = useState(false);
-    const activeDay = days.find((day) => day.dayNo === activeDayNo) || days[0] || { places: [] };
+    const activeDay = days.find(
+        (day) => Number(day.dayNo) === Number(activeDayNo),
+    ) || days[0] || { places: [] };
     const activeDayPlaces = Array.isArray(activeDay.places) ? activeDay.places : [];
+    const activeRouteStops = activeDay?.routeOriginPlace
+        ? [
+            {
+                ...activeDay.routeOriginPlace,
+                routeOrigin: true,
+            },
+            ...activeDayPlaces,
+        ]
+        : activeDayPlaces;
     const allPlaces = useMemo(
         () => days.flatMap((day) => (Array.isArray(day.places) ? day.places : [])),
         [days],
     );
     const meta = optionMeta[option.optionType] || optionMeta.BALANCED;
     const transport = getTransportMeta(transportMode);
-    const coverImage = option.coverImageUrl
-        || allPlaces.map(getPlaceImage).find(Boolean)
-        || fallbackImage;
+    const coverImageCandidates = useMemo(
+        () => getCoverImageCandidates(option, allPlaces),
+        [allPlaces, option],
+    );
+    const coverImageCandidatesKey = coverImageCandidates.join('\u001f');
+    const [failedCoverImages, setFailedCoverImages] = useState([]);
+
+    useEffect(() => {
+        setFailedCoverImages([]);
+    }, [coverImageCandidatesKey]);
+
+    const coverImage = coverImageCandidates.find(
+        (imageUrl) => !failedCoverImages.includes(imageUrl),
+    ) || null;
+    const hasCoverImage = Boolean(coverImage);
     const score = getAverageScore(allPlaces);
     const tags = getThemeTags(option, allPlaces);
     const totalCourseTime = option.totalCourseTimeMinutes
@@ -310,6 +470,10 @@ function CourseRecommendationCard({
     const displayPlaceCount = days.length > 1
         ? (activeDay.places || []).length
         : allPlaces.length;
+    const activePlaceReductionNotice = getPlaceReductionNotice(
+        activeDay,
+        transportMode,
+    );
 
     return (
         <article
@@ -318,18 +482,29 @@ function CourseRecommendationCard({
             onFocusCapture={() => onFocusOption(option)}
         >
             <div className="course-result-card-main">
-                <div className="course-result-cover">
+                <div className={`course-result-cover${hasCoverImage ? ' has-image' : ''}`}>
                     <span className="course-result-rank-badge">{meta.badge}</span>
-                    <img
-                        src={coverImage}
-                        alt={`${option.title || option.optionName} 대표 이미지`}
-                        onError={(event) => {
-                            if (fallbackImage && event.currentTarget.src !== fallbackImage) {
-                                event.currentTarget.src = fallbackImage;
-                            }
-                        }}
-                    />
-                    <span className="course-result-cover-gradient" aria-hidden="true" />
+                    {hasCoverImage ? (
+                        <img
+                            src={coverImage}
+                            alt={`${option.title || option.optionName} 대표 이미지`}
+                            onError={() => {
+                                setFailedCoverImages((previous) => (
+                                    previous.includes(coverImage)
+                                        ? previous
+                                        : [...previous, coverImage]
+                                ));
+                            }}
+                        />
+                    ) : (
+                        <span className="course-result-cover-empty" aria-label="등록된 코스 사진 없음">
+                            <MapPinned size={30} strokeWidth={1.7} aria-hidden="true" />
+                            <small>사진 준비 중</small>
+                        </span>
+                    )}
+                    {hasCoverImage && (
+                        <span className="course-result-cover-gradient" aria-hidden="true" />
+                    )}
                     <span className="course-result-option-label">{meta.shortLabel}</span>
                 </div>
 
@@ -346,17 +521,6 @@ function CourseRecommendationCard({
                             </div>
                             <h2>{option.title || `${meta.shortLabel} 서울 맞춤 코스`}</h2>
                         </div>
-
-                        <button
-                            className={`course-result-bookmark-btn${isBookmarked ? ' bookmarked' : ''}`}
-                            type="button"
-                            aria-label={isBookmarked ? '북마크 해제' : '북마크 추가'}
-                            aria-pressed={isBookmarked}
-                            title={isBookmarked ? '북마크 해제' : '북마크 추가'}
-                            onClick={() => setIsBookmarked((previous) => !previous)}
-                        >
-                            <Bookmark size={20} strokeWidth={1.9} aria-hidden="true" />
-                        </button>
                     </div>
 
                     <p className="course-result-description">
@@ -402,7 +566,11 @@ function CourseRecommendationCard({
                         <div className="course-result-day-tabs" aria-label="일차 선택">
                             {days.map((day) => (
                                 <button
-                                    className={day.dayNo === activeDay.dayNo ? 'active' : ''}
+                                    className={
+                                        Number(day.dayNo) === Number(activeDay.dayNo)
+                                            ? 'active'
+                                            : ''
+                                    }
                                     type="button"
                                     key={`${day.dayNo}-${day.visitDate}`}
                                     onClick={() => {
@@ -416,12 +584,15 @@ function CourseRecommendationCard({
                         </div>
                     )}
 
+                    <PlaceReductionNotice
+                        notice={activePlaceReductionNotice}
+                    />
+
                     <ol className="course-result-stops">
-                        {activeDayPlaces.map((place, index) => (
+                        {activeRouteStops.map((place, index) => (
                             <RouteStop
-                                key={`${place.placeId}-${place.visitOrder ?? index}`}
+                                key={`${place.routeOrigin ? 'origin' : 'place'}-${place.placeId}-${place.visitOrder ?? index}`}
                                 place={place}
-                                fallbackImage={fallbackImage}
                                 hasPrevious={index > 0}
                             />
                         ))}
@@ -474,7 +645,7 @@ function CourseRecommendationCard({
                         {isSaving && isSelectedForSave
                             ? '저장 중...'
                             : isSaved
-                                ? '저장 완료'
+                                ? '저장됨'
                                 : isSelectedForSave
                                     ? (
                                         <span className="course-result-save-label">

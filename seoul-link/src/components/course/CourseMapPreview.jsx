@@ -1,7 +1,6 @@
 import { startTransition, useEffect, useState } from 'react';
-import { MapPin, Route } from 'lucide-react';
+import { MapPin } from 'lucide-react';
 import KakaoCourseMap from './KakaoCourseMap';
-import { getMappableCoursePlaces } from '../../utils/courseMap';
 
 /** 카드 DAY가 먼저 그려진 뒤 지도 DAY만 별도 렌더하도록 다음 페인트까지 기다립니다. */
 function scheduleMapDayAfterPaint(callback) {
@@ -47,8 +46,17 @@ function CourseMapPreview({ option, activeDayNo }) {
     const activeDay = days.find((day) => day?.dayNo === displayedDayNo)
         || days[0]
         || { places: [] };
-    const places = (activeDay?.places || []).slice(0, 35);
-    const mappablePlaceCount = getMappableCoursePlaces(places).length;
+    const routeOriginPlace = activeDay?.routeOriginPlace || null;
+    const visitPlaces = (activeDay?.places || []).slice(0, 35);
+    const places = routeOriginPlace
+        ? [
+            {
+                ...routeOriginPlace,
+                routeOrigin: true,
+            },
+            ...visitPlaces,
+        ].slice(0, 35)
+        : visitPlaces;
 
     return (
         <div className="course-result-map-card">
@@ -69,15 +77,6 @@ function CourseMapPreview({ option, activeDayNo }) {
                     ariaLabel={`선택한 추천 코스 DAY ${activeDay?.dayNo || 1}의 카카오 지도 동선`}
                     showZoomControl
                 />
-
-                {mappablePlaceCount > 0 && (
-                    <div className="course-result-map-legend">
-                        <Route size={14} aria-hidden="true" />
-                        <span>
-                            DAY {activeDay?.dayNo || 1} · {mappablePlaceCount}개 장소를 순서대로 연결했어요
-                        </span>
-                    </div>
-                )}
             </div>
         </div>
     );

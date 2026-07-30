@@ -77,6 +77,13 @@ export function resolveTransportMode(...values) {
     return null;
 }
 
+/** 실제 경로 보정 뒤 다른 옵션과 허용할 일반 장소 중복 상한입니다. */
+export function getRouteCorrectionOverlapLimit(value) {
+    return normalizeTransportMode(value) === TRANSPORT_MODES.WALKING
+        ? 3
+        : 1;
+}
+
 /** 이동수단별 한글명·아이콘 종류·화면 안내 문구를 한곳에서 관리합니다. */
 export function getTransportMeta(value) {
     const transportMode = normalizeTransportMode(value);

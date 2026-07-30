@@ -49,7 +49,7 @@ public class CourseSaveService {
     @Transactional
     public CourseSaveResponse saveOptimizedCourse(CourseSaveRequest request) {
         ValidatedCourse validated = validateAndNormalize(request);
-        return saveValidatedCourse(request, validated);
+        return saveValidatedCourse(request, validated, true);
     }
 
     /**
@@ -74,7 +74,8 @@ public class CourseSaveService {
         for (int index = 0; index < requests.size(); index++) {
             savedCourses.add(saveValidatedCourse(
                     requests.get(index),
-                    validatedCourses.get(index)
+                    validatedCourses.get(index),
+                    true
             ));
         }
 
@@ -84,11 +85,47 @@ public class CourseSaveService {
                 .build();
     }
 
+    /**
+     * 추천 API가 사용자에게 보여준 모든 옵션을 저장 전 추천 이력으로 기록한다.
+     *
+     * <p>같은 추천 조합이 재호출되어도 기존 행을 재사용하고, 이 단계에서는
+     * 내 코스에 포함되지 않도록 IS_SAVED를 N으로 저장한다.</p>
+     */
+    @Transactional
+    public void saveRecommendationHistory(List<CourseSaveRequest> requests) {
+        if (requests == null || requests.isEmpty()) {
+            return;
+        }
+
+        List<ValidatedCourse> validatedCourses = requests.stream()
+                .map(this::validateAndNormalize)
+                .toList();
+        validateSameMemberAndTransportMode(requests);
+
+        for (int index = 0; index < requests.size(); index++) {
+            saveValidatedCourse(
+                    requests.get(index),
+                    validatedCourses.get(index),
+                    false
+            );
+        }
+    }
+
     /** 검증이 끝난 코스 한 건의 기본 정보와 상세 장소를 저장하고 합계를 반환한다. */
     private CourseSaveResponse saveValidatedCourse(
             CourseSaveRequest request,
-            ValidatedCourse validated
+            ValidatedCourse validated,
+            boolean markAsSaved
     ) {
+        CourseSaveResponse existingCourse = findExistingSurveyCourse(
+                request,
+                validated,
+                markAsSaved
+        );
+        if (existingCourse != null) {
+            return existingCourse;
+        }
+
         double totalDistanceKm = validated.places().stream()
                 .mapToDouble(CourseSavePlaceDto::getDistanceFromPreviousKm)
                 .sum();
@@ -118,6 +155,7 @@ public class CourseSaveService {
                         .region(trimToNull(request.getRegion()))
                         .publicStatus(Boolean.TRUE.equals(request.getPublicCourse()) ? "Y" : "N")
                         .viewCount(0L)
+                        .savedStatus(markAsSaved ? "Y" : "N")
                         .totalDistanceKm(storedTotalDistanceKm)
                         .totalTravelTimeMinutes(storedTotalTravelTimeMinutes)
                         .totalVisitTimeMinutes(totalVisitTimeMinutes)
@@ -170,6 +208,110 @@ public class CourseSaveService {
                 .totalVisitTimeMinutes(totalVisitTimeMinutes)
                 .totalCourseTimeMinutes(storedTotalCourseTimeMinutes)
                 .build();
+    }
+
+    /**
+     * 같은 회원이 같은 설문 결과에서 동일한 장소 구성의 추천 코스를 이미
+     * 받았다면 새 행을 만들지 않는다. 사용자가 저장을 누른 호출이면 기존
+     * 추천 이력 행만 저장 상태로 전환한다.
+     */
+    private CourseSaveResponse findExistingSurveyCourse(
+            CourseSaveRequest request,
+            ValidatedCourse validated,
+            boolean markAsSaved
+    ) {
+        if (!"SURVEY".equals(validated.courseType())
+                || request.getResultId() == null) {
+            return null;
+        }
+
+        String requestedCompositionKey = createCompositionKey(
+                validated.places()
+        );
+        List<TravelCourse> candidates = travelCourseRepository
+                .findByMemberIdAndResultIdAndCourseTypeOrderByCreatedAtDesc(
+                        request.getMemberId(),
+                        request.getResultId(),
+                        "SURVEY"
+                );
+
+        if (candidates == null || candidates.isEmpty()) {
+            return null;
+        }
+
+        for (TravelCourse candidate : candidates) {
+            if (candidate.getCourseId() == null) {
+                continue;
+            }
+
+            List<CourseDetail> details = courseDetailRepository
+                    .findByCourseIdOrderByDayNoAscPlaceOrderAsc(
+                            candidate.getCourseId()
+                    );
+            if (!requestedCompositionKey.equals(
+                    createCompositionKeyFromDetails(details)
+            )) {
+                continue;
+            }
+
+            if (markAsSaved && !candidate.isSaved()) {
+                candidate.markSaved();
+            }
+
+            return CourseSaveResponse.builder()
+                    .courseId(candidate.getCourseId())
+                    .title(candidate.getTitle())
+                    .transportMode(validated.transportMode())
+                    .placeCount(details.size())
+                    .dayCount((int) details.stream()
+                            .map(CourseDetail::getVisitDate)
+                            .filter(java.util.Objects::nonNull)
+                            .distinct()
+                            .count())
+                    .totalDistanceKm(candidate.getTotalDistanceKm())
+                    .totalTravelTimeMinutes(
+                            candidate.getTotalTravelTimeMinutes()
+                    )
+                    .totalVisitTimeMinutes(
+                            candidate.getTotalVisitTimeMinutes()
+                    )
+                    .totalCourseTimeMinutes(
+                            candidate.getTotalCourseTimeMinutes()
+                    )
+                    .build();
+        }
+
+        return null;
+    }
+
+    /** 추천 옵션의 날짜·장소 구성을 방문 순서와 무관한 안정적인 키로 만든다. */
+    private String createCompositionKey(List<CourseSavePlaceDto> places) {
+        return places.stream()
+                .sorted(Comparator
+                        .comparing(CourseSavePlaceDto::getVisitDate)
+                        .thenComparing(CourseSavePlaceDto::getPlaceId))
+                .map(place -> place.getVisitDate()
+                        + ":" + place.getPlaceId())
+                .reduce((left, right) -> left + "," + right)
+                .orElse("");
+    }
+
+    /** DB에 저장된 상세 행을 요청과 같은 날짜·장소 구성 키로 변환한다. */
+    private String createCompositionKeyFromDetails(List<CourseDetail> details) {
+        if (details == null || details.isEmpty()) {
+            return "";
+        }
+
+        return details.stream()
+                .filter(detail -> detail.getVisitDate() != null)
+                .filter(detail -> detail.getPlaceId() != null)
+                .sorted(Comparator
+                        .comparing(CourseDetail::getVisitDate)
+                        .thenComparing(CourseDetail::getPlaceId))
+                .map(detail -> detail.getVisitDate()
+                        + ":" + detail.getPlaceId())
+                .reduce((left, right) -> left + "," + right)
+                .orElse("");
     }
 
     /** 배치 요청의 null·빈 목록·최대 선택 개수를 검증한다. */

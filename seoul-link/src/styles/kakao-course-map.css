@@ -113,7 +113,7 @@
   position: relative;
   border: 3px solid #ffffff;
   border-radius: 50%;
-  background: #1677da;
+  background: #287fd0;
   color: #ffffff;
   font-family: Pretendard, sans-serif;
   font-size: 11px;
@@ -153,20 +153,20 @@
   transform: translateX(-50%) translateY(0);
 }
 
-.kakao-course-map-marker.marker-2 {
-  background: #2563eb;
+.kakao-course-map-marker.category-tour {
+  background: #287fd0;
 }
 
-.kakao-course-map-marker.marker-3 {
-  background: #ef8c2f;
+.kakao-course-map-marker.category-restaurant {
+  background: #ed8c34;
 }
 
-.kakao-course-map-marker.marker-4 {
-  background: #9651cb;
+.kakao-course-map-marker.category-cafe {
+  background: #9259cb;
 }
 
-.kakao-course-map-marker.marker-5 {
-  background: #2b9a49;
+.kakao-course-map-marker.category-hotel {
+  background: #43a35e;
 }
 
 .kakao-course-map-accessible-list {

@@ -7,7 +7,7 @@
 }
 
 .recommended-history-shell {
-  width: min(94vw, 1440px);
+  width: min(85vw, 1440px);
   flex: 1;
   margin: 0 auto;
   padding: 104px 0 90px;
@@ -85,31 +85,117 @@
 }
 
 .recommended-history-heading__sort {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 9px;
 }
 
-.recommended-history-heading__sort label {
+.recommended-history-sort-label {
   color: #4d667a;
   font-size: 13px;
   font-weight: 780;
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  white-space: nowrap;
 }
 
-.recommended-history-heading__sort select {
+.recommended-history-sort-menu {
+  position: relative;
+}
+
+.recommended-history-sort-trigger {
   min-width: 142px;
   height: 42px;
-  padding: 0 14px;
+  padding: 0 13px 0 15px;
   border: 1px solid #d8e5ef;
   border-radius: 11px;
   background: #ffffff;
   color: #20384f;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 750;
   box-shadow: 0 5px 14px rgba(31, 68, 101, 0.045);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  transition: 0.18s ease;
+}
+
+.recommended-history-sort-trigger:hover,
+.recommended-history-heading__sort.is-open .recommended-history-sort-trigger {
+  border-color: #9ecbec;
+  box-shadow: 0 7px 18px rgba(42, 128, 192, 0.11);
+}
+
+.recommended-history-sort-trigger svg {
+  color: #638096;
+  transition: transform 0.18s ease;
+}
+
+.recommended-history-heading__sort.is-open .recommended-history-sort-trigger svg {
+  transform: rotate(180deg);
+}
+
+.recommended-history-sort-dropdown {
+  position: absolute;
+  z-index: 120;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 176px;
+  padding: 7px;
+  border: 1px solid #dce8f1;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 16px 36px rgba(31, 68, 101, 0.16);
+  animation: recommended-history-sort-open 0.14s ease-out;
+}
+
+.recommended-history-sort-dropdown button {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #385166;
+  font-size: 13px;
+  font-weight: 680;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  transition: 0.14s ease;
+}
+
+.recommended-history-sort-dropdown button:hover {
+  background: #f2f8fd;
+  color: #176fae;
+}
+
+.recommended-history-sort-dropdown button.is-selected {
+  background: #e9f4ff;
+  color: #1676b9;
+  font-weight: 820;
+}
+
+.recommended-history-sort-dropdown button svg {
+  color: #2383c8;
+  flex-shrink: 0;
+}
+
+@keyframes recommended-history-sort-open {
+  from {
+    opacity: 0;
+    transform: translateY(-5px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .recommended-history-loading {
@@ -445,7 +531,7 @@
 
 @media (max-width: 720px) {
   .recommended-history-shell {
-    width: calc(100% - 32px);
+    width: min(85vw, 1440px);
     padding: 96px 0 65px;
   }
 
@@ -466,8 +552,16 @@
     width: 100%;
   }
 
-  .recommended-history-heading__sort select {
+  .recommended-history-sort-menu {
     flex: 1;
+  }
+
+  .recommended-history-sort-trigger {
+    width: 100%;
+  }
+
+  .recommended-history-sort-dropdown {
+    width: 100%;
   }
 
   .recommended-history-item {
@@ -504,4 +598,81 @@
     width: 36px;
     height: 36px;
   }
+}
+
+/* 정렬 트리거와 펼침 메뉴의 크기·수직 정렬 통일 */
+.recommended-history-sort-menu {
+  width: 152px;
+  box-sizing: border-box;
+}
+
+.recommended-history-sort-trigger {
+  width: 100%;
+  min-width: 0;
+  height: 44px;
+  box-sizing: border-box;
+  padding: 0 13px 0 15px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.recommended-history-sort-trigger > span {
+  height: 100%;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+}
+
+.recommended-history-sort-trigger > svg {
+  display: block;
+  flex-shrink: 0;
+}
+
+.recommended-history-sort-dropdown {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.recommended-history-sort-dropdown button {
+  width: 100%;
+  min-height: 40px;
+  box-sizing: border-box;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+}
+
+.recommended-history-sort-dropdown button > span {
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* 정렬 텍스트의 시각적 수직 중심 보정 */
+.recommended-history-sort-trigger > span,
+.recommended-history-sort-dropdown button > span {
+  position: relative;
+  top: -4px;
+  line-height: 16px;
+}
+
+.recommended-history-sort-trigger > svg,
+.recommended-history-sort-dropdown button > svg {
+  position: relative;
+  top: 0;
+  align-self: center;
+}
+
+/* 상단 '정렬' 라벨과 필터 아이콘의 시각적 위치 보정 */
+.recommended-history-sort-label {
+  position: relative;
+  top: -4px;
+}
+
+
+/* 정렬 라벨은 텍스트만 사용해 더 단정하게 정리 */
+.recommended-history-sort-label {
+  gap: 0;
 }

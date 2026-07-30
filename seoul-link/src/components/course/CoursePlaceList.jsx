@@ -1,4 +1,5 @@
-import { Fragment } from 'react';
+
+import { Fragment, useEffect, useState } from 'react';
 import {
     BedDouble,
     Clock3,
@@ -30,6 +31,43 @@ function formatMinutes(value) {
 
     if (hours === 0) return `${restMinutes}분`;
     return restMinutes === 0 ? `${hours}시간` : `${hours}시간 ${restMinutes}분`;
+}
+
+/** 실제 사진이 없거나 깨지면 예시 이미지와 출처 안내를 함께 표시합니다. */
+function CoursePlaceImage({
+    imageUrl,
+    fallbackImageUrl,
+    isExample,
+    placeName,
+}) {
+    const [showExample, setShowExample] = useState(Boolean(isExample || !imageUrl));
+
+    useEffect(() => {
+        setShowExample(Boolean(isExample || !imageUrl));
+    }, [fallbackImageUrl, imageUrl, isExample]);
+
+    const source = showExample ? fallbackImageUrl : imageUrl;
+
+    if (!source) {
+        return <span className="course-detail-place-image-empty" aria-hidden="true" />;
+    }
+
+    return (
+        <span className="course-detail-place-image">
+            <img
+                src={source}
+                alt={`${placeName || '추천 장소'} ${showExample ? '예시 사진' : '사진'}`}
+                onError={() => {
+                    if (!showExample && fallbackImageUrl) {
+                        setShowExample(true);
+                    }
+                }}
+            />
+            {showExample && (
+                <em className="course-detail-place-image-label">예시 사진</em>
+            )}
+        </span>
+    );
 }
 
 /** 선택한 일차의 장소와 장소 사이 이동 정보를 시간 순 타임라인으로 표시합니다. */
@@ -119,17 +157,11 @@ function CoursePlaceList({ day, transportMode }) {
                                 </div>
 
                                 <div className="course-detail-place-side">
-                                    <img
-                                        src={place.displayImageUrl}
-                                        alt={`${place.placeName || '추천 장소'} 사진`}
-                                        onError={(event) => {
-                                            if (
-                                                place.fallbackImageUrl
-                                                && event.currentTarget.src !== place.fallbackImageUrl
-                                            ) {
-                                                event.currentTarget.src = place.fallbackImageUrl;
-                                            }
-                                        }}
+                                    <CoursePlaceImage
+                                        imageUrl={place.displayImageUrl}
+                                        fallbackImageUrl={place.fallbackImageUrl}
+                                        isExample={place.displayImageIsExample}
+                                        placeName={place.placeName}
                                     />
 
                                     {!isHotelCategory(place.category) && (

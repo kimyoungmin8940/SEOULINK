@@ -610,7 +610,7 @@
   position: relative;
   overflow: hidden;
   border-radius: 13px;
-  background: #dce9f2;
+  background: linear-gradient(145deg, #eef7fd 0%, #dcebf5 100%);
 }
 
 .course-result-cover img {
@@ -625,6 +625,22 @@
 
 .course-result-card:hover .course-result-cover img {
   transform: scale(1.025);
+}
+
+.course-result-cover-empty {
+  position: absolute;
+  inset: 0;
+  color: #7d9eb5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.course-result-cover-empty small {
+  font-size: 11px;
+  font-weight: 750;
 }
 
 .course-result-cover-gradient {
@@ -658,10 +674,14 @@
   left: 13px;
   bottom: 11px;
   z-index: 2;
-  color: #ffffff;
+  color: #31566d;
   font-size: 12px;
   font-weight: 850;
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.38);
+}
+
+.course-result-cover.has-image .course-result-option-label {
+  color: #ffffff;
 }
 
 .course-result-summary {
@@ -866,6 +886,51 @@
 .course-result-day-tabs button.active {
   background: var(--course-option-soft);
   color: var(--course-option-color);
+}
+
+.course-result-place-reduction-notice {
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border: 1px solid #f0d7a4;
+  border-radius: 9px;
+  background: #fff9ed;
+  color: #8a6115;
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  line-height: 1.45;
+  word-break: keep-all;
+}
+
+.course-result-place-reduction-notice > svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.course-result-place-reduction-notice > span {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.course-result-place-reduction-notice strong {
+  color: #805a13;
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.course-result-place-reduction-notice small {
+  color: #987328;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.course-result-place-reduction-notice.compact {
+  width: 100%;
+  margin-bottom: 10px;
 }
 
 .course-result-stops {
@@ -1698,6 +1763,18 @@
   gap: 9px;
   box-shadow: 0 17px 42px rgba(24, 52, 77, 0.18);
   backdrop-filter: blur(16px);
+}
+
+.course-result-route-loading-toast {
+  pointer-events: none;
+}
+
+.course-result-route-loading-toast.has-notice {
+  bottom: 96px;
+}
+
+.course-result-route-loading-toast > span svg {
+  animation: course-result-spin 0.85s linear infinite;
 }
 
 .course-result-toast > span {

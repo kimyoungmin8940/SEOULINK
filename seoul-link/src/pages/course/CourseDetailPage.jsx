@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import {
     ArrowLeft,
     Tag,
-    Bookmark,
     CalendarDays,
     Compass,
     Check,
@@ -16,6 +15,7 @@ import {
     MapPinned,
     RefreshCw,
     Route,
+    Save,
     Share2,
     Sparkles,
     Timer,
@@ -27,8 +27,16 @@ import Footer from '../../components/common/Footer';
 import CoursePlaceList from '../../components/course/CoursePlaceList';
 import KakaoCourseMap from '../../components/course/KakaoCourseMap';
 import CourseTransportIcon from '../../components/course/CourseTransportIcon';
-import { getCourseDetail } from '../../api/courseApi';
-import { getCurrentMemberId } from '../../utils/courseHistory';
+import {
+    getCourseDetail,
+    getMyCourses,
+    saveCourse,
+} from '../../api/courseApi';
+import {
+    getCurrentMemberId,
+    normalizeMyCourseList,
+} from '../../utils/courseHistory';
+import { requireLogin } from '../../utils/authGuard';
 import {
     getTransportMeta,
     normalizeTransitPathType,
@@ -38,6 +46,7 @@ import {
     getCurrentTravelCode,
     getRememberedCourseTravelCode,
     normalizeTravelCode,
+    rememberCourseTravelCode,
 } from '../../utils/courseTravelCode';
 import recommendationPreview from '../../mocks/courseRecommendation.json';
 import { mockThemeCourseListResponse } from '../../mocks/homeMockData';
@@ -166,6 +175,13 @@ function normalizeDays(rawDays) {
             const expectedVisitMinutes = isHotelCategory(place.category)
                 ? 0
                 : toFiniteNumber(place.expectedVisitMinutes);
+            const actualImageUrl = place.imageUrl
+                || place.placeImageUrl
+                || place.thumbnailUrl
+                || null;
+            const fallbackImageUrl = placeFallbackImages[
+                (placeIndex + dayIndex) % placeFallbackImages.length
+            ];
 
             // 서버가 예상 시각을 주지 않으면 10:00부터 이동·체류시간을 누적해 표시합니다.
             if (explicitTime) {
@@ -175,10 +191,6 @@ function normalizeDays(rawDays) {
             }
 
             const displayVisitTime = explicitTime || minutesToTime(timeCursor);
-            const fallbackImageUrl = placeFallbackImages[
-                (placeIndex + dayIndex) % placeFallbackImages.length
-            ];
-
             timeCursor = (timeToMinutes(displayVisitTime) ?? timeCursor)
                 + expectedVisitMinutes;
 
@@ -195,10 +207,8 @@ function normalizeDays(rawDays) {
                 routeEstimated: Boolean(place.routeEstimated),
                 displayVisitTime,
                 fallbackImageUrl,
-                displayImageUrl: place.imageUrl
-                    || place.placeImageUrl
-                    || place.thumbnailUrl
-                    || fallbackImageUrl,
+                displayImageUrl: actualImageUrl || fallbackImageUrl,
+                displayImageIsExample: !actualImageUrl,
             };
         });
 
@@ -313,6 +323,67 @@ function normalizeApiCourseDetail(response, courseId) {
         tags: responseTags.length > 0 ? responseTags : summaryTags,
         liked: response?.liked ?? summary?.liked ?? false,
     });
+}
+
+/** 상세 화면의 코스를 추천 결과 화면과 같은 POST /courses 저장 요청으로 변환합니다. */
+function buildDetailSaveRequest(course, memberId) {
+    const transportMode = normalizeTransportMode(course?.transportMode);
+    if (!transportMode) {
+        throw new Error('코스의 이동수단을 확인할 수 없어 저장하지 못했습니다.');
+    }
+
+    const rawCourseType = String(course?.courseType || '').trim().toUpperCase();
+    const courseType = rawCourseType === 'SURVEY'
+        ? 'SURVEY'
+        : rawCourseType === 'CHATBOT'
+            ? 'CHATBOT'
+            : 'CUSTOM';
+    const resultId = Number(course?.resultId);
+
+    if (
+        courseType === 'SURVEY'
+        && (!Number.isInteger(resultId) || resultId < 1)
+    ) {
+        throw new Error('설문 추천 결과 정보를 확인할 수 없어 저장하지 못했습니다.');
+    }
+
+    const places = (course?.days || []).flatMap((day) => (
+        (day?.places || []).map((place, index) => ({
+            placeId: place.placeId,
+            category: place.category,
+            visitDate: place.visitDate || day.visitDate,
+            visitOrder: place.visitOrder ?? index + 1,
+            visitTime: place.visitTime
+                || place.expectedVisitTimeHHmm
+                || place.displayVisitTime
+                || null,
+            expectedVisitMinutes: Number(place.expectedVisitMinutes) || 0,
+            distanceFromPreviousKm: Number(place.distanceFromPreviousKm) || 0,
+            travelTimeFromPreviousMinutes: Number(
+                place.travelTimeFromPreviousMinutes,
+            ) || 0,
+            transitPathType: normalizeTransitPathType(place.transitPathType),
+            routeEstimated: Boolean(place.routeEstimated),
+        }))
+    ));
+
+    if (places.length === 0) {
+        throw new Error('저장할 장소가 없어 코스를 저장하지 못했습니다.');
+    }
+
+    return {
+        memberId,
+        ...(courseType === 'SURVEY' ? { resultId } : {}),
+        title: course.title || '서울 맞춤 추천 코스',
+        description: course.description
+            || '서울 여행 장소와 이동 동선을 반영한 추천 코스입니다.',
+        travelCode: course.travelCode || null,
+        transportMode,
+        courseType,
+        region: course.region || null,
+        publicCourse: false,
+        places,
+    };
 }
 
 /** 상세 API를 사용할 수 없을 때 사용자가 선택해서 확인할 수 있는 UI 미리보기를 만듭니다. */
@@ -466,8 +537,8 @@ function CourseDetailPage() {
     const [errorMessage, setErrorMessage] = useState('');
     const [reloadKey, setReloadKey] = useState(0);
     const [activeDayNo, setActiveDayNo] = useState(1);
-    // 북마크 API가 연결되기 전까지 상세 화면 안에서 선택 상태만 표시합니다.
-    const [isBookmarked, setIsBookmarked] = useState(false);
+    const [isSavingCourse, setIsSavingCourse] = useState(false);
+    const [savedCourseId, setSavedCourseId] = useState(null);
     const [toast, setToast] = useState(null);
 
     useEffect(() => {
@@ -479,11 +550,20 @@ function CourseDetailPage() {
         const controller = new AbortController();
 
         // 목록 요약이 아닌 저장 코스 상세 API를 기준으로 일정과 이동 정보를 갱신합니다.
-        getCourseDetail(courseId, {
-            memberId,
-            signal: controller.signal,
-        })
-            .then((response) => {
+        Promise.all([
+            getCourseDetail(courseId, {
+                memberId,
+                signal: controller.signal,
+            }),
+            memberId
+                ? getMyCourses(memberId, { signal: controller.signal })
+                    .catch((error) => {
+                        if (error?.name === 'AbortError') throw error;
+                        return [];
+                    })
+                : Promise.resolve([]),
+        ])
+            .then(([response, myCoursesResponse]) => {
                 const normalizedCourse = normalizeApiCourseDetail(response, courseId);
 
                 if (!normalizedCourse.days.some((day) => day.places.length > 0)) {
@@ -494,7 +574,14 @@ function CourseDetailPage() {
 
                 setCourse(normalizedCourse);
                 setActiveDayNo(normalizedCourse.days[0]?.dayNo ?? 1);
-                setIsBookmarked(normalizedCourse.bookmarked ?? normalizedCourse.liked ?? false);
+                setIsSavingCourse(false);
+                setSavedCourseId(
+                    normalizeMyCourseList(myCoursesResponse).some(
+                        (savedCourse) => savedCourse.courseId === courseId,
+                    )
+                        ? courseId
+                        : null,
+                );
                 setSource('api');
                 setErrorMessage('');
                 setStatus('success');
@@ -537,7 +624,8 @@ function CourseDetailPage() {
     const showPreview = () => {
         setCourse(previewCourse);
         setActiveDayNo(previewCourse.days[0]?.dayNo ?? 1);
-        setIsBookmarked(previewCourse.bookmarked ?? previewCourse.liked ?? false);
+        setIsSavingCourse(false);
+        setSavedCourseId(null);
         setSource('preview');
         setErrorMessage('');
         setStatus('success');
@@ -568,6 +656,56 @@ function CourseDetailPage() {
             if (error?.name !== 'AbortError') {
                 setToast({ tone: 'error', message: '링크를 복사하지 못했어요.' });
             }
+        }
+    };
+
+    const handleSaveCourse = async () => {
+        if (isSavingCourse || savedCourseId || !course) return;
+
+        if (!requireLogin('코스 저장은 로그인 후 이용할 수 있습니다.')) {
+            return;
+        }
+
+        if (source === 'preview') {
+            setToast({
+                tone: 'info',
+                message: '현재는 화면 미리보기입니다. 실제 코스 정보를 불러온 뒤 저장해 주세요.',
+            });
+            return;
+        }
+
+        if (!memberId) {
+            setToast({
+                tone: 'error',
+                message: '회원 ID를 확인할 수 없습니다. 다시 로그인한 뒤 저장해 주세요.',
+            });
+            return;
+        }
+
+        setIsSavingCourse(true);
+        setToast(null);
+
+        try {
+            const savedCourse = await saveCourse(
+                buildDetailSaveRequest(course, memberId),
+            );
+            const nextSavedCourseId = Number(savedCourse?.courseId);
+
+            if (!Number.isInteger(nextSavedCourseId) || nextSavedCourseId < 1) {
+                throw new Error('저장 결과의 코스 ID를 확인할 수 없습니다.');
+            }
+
+            rememberCourseTravelCode(nextSavedCourseId, course.travelCode);
+            setSavedCourseId(nextSavedCourseId);
+            window.location.href = '/mypage/courses';
+        } catch (error) {
+            setToast({
+                tone: 'error',
+                message: error?.message
+                    || '코스를 저장하지 못했습니다. 잠시 후 다시 시도해주세요.',
+            });
+        } finally {
+            setIsSavingCourse(false);
         }
     };
 
@@ -602,18 +740,21 @@ function CourseDetailPage() {
                     {status === 'success' && (
                         <div className="course-detail-toolbar-actions">
                             <button
-                                className={isBookmarked ? 'is-active' : ''}
+                                className={savedCourseId ? 'is-active' : ''}
                                 type="button"
-                                aria-label={isBookmarked ? '북마크 해제' : '북마크 추가'}
-                                aria-pressed={isBookmarked}
-                                onClick={() => setIsBookmarked((previous) => !previous)}
+                                disabled={isSavingCourse || Boolean(savedCourseId)}
+                                aria-label={savedCourseId ? '저장됨' : '코스 저장'}
+                                aria-pressed={Boolean(savedCourseId)}
+                                onClick={handleSaveCourse}
                             >
-                                <Bookmark
-                                    size={17}
-                                    fill={isBookmarked ? 'currentColor' : 'none'}
-                                    aria-hidden="true"
-                                />
-                                북마크
+                                {savedCourseId
+                                    ? <Check size={17} aria-hidden="true" />
+                                    : <Save size={17} aria-hidden="true" />}
+                                {isSavingCourse
+                                    ? '저장 중...'
+                                    : savedCourseId
+                                        ? '저장됨'
+                                        : '저장'}
                             </button>
                             <button type="button" onClick={handleShare}>
                                 <Share2 size={17} aria-hidden="true" />

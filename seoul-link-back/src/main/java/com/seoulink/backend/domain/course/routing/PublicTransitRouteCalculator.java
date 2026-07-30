@@ -14,22 +14,17 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 
-/**
- * ODsay 대중교통 길찾기 결과를 코스 최적화용 거리·시간 행렬로 변환한다.
- *
- * <p>ODsay는 행렬 API가 아니라 출발지·도착지 한 쌍씩 조회하므로 방향별로 호출한다.
- * API 키가 없거나 특정 구간 검색에 실패한 경우에만 별도 대중교통 추정값을 남기고
- * {@code estimated=true}로 표시한다. 호출 결과는 상위 {@code RoutePairCache}에서
- * 장소 쌍별로 재사용된다.</p>
- */
+/** ODsay 대중교통 결과를 코스 최적화용 거리·시간 행렬로 변환한다. */
 @Component
 public class PublicTransitRouteCalculator implements RouteCalculator {
 
     private static final Logger log = LoggerFactory.getLogger(
             PublicTransitRouteCalculator.class
     );
+    private static final double EARTH_RADIUS_KM = 6371.0088;
     private static final double ROUTE_DISTANCE_FACTOR = 1.20;
     private static final double ACCESS_WALKING_DISTANCE_KM = 0.70;
+    private static final double DIRECT_WALKING_SKIP_DISTANCE_KM = 0.20;
     private static final double WALKING_SPEED_KM_PER_HOUR = 4.5;
     private static final double TRANSIT_SPEED_KM_PER_HOUR = 22.0;
     private static final double WAIT_AND_TRANSFER_MINUTES = 8.0;
@@ -65,7 +60,6 @@ public class PublicTransitRouteCalculator implements RouteCalculator {
         return calculate(coordinates, requiredPairs);
     }
 
-    /** ODsay 단일 경로 API는 상위 캐시에 없는 방향별 장소 쌍만 호출한다. */
     @Override
     public RouteCalculation calculate(
             List<RouteCoordinate> coordinates,
@@ -81,29 +75,73 @@ public class PublicTransitRouteCalculator implements RouteCalculator {
                     false
             );
         }
-        if (odsayClient == null || !odsayClient.isConfigured()) {
-            return fallback;
-        }
-
         double[][] distancesKm = fallback.distancesKm();
         double[][] travelTimesMinutes = fallback.travelTimesMinutes();
         boolean[][] estimatedPairs = fallback.estimatedPairs();
         TransitPathType[][] transitPathTypes = fallback.transitPathTypes();
-        boolean apiAvailable = true;
+        boolean apiAvailable = odsayClient != null
+                && odsayClient.isConfigured();
+        int consecutiveUnexpectedFailures = 0;
+        if (!apiAvailable) {
+            log.warn(
+                    "ODsay API 키가 설정되지 않아 대중교통 구간을 추정값으로 표시합니다."
+            );
+        }
 
         for (int fromIndex = 0; fromIndex < coordinates.size(); fromIndex++) {
             for (int toIndex = 0; toIndex < coordinates.size(); toIndex++) {
                 if (!requiredPairs[fromIndex][toIndex]) {
                     continue;
                 }
+
+                RouteCoordinate from = coordinates.get(fromIndex);
+                RouteCoordinate to = coordinates.get(toIndex);
+                double straightDistanceKm = straightLineDistanceKm(from, to);
+                if (straightDistanceKm <= DIRECT_WALKING_SKIP_DISTANCE_KM) {
+                    applyWalkingRoute(
+                            from,
+                            to,
+                            fromIndex,
+                            toIndex,
+                            distancesKm,
+                            travelTimesMinutes,
+                            estimatedPairs,
+                            transitPathTypes
+                    );
+                    log.info(
+                            "200m 이내 초단거리 구간은 ODsay 호출 없이 도보 경로로 전환합니다: straightDistanceKm={}, from=({}, {}), to=({}, {})",
+                            roundForLog(straightDistanceKm),
+                            from.longitude(),
+                            from.latitude(),
+                            to.longitude(),
+                            to.latitude()
+                    );
+                    continue;
+                }
                 if (!apiAvailable) {
+                    log.warn(
+                            "ODsay 전역 사용 불가 상태라 구간을 추정값으로 유지합니다: straightDistanceKm={}, from=({}, {}), to=({}, {})",
+                            roundForLog(straightDistanceKm),
+                            from.longitude(),
+                            from.latitude(),
+                            to.longitude(),
+                            to.latitude()
+                    );
                     continue;
                 }
 
                 try {
+                    log.info(
+                            "ODsay 구간 조회 시작: straightDistanceKm={}, from=({}, {}), to=({}, {})",
+                            roundForLog(straightDistanceKm),
+                            from.longitude(),
+                            from.latitude(),
+                            to.longitude(),
+                            to.latitude()
+                    );
                     TransitRouteResult result = odsayClient.calculateRoute(
-                            coordinates.get(fromIndex),
-                            coordinates.get(toIndex)
+                            from,
+                            to
                     );
                     distancesKm[fromIndex][toIndex] = result.distanceKm();
                     travelTimesMinutes[fromIndex][toIndex] =
@@ -111,10 +149,8 @@ public class PublicTransitRouteCalculator implements RouteCalculator {
                     transitPathTypes[fromIndex][toIndex] =
                             result.transitPathType();
                     estimatedPairs[fromIndex][toIndex] = false;
+                    consecutiveUnexpectedFailures = 0;
                 } catch (OdsayApiException exception) {
-                    // -98(700m 이내)뿐 아니라 정류장 없음·검색 결과 없음처럼
-                    // 해당 장소 쌍에서만 발생한 오류도 실제 도보 경로로 보완한다.
-                    // 이 경우 수단을 임의의 버스/지하철로 꾸미지 않고 WALKING으로 표시한다.
                     if (exception.isPairSpecific()) {
                         applyWalkingRoute(
                                 coordinates.get(fromIndex),
@@ -126,24 +162,47 @@ public class PublicTransitRouteCalculator implements RouteCalculator {
                                 estimatedPairs,
                                 transitPathTypes
                         );
-                        log.debug(
-                                "ODsay 구간 검색 불가로 도보 경로를 사용합니다. code={}",
-                                exception.getErrorCode()
+                        log.info(
+                                "ODsay 구간 검색 불가로 도보 경로를 사용합니다: code={}, straightDistanceKm={}, from=({}, {}), to=({}, {})",
+                                exception.getErrorCode(),
+                                roundForLog(straightDistanceKm),
+                                from.longitude(),
+                                from.latitude(),
+                                to.longitude(),
+                                to.latitude()
                         );
                         continue;
                     }
-                    // 인증·요청 제한처럼 전체 호출에 영향을 주는 오류는 반복 요청을 중단한다.
-                    apiAvailable = false;
-                    log.warn(
-                            "ODsay 호출 오류로 남은 대중교통 구간에 임시 추정값을 사용합니다: {}",
-                            exception.getMessage()
-                    );
+
+                    if (isHardGlobalFailure(exception)) {
+                        apiAvailable = false;
+                        log.warn(
+                                "ODsay 호출 한도·차단 오류로 현재 요청의 남은 구간은 임시 추정값을 사용합니다: code={}, straightDistanceKm={}, reason={}",
+                                exception.getErrorCode(),
+                                roundForLog(straightDistanceKm),
+                                exception.getMessage()
+                        );
+                    } else {
+                        log.warn(
+                                "ODsay 구간 오류가 발생했지만 다음 구간은 다시 실제 조회합니다: code={}, straightDistanceKm={}, reason={}",
+                                exception.getErrorCode(),
+                                roundForLog(straightDistanceKm),
+                                exception.getMessage()
+                        );
+                    }
                 } catch (RuntimeException exception) {
-                    apiAvailable = false;
+                    consecutiveUnexpectedFailures++;
                     log.warn(
-                            "ODsay 호출 실패로 남은 대중교통 구간에 임시 추정값을 사용합니다: {}",
+                            "ODsay 구간 호출 실패로 해당 구간은 추정값을 유지합니다: straightDistanceKm={}, consecutiveFailures={}, reason={}",
+                            roundForLog(straightDistanceKm),
+                            consecutiveUnexpectedFailures,
                             exception.getMessage()
                     );
+                    // 한 구간의 네트워크 오류가 나머지 모든 정상 구간까지 막지 않도록
+                    // 다음 구간은 한 번 더 시도한다. 연속 두 번 실패할 때만 남은 요청을 중단한다.
+                    if (consecutiveUnexpectedFailures >= 2) {
+                        apiAvailable = false;
+                    }
                 }
             }
         }
@@ -156,10 +215,29 @@ public class PublicTransitRouteCalculator implements RouteCalculator {
         );
     }
 
-    /**
-     * ODsay -98은 장애가 아니라 대중교통 대신 도보가 적합한 짧은 구간이다.
-     * ORS 도보 실제 경로를 우선 사용하고, ORS도 실패한 경우에만 도보 추정값을 남긴다.
-     */
+
+    /** 실제 일일 한도·HTTP 429처럼 재시도해도 즉시 성공할 수 없는 오류만 전역 중단한다. */
+    private boolean isHardGlobalFailure(OdsayApiException exception) {
+        if (exception == null) {
+            return false;
+        }
+        String code = exception.getErrorCode();
+        String message = exception.getApiMessage() == null
+                ? ""
+                : exception.getApiMessage().toLowerCase();
+        return "LOCAL_DAILY_LIMIT".equals(code)
+                || "HTTP_429".equals(code)
+                || message.contains("quota")
+                || message.contains("limit")
+                || message.contains("exceed")
+                || message.contains("suspend")
+                || message.contains("blocked")
+                || message.contains("호출 한도")
+                || message.contains("사용량")
+                || message.contains("초과")
+                || message.contains("정지");
+    }
+
     private void applyWalkingRoute(
             RouteCoordinate from,
             RouteCoordinate to,
@@ -209,7 +287,37 @@ public class PublicTransitRouteCalculator implements RouteCalculator {
         estimatedPairs[fromIndex][toIndex] = true;
     }
 
-    /** 후보 풀 1차 평가에서는 ODsay를 호출하지 않고 대중교통 전용 추정값을 사용한다. */
+    /** 로그와 초단거리 판정에 공통으로 사용하는 두 좌표의 직선거리(km)이다. */
+    private double straightLineDistanceKm(
+            RouteCoordinate from,
+            RouteCoordinate to
+    ) {
+        double latitudeDeltaRadians = Math.toRadians(
+                to.latitude() - from.latitude()
+        );
+        double longitudeDeltaRadians = Math.toRadians(
+                to.longitude() - from.longitude()
+        );
+        double fromLatitudeRadians = Math.toRadians(from.latitude());
+        double toLatitudeRadians = Math.toRadians(to.latitude());
+        double haversine = Math.sin(latitudeDeltaRadians / 2.0)
+                * Math.sin(latitudeDeltaRadians / 2.0)
+                + Math.cos(fromLatitudeRadians)
+                * Math.cos(toLatitudeRadians)
+                * Math.sin(longitudeDeltaRadians / 2.0)
+                * Math.sin(longitudeDeltaRadians / 2.0);
+        double clampedHaversine = Math.max(0.0, Math.min(1.0, haversine));
+        double centralAngle = 2.0 * Math.atan2(
+                Math.sqrt(clampedHaversine),
+                Math.sqrt(1.0 - clampedHaversine)
+        );
+        return EARTH_RADIUS_KM * centralAngle;
+    }
+
+    private double roundForLog(double value) {
+        return Math.round(value * 1_000.0) / 1_000.0;
+    }
+
     @Override
     public RouteCalculation estimate(List<RouteCoordinate> coordinates) {
         if (coordinates == null) {
@@ -250,13 +358,10 @@ public class PublicTransitRouteCalculator implements RouteCalculator {
         return false;
     }
 
-    /** ODsay를 사용할 수 없는 구간의 개발용 추정 계산식을 별도로 격리한다. */
     double estimateTransitMinutes(double routeDistanceKm) {
         if (routeDistanceKm == 0.0) {
             return 0.0;
         }
-
-        // ODsay가 -98(700m 이내)을 반환하는 짧은 구간은 도보 이동으로 처리한다.
         if (routeDistanceKm <= ACCESS_WALKING_DISTANCE_KM) {
             return routeDistanceKm / WALKING_SPEED_KM_PER_HOUR * 60.0;
         }

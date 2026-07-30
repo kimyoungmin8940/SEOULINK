@@ -168,6 +168,7 @@
 /**
  * @typedef {Object} CourseDetailResponse
  * @property {number} courseId
+ * @property {?number} resultId 설문 추천 코스를 상세 화면에서 다시 저장할 때 사용
  * @property {string} title
  * @property {?string} description
  * @property {?string} coverImageUrl
@@ -192,6 +193,8 @@
 /**
  * @typedef {Object} CourseSummaryResponse
  * @property {number} courseId
+ * @property {?number} resultId 설문 추천 결과 식별자
+ * @property {?string} recommendationKey 추천 결과 화면의 저장 여부 판별 키
  * @property {string} title
  * @property {?string} description
  * @property {?string} coverImageUrl

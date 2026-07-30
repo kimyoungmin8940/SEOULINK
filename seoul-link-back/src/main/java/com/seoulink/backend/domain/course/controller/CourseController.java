@@ -15,6 +15,7 @@ import com.seoulink.backend.domain.course.dto.response.CourseRecommendationRespo
 import com.seoulink.backend.domain.course.dto.response.CourseSaveResponse;
 import com.seoulink.backend.domain.course.service.CourseDraftService;
 import com.seoulink.backend.domain.course.service.CourseOptimizationService;
+import com.seoulink.backend.domain.course.service.CourseRecommendationHistoryService;
 import com.seoulink.backend.domain.course.service.CourseRecommendationService;
 import com.seoulink.backend.domain.course.service.CourseSaveService;
 import com.seoulink.backend.domain.course.service.CourseService;
@@ -49,6 +50,8 @@ public class CourseController {
     private final CourseDraftService courseDraftService;
     private final CourseOptimizationService courseOptimizationService;
     private final CourseRecommendationService courseRecommendationService;
+    private final CourseRecommendationHistoryService
+            courseRecommendationHistoryService;
     private final CourseSaveService courseSaveService;
     private final CourseService courseService;
 
@@ -56,12 +59,16 @@ public class CourseController {
             CourseDraftService courseDraftService,
             CourseOptimizationService courseOptimizationService,
             CourseRecommendationService courseRecommendationService,
+            CourseRecommendationHistoryService
+                    courseRecommendationHistoryService,
             CourseSaveService courseSaveService,
             CourseService courseService
     ) {
         this.courseDraftService = courseDraftService;
         this.courseOptimizationService = courseOptimizationService;
         this.courseRecommendationService = courseRecommendationService;
+        this.courseRecommendationHistoryService =
+                courseRecommendationHistoryService;
         this.courseSaveService = courseSaveService;
         this.courseService = courseService;
     }
@@ -122,7 +129,10 @@ public class CourseController {
     public CourseRecommendResponse recommendCourse(
             @RequestBody CourseRecommendRequest request
     ) {
-        return courseRecommendationService.recommend(request);
+        CourseRecommendResponse response =
+                courseRecommendationService.recommend(request);
+        courseRecommendationHistoryService.record(request, response);
+        return response;
     }
 
     /**
@@ -174,6 +184,18 @@ public class CourseController {
             @RequestParam Long memberId
     ) {
         return courseService.getRecommendedCourses(memberId);
+    }
+
+    /**
+     * 수정 전 브라우저 세션에만 남아 있던 추천 응답을 추천 이력으로 복구한다.
+     * 같은 결과·장소 구성은 저장 서비스에서 중복 행 없이 재사용한다.
+     */
+    @PostMapping("/recommended/history")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void recordRecommendedCourseHistory(
+            @RequestBody CourseRecommendResponse response
+    ) {
+        courseRecommendationHistoryService.record(response);
     }
 
     /**

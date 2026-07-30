@@ -56,6 +56,8 @@ public class CourseRecommendationService {
     // 다른 추천 코스는 날짜가 같거나 달라도 DAY 조합 한 쌍당 최대 1개까지 허용한다.
     // 숙소를 제외한 하루 장소 구성이 완전히 같으면 중복 상한 완화 중에도 허용하지 않는다.
     private static final int MAX_DAILY_OVERLAP_LIMIT = 1;
+    // 도보만 후보 부족 시 1곳 → 2곳 → 최대 3곳까지 단계적으로 완화한다.
+    private static final int MAX_WALKING_RELAXED_DAILY_OVERLAP_LIMIT = 3;
     /*
      * 이동 최소를 먼저 생성해야 앞선 옵션이 가까운 장소를 모두 선점하는 편향을
      * 피할 수 있다. 응답 화면에서는 아래에서 다시 취향 집중 → 이동 최소 → 균형
@@ -81,10 +83,19 @@ public class CourseRecommendationService {
     private static final double WALKING_MAX_MINUTES = 20.0;
     private static final double WALKING_TARGET_AVERAGE_MINUTES = 15.0;
     private static final double WALKING_RELAXED_AVERAGE_MINUTES = 18.0;
-    // 숙소는 일반 방문 장소와 분리해 20분 이내를 우선하고, 최대 30분까지만 허용한다.
+    // 숙소 도착은 20분 이내를 우선하고 최대 30분까지 완화한다.
+    // DAY2 이후 숙소 출발 구간은 일반 도보 구간과 동일하게 20분을 넘길 수 없다.
     private static final double HOTEL_WALKING_PREFERRED_MAX_MINUTES = 20.0;
     private static final double HOTEL_WALKING_MAX_MINUTES = 30.0;
+    private static final double HOTEL_DEPARTURE_WALKING_MAX_MINUTES =
+            WALKING_MAX_MINUTES;
     private static final int MIN_PLACES_PER_DAY = 3;
+    /*
+     * 후보 생성은 하루 최소 3곳을 유지한다. 다만 추정값과 실제 ORS 결과가 달라
+     * 3곳 경로가 20분 상한을 넘는 경우에는 요청 전체를 실패시키지 않도록 실제
+     * 경로 복구 단계에서만 최후 수단으로 2곳까지 줄인다.
+     */
+    private static final int MIN_ACTUAL_WALKING_REPAIR_PLACES_PER_DAY = 2;
     private static final int WALKING_PATH_BEAM_WIDTH = 64;
     private static final int MAX_WALKING_OPTION_CANDIDATES_PER_STRATEGY = 8;
     private static final int MAX_WALKING_CANDIDATE_GENERATION_ATTEMPTS = 36;
@@ -94,8 +105,9 @@ public class CourseRecommendationService {
             84;
     private static final int MAX_WALKING_EXCLUSION_DEPTH = 60;
     private static final int MAX_WALKING_JOINT_COMBINATIONS = 800;
-    // 추정 경로와 실제 ORS 경로의 차이로 한 구간만 20분을 넘는 경우,
-    // 하루 최소 3곳을 유지하며 문제 DAY의 장소를 줄여 실제 경로를 복구한다.
+    // 추정 경로와 실제 ORS 경로의 차이로 20분을 넘는 구간이 생기면
+    // 먼저 현재 순서에서 장소를 줄여 복구하고, 그래도 세 코스 조합이 없으면
+    // 문제 DAY의 목표 장소 수를 한 곳 낮춰 후보부터 다시 고른다.
     private static final int MAX_ACTUAL_WALKING_REPAIR_ATTEMPTS = 8;
     private static final int MAX_ACTUAL_WALKING_REPAIR_DEPTH = 2;
 
@@ -103,6 +115,9 @@ public class CourseRecommendationService {
     private static final int LUNCH_START_MINUTE = 11 * 60 + 30;
     private static final int LUNCH_END_MINUTE = 14 * 60;
     private static final int LUNCH_TARGET_MINUTE = 12 * 60 + 30;
+    private static final int DINNER_START_MINUTE = 17 * 60 + 30;
+    private static final int DINNER_END_MINUTE = 19 * 60 + 30;
+    private static final int DINNER_TARGET_MINUTE = 18 * 60 + 30;
     private static final int AFTERNOON_CAFE_MINUTE = 13 * 60;
     private static final double MAX_NATURAL_ROUTE_EXTRA_MINUTES = 15.0;
     private static final double MAX_NATURAL_ROUTE_EXTRA_RATIO = 0.20;
@@ -239,8 +254,8 @@ public class CourseRecommendationService {
                                     );
                 }
 
-                // 최종 장소 구성은 유지하면서 관광지 시작·점심 식당·카페 흐름을
-                // 기존 동선이 크게 나빠지지 않는 범위에서 방문 순서에 반영한다.
+                // 최종 장소 구성은 유지하면서 관광지 시작·점심·저녁 식당·카페
+                // 흐름을 기존 동선이 크게 나빠지지 않는 범위에서 방문 순서에 반영한다.
                 optimized = applyNaturalScheduleFlow(
                         optimized,
                         request.getDailyStartTime(),
@@ -359,11 +374,9 @@ public class CourseRecommendationService {
                                 optimized.getOptimizedPlaces(),
                                 validated.transportMode()
                         );
-                recommendationKey =
-                        createOptimizedCompositionSignature(
-                                optimized.getOptimizedPlaces(),
-                                validated.transportMode()
-                        );
+                // 숙소가 바뀌어도 같은 일반 장소 코스를 다시 반환하지 않도록
+                // 외부에 전달하는 제외 키 역시 숙소를 제거한 최종 장소 기준으로 만든다.
+                recommendationKey = ordinaryRecommendationKey;
                 boolean duplicatedInCurrentResponse =
                         generatedRecommendationKeys.contains(
                                 ordinaryRecommendationKey
@@ -496,6 +509,37 @@ public class CourseRecommendationService {
             Map<LocalDate, DailyRouteContext> routeContexts,
             int dailyOverlapLimit
     ) {
+        return recommendWalkingJointly(
+                request,
+                validated,
+                routeContexts,
+                dailyOverlapLimit,
+                requestedPlaceCountsByDate(routeContexts),
+                new LinkedHashSet<>()
+        );
+    }
+
+    /**
+     * 실제 ORS 검증에서 실패한 DAY는 목표 장소 수를 한 곳씩 줄여 후보 생성부터
+     * 다시 수행한다. 응답의 requestedPlaceCount는 최초 요청값을 유지한다.
+     */
+    private CourseRecommendResponse recommendWalkingJointly(
+            CourseRecommendRequest request,
+            ValidatedRecommendation validated,
+            Map<LocalDate, DailyRouteContext> routeContexts,
+            int dailyOverlapLimit,
+            Map<LocalDate, Integer> originalRequestedPlaceCounts,
+            Set<String> attemptedTargetSignatures
+    ) {
+        String targetSignature = walkingTargetSignature(routeContexts);
+        if (!attemptedTargetSignatures.add(targetSignature)) {
+            throw new IllegalStateException(
+                    "같은 도보 장소 수 조합을 반복해 재시도할 수 없습니다. "
+                            + "resultId=" + request.getResultId()
+                            + ", targets=" + targetSignature
+            );
+        }
+
         Map<OptionStrategy, List<WalkingOptionCandidate>> candidatesByStrategy =
                 new LinkedHashMap<>();
         for (OptionStrategy strategy : OptionStrategy.values()) {
@@ -587,6 +631,7 @@ public class CourseRecommendationService {
         Map<String, CourseOptimizeResponse> actualRouteCache =
                 new LinkedHashMap<>();
         Set<String> invalidActualRouteKeys = new LinkedHashSet<>();
+        Set<LocalDate> actualLimitFailureDates = new LinkedHashSet<>();
         int attemptedCombinations = 0;
         for (WalkingCandidateCombination combination : combinations) {
             attemptedCombinations++;
@@ -599,7 +644,8 @@ public class CourseRecommendationService {
                         candidate,
                         request.getResultId(),
                         actualRouteCache,
-                        invalidActualRouteKeys
+                        invalidActualRouteKeys,
+                        actualLimitFailureDates
                 );
                 if (actual == null) {
                     invalidCombination = true;
@@ -620,7 +666,8 @@ public class CourseRecommendationService {
                             validated,
                             routeContexts,
                             appliedDailyOverlapLimit,
-                            resolvedCandidates
+                            resolvedCandidates,
+                            originalRequestedPlaceCounts
                     );
             if (response != null) {
                 log.info(
@@ -637,6 +684,37 @@ public class CourseRecommendationService {
                 );
                 return response;
             }
+        }
+
+        Map<LocalDate, DailyRouteContext> reducedRouteContexts =
+                reduceWalkingRouteContextsAfterActualFailure(
+                        routeContexts,
+                        actualLimitFailureDates,
+                        validated.scheduleType(),
+                        request.getResultId()
+                );
+        if (!walkingTargetSignature(reducedRouteContexts).equals(
+                targetSignature
+        )) {
+            CourseRecommendResponse reducedResponse =
+                    recommendWalkingJointly(
+                            request,
+                            validated,
+                            reducedRouteContexts,
+                            dailyOverlapLimit,
+                            originalRequestedPlaceCounts,
+                            attemptedTargetSignatures
+                    );
+            log.info(
+                    "실제 도보 제한 실패 DAY의 장소 수 축소 재선택 완료: "
+                            + "resultId={}, failedDates={}, beforeTargets={}, "
+                            + "afterTargets={}",
+                    request.getResultId(),
+                    actualLimitFailureDates,
+                    targetSignature,
+                    walkingTargetSignature(reducedRouteContexts)
+            );
+            return reducedResponse;
         }
 
         throw new IllegalStateException(
@@ -1319,20 +1397,8 @@ public class CourseRecommendationService {
             int originalDailyOverlapLimit,
             Long resultId
     ) {
-        int maximumDailyPlaceCount = candidatesByStrategy.values().stream()
-                .flatMap(List::stream)
-                .flatMap(candidate -> candidate.ordinaryPlacesByDate()
-                        .values().stream())
-                .mapToInt(Set::size)
-                .max()
-                .orElse(0);
-
-        int maximumRelaxedOverlap = Math.max(
-                originalDailyOverlapLimit,
-                maximumDailyPlaceCount - 1
-        );
         for (int relaxedOverlap = originalDailyOverlapLimit + 1;
-             relaxedOverlap <= maximumRelaxedOverlap;
+             relaxedOverlap <= MAX_WALKING_RELAXED_DAILY_OVERLAP_LIMIT;
              relaxedOverlap++) {
             WalkingCombinationSelection selection =
                     selectWalkingCandidateCombinations(
@@ -1616,7 +1682,8 @@ public class CourseRecommendationService {
             WalkingOptionCandidate candidate,
             Long resultId,
             Map<String, CourseOptimizeResponse> actualRouteCache,
-            Set<String> invalidActualRouteKeys
+            Set<String> invalidActualRouteKeys,
+            Set<LocalDate> actualLimitFailureDates
     ) {
         String key = candidate.recommendationKey();
         if (invalidActualRouteKeys.contains(key)) {
@@ -1634,6 +1701,23 @@ public class CourseRecommendationService {
             );
             actualRouteCache.put(key, actual);
             return actual;
+        } catch (ActualWalkingLimitException exception) {
+            invalidActualRouteKeys.add(key);
+            actualLimitFailureDates.addAll(
+                    exception.violationDates()
+            );
+            log.warn(
+                    "추정 경로는 통과했지만 실제 도보 제한에서 탈락해 다음 "
+                            + "세 코스 조합을 확인합니다: resultId={}, "
+                            + "strategy={}, recommendationKey={}, "
+                            + "violationDates={}, reason={}",
+                    resultId,
+                    candidate.strategy(),
+                    key,
+                    exception.violationDates(),
+                    exception.getMessage()
+            );
+            return null;
         } catch (IllegalArgumentException | IllegalStateException exception) {
             invalidActualRouteKeys.add(key);
             log.warn(
@@ -1654,7 +1738,8 @@ public class CourseRecommendationService {
             ValidatedRecommendation validated,
             Map<LocalDate, DailyRouteContext> routeContexts,
             int dailyOverlapLimit,
-            List<ResolvedWalkingCandidate> resolvedCandidates
+            List<ResolvedWalkingCandidate> resolvedCandidates,
+            Map<LocalDate, Integer> originalRequestedPlaceCounts
     ) {
         List<CourseOptionResponse> courseOptions = new ArrayList<>();
         List<Map<LocalDate, Set<Long>>> generatedOptionPlaces =
@@ -1740,11 +1825,8 @@ public class CourseRecommendationService {
                 return null;
             }
 
-            String recommendationKey =
-                    createOptimizedCompositionSignature(
-                            optimized.getOptimizedPlaces(),
-                            TransportMode.WALKING
-                    );
+            // 숙소는 코스 중복 여부와 무관하므로 응답 키에도 포함하지 않는다.
+            String recommendationKey = ordinaryRecommendationKey;
             generatedOptionPlaces.add(ordinaryPlaces);
             logOverlapResult(
                     request.getResultId(),
@@ -1764,7 +1846,7 @@ public class CourseRecommendationService {
                     recommendationKey,
                     validated.dailyPlans().size() >= 2,
                     selectedHotelId != null,
-                    requestedPlaceCountsByDate(routeContexts)
+                    originalRequestedPlaceCounts
             ));
         }
 
@@ -2274,7 +2356,8 @@ public class CourseRecommendationService {
      * 장소 수를 줄일 때 기존에 요청된 카테고리는 가능한 한 한 곳씩 남긴다.
      *
      * <p>P형 3·2·1은 5곳에서 2·2·1, 4곳에서 2·1·1,
-     * 3곳에서 1·1·1 순서로 감소한다.</p>
+     * 3곳에서 1·1·1, 실제 경로 최후 fallback인 2곳에서 1·1·0
+     * 순서로 감소한다.</p>
      */
     private Map<String, Integer> deriveFinalCategoryTargets(
             Map<String, Integer> requestedTargets,
@@ -2292,8 +2375,22 @@ public class CourseRecommendationService {
                 case 5 -> fixedCategoryTargets(2, 2, 1);
                 case 4 -> fixedCategoryTargets(2, 1, 1);
                 case 3 -> fixedCategoryTargets(1, 1, 1);
+                case 2 -> fixedCategoryTargets(1, 1, 0);
                 default -> throw new IllegalArgumentException(
-                        "P형 하루 장소 수는 3~6곳이어야 합니다."
+                        "P형 하루 장소 수는 2~6곳이어야 합니다."
+                );
+            };
+        }
+        if (requestedTour == 2
+                && requestedRestaurant == 2
+                && requestedCafe == 1) {
+            return switch (targetPlaceCount) {
+                case 5 -> fixedCategoryTargets(2, 2, 1);
+                case 4 -> fixedCategoryTargets(2, 1, 1);
+                case 3 -> fixedCategoryTargets(1, 1, 1);
+                case 2 -> fixedCategoryTargets(1, 1, 0);
+                default -> throw new IllegalArgumentException(
+                        "축소된 P형 하루 장소 수는 2~5곳이어야 합니다."
                 );
             };
         }
@@ -2303,8 +2400,20 @@ public class CourseRecommendationService {
             return switch (targetPlaceCount) {
                 case 4 -> fixedCategoryTargets(2, 1, 1);
                 case 3 -> fixedCategoryTargets(1, 1, 1);
+                case 2 -> fixedCategoryTargets(1, 1, 0);
                 default -> throw new IllegalArgumentException(
-                        "R형 하루 장소 수는 3~4곳이어야 합니다."
+                        "R형 하루 장소 수는 2~4곳이어야 합니다."
+                );
+            };
+        }
+        if (requestedTour == 1
+                && requestedRestaurant == 1
+                && requestedCafe == 1) {
+            return switch (targetPlaceCount) {
+                case 3 -> fixedCategoryTargets(1, 1, 1);
+                case 2 -> fixedCategoryTargets(1, 1, 0);
+                default -> throw new IllegalArgumentException(
+                        "축소된 일정의 하루 장소 수는 2~3곳이어야 합니다."
                 );
             };
         }
@@ -2433,6 +2542,141 @@ public class CourseRecommendationService {
             );
         }
         return contexts;
+    }
+
+    /**
+     * 실제 ORS 제한을 넘긴 DAY만 목표 장소 수를 한 곳 낮춘다.
+     * 기존 후보 행렬과 인접 목록은 그대로 재사용하므로 후보 풀 API를 다시 부르지 않는다.
+     */
+    private Map<LocalDate, DailyRouteContext>
+    reduceWalkingRouteContextsAfterActualFailure(
+            Map<LocalDate, DailyRouteContext> routeContexts,
+            Set<LocalDate> failureDates,
+            String scheduleType,
+            Long resultId
+    ) {
+        if (failureDates.isEmpty()) {
+            return routeContexts;
+        }
+
+        Map<LocalDate, DailyRouteContext> reducedContexts = new TreeMap<>();
+        for (Map.Entry<LocalDate, DailyRouteContext> entry
+                : routeContexts.entrySet()) {
+            LocalDate visitDate = entry.getKey();
+            DailyRouteContext context = entry.getValue();
+            int currentTarget = context.plan().targetPlaceCount();
+            if (!failureDates.contains(visitDate)
+                    || currentTarget
+                    <= MIN_ACTUAL_WALKING_REPAIR_PLACES_PER_DAY) {
+                reducedContexts.put(visitDate, context);
+                continue;
+            }
+
+            int reducedTarget = currentTarget - 1;
+            Map<String, Integer> reducedCategoryTargets =
+                    deriveWalkingFallbackCategoryTargets(
+                            context.plan(),
+                            reducedTarget,
+                            scheduleType
+                    );
+            ValidatedDailyPlan reducedPlan = new ValidatedDailyPlan(
+                    visitDate,
+                    reducedTarget,
+                    reducedCategoryTargets,
+                    context.plan().placeCandidates()
+            );
+            reducedContexts.put(
+                    visitDate,
+                    new DailyRouteContext(
+                            reducedPlan,
+                            context.routeMatrix(),
+                            context.candidateIndexes(),
+                            context.scoreRange(),
+                            context.routeCostRange(),
+                            context.walkingNeighborCandidates()
+                    )
+            );
+            log.warn(
+                    "실제 ORS 도보 제한을 만족하는 세 코스 조합이 없어 "
+                            + "문제 DAY의 장소 수를 한 곳 줄여 다시 선택합니다: "
+                            + "resultId={}, visitDate={}, beforePlaces={}, "
+                            + "afterPlaces={}, categoryTargets={}",
+                    resultId,
+                    visitDate,
+                    currentTarget,
+                    reducedTarget,
+                    reducedCategoryTargets
+            );
+        }
+        return reducedContexts;
+    }
+
+    /**
+     * P/R 표준 카테고리 비율을 장소 수 축소 단계에도 유지한다.
+     * 최후의 2곳 단계에서는 관광지와 식당을 남기고 카페를 먼저 제외한다.
+     */
+    private Map<String, Integer> deriveWalkingFallbackCategoryTargets(
+            ValidatedDailyPlan plan,
+            int targetPlaceCount,
+            String scheduleType
+    ) {
+        Map<String, Integer> currentTargets = plan.categoryTargets();
+        boolean hasTour = currentTargets.getOrDefault("TOUR", 0) > 0;
+        boolean hasRestaurant =
+                currentTargets.getOrDefault("RESTAURANT", 0) > 0;
+        boolean hasCafe = currentTargets.getOrDefault("CAFE", 0) > 0;
+
+        if (targetPlaceCount == 2) {
+            if (hasTour && hasRestaurant) {
+                return fixedCategoryTargets(1, 1, 0);
+            }
+            if (hasTour && hasCafe) {
+                return fixedCategoryTargets(1, 0, 1);
+            }
+            if (hasRestaurant && hasCafe) {
+                return fixedCategoryTargets(0, 1, 1);
+            }
+        }
+
+        if (hasTour && hasRestaurant && hasCafe) {
+            if ("P".equals(scheduleType)) {
+                return switch (targetPlaceCount) {
+                    case 6 -> fixedCategoryTargets(3, 2, 1);
+                    case 5 -> fixedCategoryTargets(2, 2, 1);
+                    case 4 -> fixedCategoryTargets(2, 1, 1);
+                    case 3 -> fixedCategoryTargets(1, 1, 1);
+                    default -> deriveFinalCategoryTargets(
+                            currentTargets,
+                            targetPlaceCount
+                    );
+                };
+            }
+            if ("R".equals(scheduleType)) {
+                return switch (targetPlaceCount) {
+                    case 4 -> fixedCategoryTargets(2, 1, 1);
+                    case 3 -> fixedCategoryTargets(1, 1, 1);
+                    default -> deriveFinalCategoryTargets(
+                            currentTargets,
+                            targetPlaceCount
+                    );
+                };
+            }
+        }
+        return deriveFinalCategoryTargets(
+                currentTargets,
+                targetPlaceCount
+        );
+    }
+
+    private String walkingTargetSignature(
+            Map<LocalDate, DailyRouteContext> routeContexts
+    ) {
+        return routeContexts.entrySet().stream()
+                .map(entry -> entry.getKey()
+                        + "="
+                        + entry.getValue().plan().targetPlaceCount())
+                .reduce((left, right) -> left + "," + right)
+                .orElse("-");
     }
 
     /**
@@ -3665,7 +3909,7 @@ public class CourseRecommendationService {
             if (repaired != null) {
                 log.warn(
                         "추정 경로와 실제 도보시간 차이로 탈락한 후보를 "
-                                + "하루 최소 3곳을 유지하며 복구했습니다: "
+                                + "문제 DAY의 장소를 줄여 복구했습니다: "
                                 + "resultId={}, strategy={}, beforePlaces={}, "
                                 + "afterPlaces={}",
                         resultId,
@@ -3675,8 +3919,63 @@ public class CourseRecommendationService {
                 );
                 return repaired;
             }
-            throw initialFailure;
+            Set<LocalDate> violationDates =
+                    walkingLimitViolationDates(optimized);
+            if (violationDates.isEmpty()) {
+                throw initialFailure;
+            }
+            throw new ActualWalkingLimitException(
+                    initialFailure.getMessage(),
+                    violationDates,
+                    initialFailure
+            );
         }
+    }
+
+    /** 실제 경로에서 구간 20분 또는 DAY 평균 18분을 넘긴 날짜만 반환한다. */
+    private Set<LocalDate> walkingLimitViolationDates(
+            CourseOptimizeResponse optimized
+    ) {
+        Map<LocalDate, List<OptimizedPlaceDto>> placesByDate =
+                optimized.getOptimizedPlaces().stream()
+                        .filter(place -> !"HOTEL".equalsIgnoreCase(
+                                place.getCategory()
+                        ))
+                        .collect(java.util.stream.Collectors.groupingBy(
+                                OptimizedPlaceDto::getVisitDate,
+                                TreeMap::new,
+                                java.util.stream.Collectors.toList()
+                        ));
+        Set<LocalDate> violationDates = new LinkedHashSet<>();
+        for (Map.Entry<LocalDate, List<OptimizedPlaceDto>> entry
+                : placesByDate.entrySet()) {
+            List<OptimizedPlaceDto> dailyPlaces = entry.getValue().stream()
+                    .sorted(Comparator.comparing(
+                            OptimizedPlaceDto::getVisitOrder
+                    ))
+                    .toList();
+            int legCount = Math.max(0, dailyPlaces.size() - 1);
+            if (legCount == 0) {
+                continue;
+            }
+            double totalMinutes = 0.0;
+            double maximumMinutes = 0.0;
+            for (int index = 1; index < dailyPlaces.size(); index++) {
+                double minutes = valueOrZero(
+                        dailyPlaces.get(index)
+                                .getTravelTimeFromPreviousMinutes()
+                );
+                totalMinutes += minutes;
+                maximumMinutes = Math.max(maximumMinutes, minutes);
+            }
+            if (maximumMinutes > WALKING_MAX_MINUTES + EPSILON
+                    || totalMinutes
+                    > legCount * WALKING_RELAXED_AVERAGE_MINUTES
+                    + EPSILON) {
+                violationDates.add(entry.getKey());
+            }
+        }
+        return Set.copyOf(violationDates);
     }
 
     private CourseOptimizeResponse resolveFixedWalkingRouteDetails(
@@ -3744,6 +4043,7 @@ public class CourseRecommendationService {
     /**
      * 추정값은 통과했지만 실제 ORS 경로에서 일부 구간이 20분을 넘으면,
      * 위반 DAY에서 이동 부담이 큰 장소를 하나씩 제거해 실제 경로를 다시 검증한다.
+     * 하루 3곳으로도 실제 상한을 지킬 수 없을 때만 최후 수단으로 2곳까지 줄이며,
      * 장소 구성 복제 금지와 옵션 간 전체 DAY 중복 검사는 최종 응답 조립 단계에서
      * 복구된 실제 장소 기준으로 다시 검사한다.
      */
@@ -3852,7 +4152,8 @@ public class CourseRecommendationService {
                             OptimizedPlaceDto::getVisitOrder
                     ))
                     .toList();
-            if (daily.size() <= MIN_PLACES_PER_DAY) {
+            if (daily.size()
+                    <= MIN_ACTUAL_WALKING_REPAIR_PLACES_PER_DAY) {
                 continue;
             }
             double totalMinutes = 0.0;
@@ -3942,7 +4243,8 @@ public class CourseRecommendationService {
             );
         }
         if (countsByDate.values().stream()
-                .anyMatch(count -> count < MIN_PLACES_PER_DAY)) {
+                .anyMatch(count -> count
+                        < MIN_ACTUAL_WALKING_REPAIR_PLACES_PER_DAY)) {
             return null;
         }
         return new SequentialSelection(
@@ -4939,7 +5241,13 @@ public class CourseRecommendationService {
         );
     }
 
-    /** 코스별 마지막 일반 장소와 가까운 숙소를 전략에 맞춰 독립적으로 선택한다. */
+    /**
+     * 코스별 숙박일 마지막 장소와 다음 DAY 첫 장소를 모두 고려해 숙소를 선택한다.
+     *
+     * <p>도보는 일반 장소→숙소 도착 구간을 20분 이내로 우선하고 후보가 없을 때
+     * 최대 30분까지 완화한다. 숙소→다음 DAY 첫 장소 출발 구간은 완화하지 않고
+     * 모든 DAY에서 20분 이내인 숙소만 허용한다.</p>
+     */
     private HotelEvaluation selectHotelCandidateForOption(
             List<PlaceCandidateDto> hotelCandidates,
             CourseOptimizeResponse optimized,
@@ -4953,25 +5261,37 @@ public class CourseRecommendationService {
 
         List<OptimizedPlaceDto> lastPlaces =
                 lastOrdinaryPlacesBeforeFinalDay(optimized);
+        List<OptimizedPlaceDto> firstPlaces =
+                firstOrdinaryPlacesAfterFirstDay(optimized);
         List<HotelEvaluation> evaluations = createHotelEvaluations(
                 hotelCandidates,
                 lastPlaces,
+                firstPlaces,
                 optimized.getTransportMode()
         );
         if (optimized.getTransportMode() == TransportMode.WALKING) {
             // 숙소는 일반 방문 장소의 평균 15/18분 제한과 분리한다.
             // 모든 숙박일의 마지막 장소에서 20분 이내인 숙소를 우선하고,
-            // 없을 때만 최대 30분까지 완화한다. 30분을 넘으면 숙소를 붙이지 않는다.
+            // 없을 때만 최대 30분까지 완화한다. 단, DAY2 이후 숙소에서
+            // 첫 장소까지는 모든 날 20분 이내여야 하며 이 제한은 완화하지 않는다.
             List<HotelEvaluation> preferredHotels = evaluations.stream()
                     .filter(evaluation ->
-                            evaluation.maximumTravelMinutes()
+                            evaluation.maximumArrivalTravelMinutes()
                                     <= HOTEL_WALKING_PREFERRED_MAX_MINUTES
+                                    + EPSILON)
+                    .filter(evaluation ->
+                            evaluation.maximumDepartureTravelMinutes()
+                                    <= HOTEL_DEPARTURE_WALKING_MAX_MINUTES
                                     + EPSILON)
                     .toList();
             List<HotelEvaluation> relaxedHotels = evaluations.stream()
                     .filter(evaluation ->
-                            evaluation.maximumTravelMinutes()
+                            evaluation.maximumArrivalTravelMinutes()
                                     <= HOTEL_WALKING_MAX_MINUTES
+                                    + EPSILON)
+                    .filter(evaluation ->
+                            evaluation.maximumDepartureTravelMinutes()
+                                    <= HOTEL_DEPARTURE_WALKING_MAX_MINUTES
                                     + EPSILON)
                     .toList();
 
@@ -4980,20 +5300,32 @@ public class CourseRecommendationService {
             } else if (!relaxedHotels.isEmpty()) {
                 evaluations = relaxedHotels;
                 log.info(
-                        "도보 20분 이내 숙소가 없어 최대 30분 범위로 완화합니다."
+                        "도보 숙소 도착 20분 이내 후보가 없어 최대 30분 범위로 "
+                                + "완화합니다. 숙소 출발 20분 상한은 유지합니다."
                 );
             } else {
-                double closestMinutes = evaluations.stream()
+                double closestArrivalMinutes = evaluations.stream()
                         .mapToDouble(
-                                HotelEvaluation::maximumTravelMinutes
+                                HotelEvaluation::maximumArrivalTravelMinutes
+                        )
+                        .min()
+                        .orElse(Double.NaN);
+                double closestDepartureMinutes = evaluations.stream()
+                        .mapToDouble(
+                                HotelEvaluation::maximumDepartureTravelMinutes
                         )
                         .min()
                         .orElse(Double.NaN);
                 log.warn(
-                        "도보 30분 이내 숙소가 없어 코스에 적용하지 않습니다: "
-                                + "closestMaximumMinutes={}",
-                        Double.isFinite(closestMinutes)
-                                ? round(closestMinutes, 1)
+                        "숙소 도착 30분·다음 DAY 출발 20분 조건을 모두 "
+                                + "만족하는 숙소가 없어 코스에 적용하지 않습니다: "
+                                + "closestArrivalMaximumMinutes={}, "
+                                + "closestDepartureMaximumMinutes={}",
+                        Double.isFinite(closestArrivalMinutes)
+                                ? round(closestArrivalMinutes, 1)
+                                : "unavailable",
+                        Double.isFinite(closestDepartureMinutes)
+                                ? round(closestDepartureMinutes, 1)
                                 : "unavailable"
                 );
                 return null;
@@ -5027,6 +5359,7 @@ public class CourseRecommendationService {
     private List<HotelEvaluation> createHotelEvaluations(
             List<PlaceCandidateDto> hotelCandidates,
             List<OptimizedPlaceDto> lastPlaces,
+            List<OptimizedPlaceDto> firstPlaces,
             TransportMode transportMode
     ) {
         Map<Long, Double> averageDistances = new LinkedHashMap<>();
@@ -5037,11 +5370,13 @@ public class CourseRecommendationService {
             );
         }
         if (transportMode != TransportMode.WALKING
-                || lastPlaces.isEmpty()) {
+                || (lastPlaces.isEmpty() && firstPlaces.isEmpty())) {
             return hotelCandidates.stream()
                     .map(hotel -> new HotelEvaluation(
                             hotel,
                             averageDistances.get(hotel.getPlaceId()),
+                            Double.POSITIVE_INFINITY,
+                            Double.POSITIVE_INFINITY,
                             Double.POSITIVE_INFINITY,
                             Double.POSITIVE_INFINITY,
                             true
@@ -5052,6 +5387,10 @@ public class CourseRecommendationService {
         List<PlaceCandidateDto> matrixCandidates = new ArrayList<>();
         for (OptimizedPlaceDto lastPlace : lastPlaces) {
             matrixCandidates.add(toRouteCandidate(lastPlace));
+        }
+        int firstDeparturePlaceIndex = matrixCandidates.size();
+        for (OptimizedPlaceDto firstPlace : firstPlaces) {
+            matrixCandidates.add(toRouteCandidate(firstPlace));
         }
         int firstHotelIndex = matrixCandidates.size();
         matrixCandidates.addAll(hotelCandidates);
@@ -5065,8 +5404,10 @@ public class CourseRecommendationService {
              hotelOffset < hotelCandidates.size();
              hotelOffset++) {
             int hotelIndex = firstHotelIndex + hotelOffset;
-            double maximumMinutes = 0.0;
-            double totalMinutes = 0.0;
+            double maximumArrivalMinutes = 0.0;
+            double totalArrivalMinutes = 0.0;
+            double maximumDepartureMinutes = 0.0;
+            double totalDepartureMinutes = 0.0;
             boolean estimated = false;
             for (int lastIndex = 0;
                  lastIndex < lastPlaces.size();
@@ -5075,16 +5416,44 @@ public class CourseRecommendationService {
                         lastIndex,
                         hotelIndex
                 );
-                maximumMinutes = Math.max(maximumMinutes, minutes);
-                totalMinutes += minutes;
+                maximumArrivalMinutes = Math.max(
+                        maximumArrivalMinutes,
+                        minutes
+                );
+                totalArrivalMinutes += minutes;
                 estimated |= matrix.isEstimated(lastIndex, hotelIndex);
+            }
+            for (int firstOffset = 0;
+                 firstOffset < firstPlaces.size();
+                 firstOffset++) {
+                int firstPlaceIndex =
+                        firstDeparturePlaceIndex + firstOffset;
+                double minutes = matrix.getTravelTimeMinutes(
+                        hotelIndex,
+                        firstPlaceIndex
+                );
+                maximumDepartureMinutes = Math.max(
+                        maximumDepartureMinutes,
+                        minutes
+                );
+                totalDepartureMinutes += minutes;
+                estimated |= matrix.isEstimated(
+                        hotelIndex,
+                        firstPlaceIndex
+                );
             }
             PlaceCandidateDto hotel = hotelCandidates.get(hotelOffset);
             evaluations.add(new HotelEvaluation(
                     hotel,
                     averageDistances.get(hotel.getPlaceId()),
-                    maximumMinutes,
-                    totalMinutes / lastPlaces.size(),
+                    maximumArrivalMinutes,
+                    lastPlaces.isEmpty()
+                            ? 0.0
+                            : totalArrivalMinutes / lastPlaces.size(),
+                    maximumDepartureMinutes,
+                    firstPlaces.isEmpty()
+                            ? 0.0
+                            : totalDepartureMinutes / firstPlaces.size(),
                     estimated
             ));
         }
@@ -5365,6 +5734,40 @@ public class CourseRecommendationService {
         return List.copyOf(lastByDate.values());
     }
 
+    /**
+     * DAY2 이후의 숙소 출발 도보 구간을 검사할 수 있도록 각 DAY 첫 일반 장소를
+     * 날짜순으로 반환한다.
+     */
+    private List<OptimizedPlaceDto> firstOrdinaryPlacesAfterFirstDay(
+            CourseOptimizeResponse optimized
+    ) {
+        if (optimized == null
+                || optimized.getOptimizedPlaces() == null
+                || optimized.getOptimizedPlaces().isEmpty()) {
+            return List.of();
+        }
+        LocalDate firstDate = optimized.getOptimizedPlaces().stream()
+                .map(OptimizedPlaceDto::getVisitDate)
+                .min(Comparator.naturalOrder())
+                .orElseThrow();
+        Map<LocalDate, OptimizedPlaceDto> firstByDate = new TreeMap<>();
+        for (OptimizedPlaceDto place : optimized.getOptimizedPlaces()) {
+            if (place.getVisitDate().equals(firstDate)
+                    || "HOTEL".equalsIgnoreCase(place.getCategory())) {
+                continue;
+            }
+            OptimizedPlaceDto current = firstByDate.get(
+                    place.getVisitDate()
+            );
+            if (current == null
+                    || valueOrZero(place.getVisitOrder())
+                    < valueOrZero(current.getVisitOrder())) {
+                firstByDate.put(place.getVisitDate(), place);
+            }
+        }
+        return List.copyOf(firstByDate.values());
+    }
+
     private double averageDirectDistanceKm(
             List<OptimizedPlaceDto> lastPlaces,
             PlaceCandidateDto hotel
@@ -5637,22 +6040,6 @@ public class CourseRecommendationService {
                 .orElse(null);
     }
 
-    /** 대체 후보 교체와 숙소 삽입까지 끝난 실제 표시 장소로 재추천 제외 키를 만든다. */
-    private String createOptimizedCompositionSignature(
-            List<OptimizedPlaceDto> places,
-            TransportMode transportMode
-    ) {
-        String composition = places.stream()
-                .sorted(Comparator
-                        .comparing(OptimizedPlaceDto::getVisitDate)
-                        .thenComparing(OptimizedPlaceDto::getPlaceId))
-                .map(place -> place.getVisitDate()
-                        + ":" + place.getPlaceId())
-                .reduce((left, right) -> left + "," + right)
-                .orElse("");
-        return transportMode.name() + ":" + composition;
-    }
-
     /** 숙소를 제외한 실제 표시 장소로 코스 동일성 비교용 키를 만든다. */
     private String createOrdinaryOptimizedCompositionSignature(
             List<OptimizedPlaceDto> places,
@@ -5817,7 +6204,8 @@ public class CourseRecommendationService {
                 )
                 .hotelIncluded(hotelExpected ? hotelIncluded : null)
                 .hotelNotice(hotelExpected && !hotelIncluded
-                        ? "해당 일정 주변에서 도보 30분 이내 숙소를 찾지 못했습니다. 숙소는 별도로 확인해 주세요."
+                        ? "숙소 도착 30분·다음 DAY 출발 20분 조건을 모두 "
+                        + "만족하는 숙소를 찾지 못했습니다. 숙소는 별도로 확인해 주세요."
                         : null)
                 .days(days)
                 .build();
@@ -6183,7 +6571,7 @@ public class CourseRecommendationService {
     /**
      * 선발된 장소는 그대로 유지하고 방문 순서만 자연스럽게 보정한다.
      *
-     * <p>R형은 13시 식당 시작을, P형은 관광지 시작 뒤 점심 식당을 우선한다.
+     * <p>R형은 13시 식당 시작을, P형은 관광지 시작 뒤 점심·저녁 식당을 우선한다.
      * 가능한 순서 중 최소 이동시간보다 15분 또는 20%를 초과해 느려지는 경로는
      * 제외한 뒤 음식점·카페 연속 방지와 오후 카페 배치를 함께 평가한다.
      * 도보는 실제값과 예상값 모두 20분 이내 간선만 사용해 하드 제한을 유지한다.</p>
@@ -6614,6 +7002,9 @@ public class CourseRecommendationService {
         }
 
         List<Integer> immutableRoute = List.copyOf(route);
+        if (hasConsecutiveMealCategory(dailyPlaces, immutableRoute)) {
+            return null;
+        }
         return new NaturalRouteEvaluation(
                 immutableRoute,
                 travelTimeMinutes,
@@ -6633,7 +7024,7 @@ public class CourseRecommendationService {
         );
     }
 
-    /** 점심 식당·연속 카테고리·오후 카페 규칙을 분 단위의 소프트 페널티로 환산한다. */
+    /** 점심·저녁 식당과 오후 카페 규칙을 분 단위의 소프트 페널티로 환산한다. */
     private double calculateNaturalSchedulePenalty(
             List<OptimizedPlaceDto> dailyPlaces,
             NaturalRouteContext context,
@@ -6644,6 +7035,7 @@ public class CourseRecommendationService {
         double currentMinute = dailyStartTime.getHour() * 60.0
                 + dailyStartTime.getMinute();
         Double firstRestaurantArrival = null;
+        Double secondRestaurantArrival = null;
         double penalty = 0.0;
 
         for (int position = 0; position < route.size(); position++) {
@@ -6669,9 +7061,12 @@ public class CourseRecommendationService {
                     && !isCategory(current, expectedFirstCategory)) {
                 penalty += 500.0;
             }
-            if (isCategory(current, "RESTAURANT")
-                    && firstRestaurantArrival == null) {
-                firstRestaurantArrival = currentMinute;
+            if (isCategory(current, "RESTAURANT")) {
+                if (firstRestaurantArrival == null) {
+                    firstRestaurantArrival = currentMinute;
+                } else if (secondRestaurantArrival == null) {
+                    secondRestaurantArrival = currentMinute;
+                }
             }
             if (isCategory(current, "CAFE")
                     && currentMinute < AFTERNOON_CAFE_MINUTE) {
@@ -6720,6 +7115,23 @@ public class CourseRecommendationService {
                 ) * 0.05;
             }
         }
+        if (!"R".equals(scheduleType)
+                && secondRestaurantArrival != null) {
+            if (secondRestaurantArrival < DINNER_START_MINUTE) {
+                penalty += (
+                        DINNER_START_MINUTE - secondRestaurantArrival
+                ) * 1.2;
+            } else if (secondRestaurantArrival > DINNER_END_MINUTE) {
+                penalty += (
+                        secondRestaurantArrival - DINNER_END_MINUTE
+                ) * 1.2;
+            } else {
+                // 허용 시간대 안에서는 18시 30분에 가까울수록 아주 조금 우선한다.
+                penalty += Math.abs(
+                        secondRestaurantArrival - DINNER_TARGET_MINUTE
+                ) * 0.05;
+            }
+        }
         return penalty;
     }
 
@@ -6748,6 +7160,33 @@ public class CourseRecommendationService {
                 && left.getCategory().trim().equalsIgnoreCase(
                         right.getCategory().trim()
                 );
+    }
+
+    /**
+     * 식당 또는 카페가 같은 카테고리끼리 연속되는 경로는 후보에서 제외한다.
+     *
+     * <p>기존에는 120분 소프트 페널티만 부여해 이동시간이 짧으면 식당 두 곳이
+     * 연속으로 선택될 수 있었다. 카테고리 배치 규칙은 실제 화면 구성과 직결되므로
+     * 자연스러운 경로 탐색 단계에서는 하드 제한으로 적용한다.</p>
+     */
+    private boolean hasConsecutiveMealCategory(
+            List<OptimizedPlaceDto> dailyPlaces,
+            List<Integer> route
+    ) {
+        for (int position = 1; position < route.size(); position++) {
+            OptimizedPlaceDto previous = dailyPlaces.get(
+                    route.get(position - 1)
+            );
+            OptimizedPlaceDto current = dailyPlaces.get(
+                    route.get(position)
+            );
+            if (sameCategory(previous, current)
+                    && (isCategory(current, "RESTAURANT")
+                    || isCategory(current, "CAFE"))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private OptimizedPlaceDto copyOptimizedPlaceWithRoute(
@@ -7008,6 +7447,25 @@ public class CourseRecommendationService {
                 .doubleValue();
     }
 
+    private static final class ActualWalkingLimitException
+            extends IllegalStateException {
+        private static final long serialVersionUID = 1L;
+        private final Set<LocalDate> violationDates;
+
+        private ActualWalkingLimitException(
+                String message,
+                Set<LocalDate> violationDates,
+                Throwable cause
+        ) {
+            super(message, cause);
+            this.violationDates = Set.copyOf(violationDates);
+        }
+
+        private Set<LocalDate> violationDates() {
+            return violationDates;
+        }
+    }
+
     private enum OptionStrategy {
         PREFERENCE("취향 집중 코스"),
         MIN_DISTANCE("이동 최소 코스"),
@@ -7209,10 +7667,25 @@ public class CourseRecommendationService {
     private record HotelEvaluation(
             PlaceCandidateDto hotel,
             double averageDistanceKm,
-            double maximumTravelMinutes,
-            double averageTravelMinutes,
+            double maximumArrivalTravelMinutes,
+            double averageArrivalTravelMinutes,
+            double maximumDepartureTravelMinutes,
+            double averageDepartureTravelMinutes,
             boolean estimated
     ) {
+        private double maximumTravelMinutes() {
+            return Math.max(
+                    maximumArrivalTravelMinutes,
+                    maximumDepartureTravelMinutes
+            );
+        }
+
+        private double averageTravelMinutes() {
+            return (
+                    averageArrivalTravelMinutes
+                            + averageDepartureTravelMinutes
+            ) / 2.0;
+        }
     }
 
     private record RegionUsage(
