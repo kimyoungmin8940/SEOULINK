@@ -188,6 +188,10 @@
   overflow-wrap: break-word;
 }
 
+.home .course-info p {
+  min-height: 4.5em;
+}
+
 /* 소요 시간과 지역 정보를 가로로 배치 */
 .course-meta {
   display: flex;

@@ -27,6 +27,23 @@ function formatMinutes(value) {
     return restMinutes === 0 ? `${hours}시간` : `${hours}시간 ${restMinutes}분`;
 }
 
+function formatKoreanSubjectParticle(description) {
+    if (!description) return description;
+
+    const formattedDescription = description.replace(/은\(는\)/g, (particle, offset) => {
+        const previousCharacter = description.slice(0, offset).trim().at(-1);
+        const codePoint = previousCharacter?.charCodeAt(0);
+        const hasFinalConsonant = Number.isInteger(codePoint)
+            && codePoint >= 0xAC00
+            && codePoint <= 0xD7A3
+            && (codePoint - 0xAC00) % 28 !== 0;
+
+        return hasFinalConsonant ? '은' : '는';
+    });
+
+    return formattedDescription.replace(/\.+\s*$/, '');
+}
+
 /** 선택한 일차의 장소와 장소 사이 이동 정보를 시간 순 타임라인으로 표시합니다. */
 function CoursePlaceList({ day, transportMode }) {
     const places = Array.isArray(day?.places) ? day.places : [];
@@ -48,6 +65,13 @@ function CoursePlaceList({ day, transportMode }) {
                 const score = Number(place.recommendationScore);
                 const hasScore = Number.isFinite(score);
                 const isLast = index === places.length - 1;
+                const description = formatKoreanSubjectParticle(
+                    place.databaseDescription
+                    || place.memo
+                    || (hasScore
+                        ? `취향과 이동 동선을 반영한 추천 장소예요. 추천 점수 ${Math.round(score)}점`
+                        : '코스 이동 동선을 고려해 선택된 장소예요.'),
+                );
                 // 백엔드는 이전 장소→현재 장소의 이동 정보를 현재 장소에 함께 내려줍니다.
                 const legTransport = getTravelLegMeta(
                     transportMode,
@@ -99,10 +123,7 @@ function CoursePlaceList({ day, transportMode }) {
                                     </div>
 
                                     <p className="course-detail-place-description">
-                                        {place.memo
-                                            || (hasScore
-                                                ? `취향과 이동 동선을 반영한 추천 장소예요. 추천 점수 ${Math.round(score)}점`
-                                                : '코스 이동 동선을 고려해 선택된 장소예요.')}
+                                        {description}
                                     </p>
 
                                     {address && (

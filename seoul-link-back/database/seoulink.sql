@@ -717,6 +717,9 @@ CREATE TABLE TRAVEL_COURSES (
 
                                 COURSE_TYPE VARCHAR2(20) DEFAULT 'CUSTOM' NOT NULL,
 
+                                -- 저장한 원본 테마 코스 식별값
+                                SOURCE_COURSE_KEY VARCHAR2(50),
+
                                 REGION VARCHAR2(100),
 
                                 IS_PUBLIC CHAR(1) DEFAULT 'N' NOT NULL,
@@ -749,7 +752,7 @@ CREATE TABLE TRAVEL_COURSES (
                                         REFERENCES TRAVEL_TYPE_MASTER(TRAVEL_CODE),
 
                                 CONSTRAINT CK_COURSE_TYPE
-                                    CHECK (COURSE_TYPE IN ('CUSTOM', 'SURVEY', 'CHATBOT')),
+                                    CHECK (COURSE_TYPE IN ('CUSTOM', 'SURVEY', 'CHATBOT', 'THEME')),
 
                                 CONSTRAINT CK_COURSE_PUBLIC
                                     CHECK (IS_PUBLIC IN ('Y', 'N')),
@@ -767,7 +770,10 @@ CREATE TABLE TRAVEL_COURSES (
                                     CHECK (TOTAL_VISIT_MINUTES >= 0),
 
                                 CONSTRAINT CK_COURSE_TOTAL_TIME
-                                    CHECK (TOTAL_COURSE_MINUTES >= 0)
+                                    CHECK (TOTAL_COURSE_MINUTES >= 0),
+
+                                CONSTRAINT UK_MEMBER_SOURCE_COURSE
+                                    UNIQUE (MEMBER_ID,SOURCE_COURSE_KEY)
 );
 
 -- COURSE_DETAILS

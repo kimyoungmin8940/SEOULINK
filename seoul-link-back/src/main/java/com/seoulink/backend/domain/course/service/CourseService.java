@@ -1,10 +1,12 @@
 package com.seoulink.backend.domain.course.service;
 
-import com.seoulink.backend.domain.course.dto.request.CourseUpdateRequest;
 import com.seoulink.backend.domain.course.dto.response.CourseDetailResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseDayResponse;
 import com.seoulink.backend.domain.course.dto.response.CoursePlaceResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseRecommendationResponse;
+import com.seoulink.backend.domain.course.dto.response.ThemeCourseBookmarkResponse;
+import com.seoulink.backend.domain.course.dto.response.ThemeCoursePopularityResponse;
+import com.seoulink.backend.domain.course.dto.request.CourseUpdateRequest;
 import com.seoulink.backend.domain.course.entity.CourseDetail;
 import com.seoulink.backend.domain.course.entity.TravelCourse;
 import com.seoulink.backend.domain.course.model.TransportMode;
@@ -103,6 +105,7 @@ public class CourseService {
                 );
         Map<Long, Place> placesById = loadPlacesById(details);
         List<CourseDayResponse> days = toDayResponses(details, placesById);
+
         int excludedHotelStayMinutes = excludedHotelStayMinutes(
                 details,
                 placesById
@@ -147,14 +150,27 @@ public class CourseService {
     public List<CourseRecommendationResponse> getRecommendedCourses(Long memberId) {
         validateMemberId(memberId);
         return travelCourseRepository
-                .findByMemberIdAndCourseTypeOrderByCreatedAtDesc(
+                .findByMemberIdAndCourseTypeInOrderByCreatedAtDesc(
                         memberId,
-                        "SURVEY"
+                        List.of("SURVEY")
                 )
                 .stream()
                 .map(this::toRecommendationResponse)
                 .toList();
     }
+
+    /** 원본 테마 코스별 회원 저장 횟수를 인기순으로 반환한다. */
+    @Transactional(readOnly = true)
+    public List<ThemeCoursePopularityResponse> getThemeCoursePopularity() {
+        return travelCourseRepository.findThemeCoursePopularity()
+                .stream()
+                .map(popularity -> new ThemeCoursePopularityResponse(
+                        popularity.getSourceCourseKey(),
+                        popularity.getSaveCount()
+                ))
+                .toList();
+    }
+
 
     /** 회원이 보유한 모든 코스를 유형과 관계없이 최신순으로 반환한다. */
     @Transactional(readOnly = true)
@@ -167,14 +183,53 @@ public class CourseService {
                 .toList();
     }
 
+    /**
+     * 회원이 특정 테마 코스를 저장했는지 확인한다.
+     *
+     * <p>저장된 THEME 코스가 있으면 saved=true와 저장된 courseId를 반환하고,
+     * 저장되지 않았다면 saved=false와 courseId=null을 반환한다.</p>
+     */
+    @Transactional(readOnly = true)
+    public ThemeCourseBookmarkResponse getThemeCourseBookmarkStatus(
+            Long memberId,
+            String sourceCourseKey
+    ) {
+        validateMemberId(memberId);
+
+        String normalizedSourceCourseKey = validateSourceCourseKey(sourceCourseKey);
+
+        return travelCourseRepository
+                .findByMemberIdAndSourceCourseKey(memberId, normalizedSourceCourseKey)
+                // 북마크 조회 API에서 THEME 이외의 코스가 조회되지 않도록 확인
+                .filter(course -> "THEME".equalsIgnoreCase(course.getCourseType()))
+                .map(course ->
+                        ThemeCourseBookmarkResponse.builder()
+                                .saved(true)
+                                .courseId(course.getCourseId())
+                                .sourceCourseKey(normalizedSourceCourseKey)
+                                .build()
+                )
+                .orElseGet(() ->
+                        ThemeCourseBookmarkResponse.builder()
+                                .saved(false)
+                                .courseId(null)
+                                .sourceCourseKey(normalizedSourceCourseKey)
+                                .build()
+                );
+    }
+
     @Transactional(readOnly = true)
     public List<CourseRecommendationResponse> getMemberCoursesByType(
             Long memberId,
             String courseType
     ) {
         validateMemberId(memberId);
+
         return travelCourseRepository
-                .findByMemberIdAndCourseTypeOrderByCreatedAtDesc(memberId, courseType)
+                .findByMemberIdAndCourseTypeOrderByCreatedAtDesc(
+                        memberId,
+                        courseType
+                )
                 .stream()
                 .map(this::toRecommendationResponse)
                 .toList();
@@ -186,37 +241,81 @@ public class CourseService {
             Long memberId,
             CourseUpdateRequest request
     ) {
-        TravelCourse course = getOwnedCourse(courseId, memberId, "CUSTOM");
-        String title = request.getTitle() == null ? "" : request.getTitle().trim();
+        TravelCourse course =
+                getOwnedCourse(courseId, memberId, "CUSTOM");
+
+        String title =
+                request.getTitle() == null
+                        ? ""
+                        : request.getTitle().trim();
+
         if (title.isBlank()) {
-            throw new IllegalArgumentException("코스 제목은 필수입니다.");
+            throw new IllegalArgumentException(
+                    "코스 제목은 필수입니다."
+            );
         }
 
-        String publicStatus = "Y".equalsIgnoreCase(request.getIsPublic()) ? "Y" : "N";
+        String publicStatus =
+                "Y".equalsIgnoreCase(request.getIsPublic())
+                        ? "Y"
+                        : "N";
+
         course.updateBasicInfo(
                 title,
                 request.getDescription(),
                 request.getRegion(),
                 publicStatus
         );
+
         return toRecommendationResponse(course);
     }
 
     @Transactional
-    public void deleteMemberCourse(Long courseId, Long memberId, String courseType) {
-        TravelCourse course = getOwnedCourse(courseId, memberId, courseType);
-        courseDetailRepository.deleteByCourseId(course.getCourseId());
+    public void deleteMemberCourse(
+            Long courseId,
+            Long memberId,
+            String courseType
+    ) {
+        TravelCourse course =
+                getOwnedCourse(
+                        courseId,
+                        memberId,
+                        courseType
+                );
+
+        courseDetailRepository.deleteByCourseId(
+                course.getCourseId()
+        );
+
         travelCourseRepository.delete(course);
     }
 
-    private TravelCourse getOwnedCourse(Long courseId, Long memberId, String expectedType) {
+    private TravelCourse getOwnedCourse(
+            Long courseId,
+            Long memberId,
+            String expectedType
+    ) {
         validateCourseId(courseId);
         validateMemberId(memberId);
-        TravelCourse course = travelCourseRepository.findByCourseIdAndMemberId(courseId, memberId)
-                .orElseThrow(() -> courseNotFound(courseId));
-        if (!expectedType.equalsIgnoreCase(course.getCourseType())) {
-            throw new IllegalArgumentException("요청한 유형의 코스가 아닙니다.");
+
+        TravelCourse course =
+                travelCourseRepository
+                        .findByCourseIdAndMemberId(
+                                courseId,
+                                memberId
+                        )
+                        .orElseThrow(
+                                () -> courseNotFound(courseId)
+                        );
+
+        if (!expectedType.equalsIgnoreCase(
+                course.getCourseType()
+        )) {
+            throw new IllegalArgumentException(
+                    "요청한 유형의 코스가 아닙니다."
+            );
         }
+
         return course;
     }
 
@@ -229,10 +328,6 @@ public class CourseService {
                         course.getCourseId()
                 );
         Map<Long, Place> placesById = loadPlacesById(details);
-        int excludedHotelStayMinutes = excludedHotelStayMinutes(
-                details,
-                placesById
-        );
         int dayCount = (int) details.stream()
                 .map(CourseDetail::getDayNo)
                 .distinct()
@@ -258,8 +353,6 @@ public class CourseService {
                 .description(course.getDescription())
                 .coverImageUrl(findCoverImage(details, placesById))
                 .courseType(course.getCourseType())
-                .region(course.getRegion())
-                .publicStatus(course.getPublicStatus())
                 .transportMode(resolveTransportMode(course))
                 .regions(regions)
                 .tags(createThemeTags(placesById.values()))
@@ -269,18 +362,9 @@ public class CourseService {
                 .endDate(endDate)
                 .totalDistanceKm(course.getTotalDistanceKm())
                 .totalTravelTimeMinutes(course.getTotalTravelTimeMinutes())
-                .totalVisitTimeMinutes(Math.max(
-                        0,
-                        valueOrZero(course.getTotalVisitTimeMinutes())
-                                - excludedHotelStayMinutes
-                ))
-                .totalCourseTimeMinutes(Math.max(
-                        0.0,
-                        valueOrZero(course.getTotalCourseTimeMinutes())
-                                - excludedHotelStayMinutes
-                ))
+                .totalVisitTimeMinutes(course.getTotalVisitTimeMinutes())
+                .totalCourseTimeMinutes(course.getTotalCourseTimeMinutes())
                 .createdAt(course.getCreatedAt())
-                .updatedAt(course.getUpdatedAt())
                 // 코스 하트 테이블 연동 전까지는 미선택 상태로 반환한다.
                 .liked(false)
                 .build();
@@ -291,6 +375,45 @@ public class CourseService {
         if (memberId == null || memberId < 1) {
             throw new IllegalArgumentException("회원 ID는 1 이상이어야 합니다.");
         }
+    }
+
+    /** 원본 테마 코스 키를 검사하고 앞뒤 공백을 제거한 값을 반환한다. */
+    private String validateSourceCourseKey(
+            String sourceCourseKey
+    ) {
+        if (sourceCourseKey == null
+                || sourceCourseKey.isBlank()) {
+            throw new IllegalArgumentException("원본 테마 코스 키가 필요합니다.");
+        }
+
+        String normalizedSourceCourseKey = sourceCourseKey.trim();
+
+        if (normalizedSourceCourseKey.length() > 50) {
+            throw new IllegalArgumentException("원본 테마 코스 키는 50자를 초과할 수 없습니다.");
+        }
+        return normalizedSourceCourseKey;
+    }
+
+    /** 회원이 저장한 테마 코스 북마크를 삭제한다. */
+    @Transactional
+    public void deleteThemeCourseBookmark(
+            Long memberId,
+            String sourceCourseKey
+    ) {
+        validateMemberId(memberId);
+
+        String normalizedSourceCourseKey = validateSourceCourseKey(sourceCourseKey);
+
+        TravelCourse course = travelCourseRepository
+                .findByMemberIdAndSourceCourseKey(memberId, normalizedSourceCourseKey)
+                .filter(savedCourse ->
+                        "THEME".equalsIgnoreCase(
+                                savedCourse.getCourseType()
+                        )
+                )
+                .orElseThrow(() -> new IllegalArgumentException("저장된 테마 코스를 찾을 수 없습니다."));
+
+        travelCourseRepository.delete(course);
     }
 
     /** 잘못된 코스 식별자가 Repository까지 전달되지 않도록 공통 검증한다. */
@@ -418,7 +541,6 @@ public class CourseService {
             response
                     .placeName(place.getName())
                     .category(place.getCategory())
-                    .region(place.getRegion())
                     .address(place.getAddress())
                     .roadAddress(place.getRoadAddress())
                     .imageUrl(place.getImageUrl())
@@ -437,9 +559,14 @@ public class CourseService {
         return response.build();
     }
 
-    /** 기존 저장 데이터에 값이 남아 있어도 숙소 체류시간은 조회 응답에서 제외한다. */
-    private int normalizedStayMinutes(CourseDetail detail, Place place) {
-        return isHotel(place) ? 0 : valueOrZero(detail.getStayMinutes());
+    /** 숙소는 방문 장소가 아니라 숙박 지점이므로 체류시간 합계에서 제외한다. */
+    private int normalizedStayMinutes(
+            CourseDetail detail,
+            Place place
+    ) {
+        return isHotel(place)
+                ? 0
+                : valueOrZero(detail.getStayMinutes());
     }
 
     private int excludedHotelStayMinutes(
@@ -447,8 +574,12 @@ public class CourseService {
             Map<Long, Place> placesById
     ) {
         return details.stream()
-                .filter(detail -> isHotel(placesById.get(detail.getPlaceId())))
-                .mapToInt(detail -> valueOrZero(detail.getStayMinutes()))
+                .filter(detail -> isHotel(
+                        placesById.get(detail.getPlaceId())
+                ))
+                .mapToInt(detail ->
+                        valueOrZero(detail.getStayMinutes())
+                )
                 .sum();
     }
 
@@ -531,5 +662,21 @@ public class CourseService {
                         survey.getTransportType()
                 ))
                 .orElse(null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<CourseRecommendationResponse> getSavedMemberCourses(
+            Long memberId
+    ) {
+        validateMemberId(memberId);
+
+        return travelCourseRepository
+                .findByMemberIdAndCourseTypeInOrderByCreatedAtDesc(
+                        memberId,
+                        List.of("SURVEY", "THEME")
+                )
+                .stream()
+                .map(this::toRecommendationResponse)
+                .toList();
     }
 }

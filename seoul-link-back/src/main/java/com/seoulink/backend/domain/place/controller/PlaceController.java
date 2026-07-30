@@ -1,6 +1,7 @@
 package com.seoulink.backend.domain.place.controller;
 
 import com.seoulink.backend.domain.place.dto.request.PlaceCreateRequest;
+import com.seoulink.backend.domain.place.dto.request.PlaceNamesRequest;
 import com.seoulink.backend.domain.place.dto.response.PlaceRecommendationListResponse;
 import com.seoulink.backend.domain.place.dto.response.PlaceResponse;
 import com.seoulink.backend.domain.place.service.PlaceRecommendationService;
@@ -87,5 +88,19 @@ public class PlaceController {
     @DeleteMapping("/{placeId}")
     public void deactivatePlace(@PathVariable Long placeId) {
         placeService.deactivatePlace(placeId);
+    }
+
+    @GetMapping("/by-names")
+    public List<PlaceResponse> getPlacesByNames(
+            @RequestParam List<String> names
+    ) {
+        return placeService.getPlacesByNames(names);
+    }
+
+    @PostMapping("/by-names")
+    public List<PlaceResponse> getPlacesByNames(
+            @RequestBody PlaceNamesRequest request
+    ) {
+        return placeService.getPlacesByNames(request.getNames());
     }
 }

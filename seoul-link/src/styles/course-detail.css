@@ -704,6 +704,18 @@
   color: #6da9d9;
 }
 
+.course-detail-schedule-note-copy {
+  min-width: 0;
+}
+
+.course-detail-schedule-note-first-line {
+  white-space: nowrap;
+}
+
+.course-detail-schedule-note-line {
+  display: block;
+}
+
 .course-detail-schedule-note.is-estimated {
   margin-top: 12px;
   padding: 9px 11px;

@@ -18,6 +18,9 @@ import SurveyResultPage from '../pages/survey/SurveyResultPage';
 import CourseRecommendPage from '../pages/course/CourseRecommendPage';
 import CourseListPage from '../pages/course/CourseListPage';
 import CourseDetailPage from '../pages/course/CourseDetailPage';
+import ThemeCourseAllPage from '../pages/course/ThemeCourseAllPage';
+import PopularThemeCoursePage from '../pages/course/PopularThemeCoursePage';
+import ThemeCourseListPage from '../pages/course/ThemeCourseListPage';
 
 import MapCourseBuilderPage from '../pages/map/MapCourseBuilderPage';
 
@@ -139,7 +142,8 @@ function Router() {
         '/courses': <CourseRecommendPage />,
         '/courses/list': <CourseListPage />,
         '/courses/recommendations': <CourseListPage />,
-        '/courses/themes': <CourseListPage />,
+        '/courses/themes': <ThemeCourseAllPage />,
+        '/courses/themes/popular': <PopularThemeCoursePage />,
 
         '/map-course': <MapCourseBuilderPage />,
 
@@ -173,9 +177,14 @@ function Router() {
         return <CourseDetailPage />;
     }
 
-    // /courses/themes/sunset 같은 테마별 추천 코스 목록 페이지
-    if (pathname.startsWith('/courses/themes/')) {
-        return <CourseListPage />;
+    // /courses/themes/night-date/1101 같은 테마 코스 상세 페이지
+    if (/^\/courses\/themes\/[^/]+\/[1-9]\d*\/?$/.test(pathname)) {
+        return <CourseDetailPage />;
+    }
+
+    // /courses/themes/night-date 같은 테마별 추천 코스 목록 페이지
+    if (/^\/courses\/themes\/[^/]+\/?$/.test(pathname)) {
+        return <ThemeCourseListPage />;
     }
 
     // /mypage/courses/1 같은 내 코스 상세 페이지는 로그인 보호 경로로 처리합니다.

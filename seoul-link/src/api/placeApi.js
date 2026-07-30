@@ -19,3 +19,24 @@ export const getRecommendedPlaces = (
         options,
     );
 };
+
+export const getPlacesByNames = (names, options = {}) => {
+    const params = new URLSearchParams();
+
+    [...new Set(names.filter(Boolean))].forEach((name) => {
+        params.append('names', name);
+    });
+
+    return apiClient.get(
+        `/places/by-names?${params.toString()}`,
+        options,
+    );
+};
+
+export const getThemePlacesByNames = (names, options = {}) => apiClient.post(
+    '/places/by-names',
+    {
+        names: [...new Set(names.filter(Boolean))],
+    },
+    options,
+);

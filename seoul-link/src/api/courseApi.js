@@ -201,3 +201,49 @@ export const createCustomCourse = (data, options = {}) => saveCourse(
     { ...data, courseType: 'CUSTOM' },
     options,
 );
+
+/** 테마 코스를 회원의 저장 코스로 등록합니다. */
+export const saveThemeCourse = (data, options = {}) =>
+    saveCourse(
+        {
+            ...data,
+            courseType: 'THEME',
+        },
+        options,
+    );
+
+/** 특정 테마 코스의 저장 여부를 조회합니다. */
+export const getThemeCourseBookmarkStatus = (
+    memberId,
+    sourceCourseKey,
+    options = {},
+) => {
+    const query = new URLSearchParams({
+        memberId: String(requirePositiveId(Number(memberId), '회원 ID')),
+        sourceCourseKey,
+    });
+
+    return apiClient.get(
+        `/courses/theme-bookmarks/status?${query.toString()}`,
+        options,
+    );
+};
+
+/** 테마 북마크 삭제 함수 */
+export const deleteThemeCourseBookmark = (
+    memberId,
+    sourceCourseKey,
+    options = {},
+) => {
+    const query = new URLSearchParams({
+        memberId: String(
+            requirePositiveId(Number(memberId), '회원 ID')
+        ),
+        sourceCourseKey,
+    });
+
+    return apiClient.delete(
+        `/courses/theme-bookmarks?${query.toString()}`,
+        options,
+    );
+};

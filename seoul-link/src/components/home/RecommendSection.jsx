@@ -6,20 +6,48 @@ import CourseCard from '../course/CourseCard';
 import { Sparkles, ChevronRight } from 'lucide-react';
 import { isLoggedIn as checkIsLoggedIn, handleProtectedLinkClick } from '../../utils/authGuard';
 import { getRecommendedCourses } from '../../api/courseApi';
+import { getThemeCoursePopularity } from '../../api/themeCourseApi';
+import { themeCourses } from '../../data/themeCourseData';
 import {
     getCourseId,
     getCurrentMemberId,
     normalizeRecommendedCourseList,
 } from '../../utils/courseHistory';
 
-import { mockThemeCourseListResponse } from '../../mocks/homeMockData';
 import rainyCafeImage from '../../assets/images/moods/mood-rainy-cafe.png';
 import sunsetImage from '../../assets/images/moods/mood-sunset-seoul.png';
 import hanokImage from '../../assets/images/moods/mood-hanok-photo.png';
 import walkingImage from '../../assets/images/moods/mood-walking-alley.png';
 
-const themeCourses = mockThemeCourseListResponse.data;
 const fallbackImages = [hanokImage, sunsetImage, rainyCafeImage, walkingImage];
+const DEFAULT_COURSE_PRIORITY = [
+    'SUNSET_1401',
+    'RAINY_CAFE_1501',
+    'HANOK_PHOTO_1201',
+    'WALKING_ALLEY_1601',
+];
+
+function formatCourseDuration(totalMinutes) {
+    const minutes = Number(totalMinutes);
+
+    if (!Number.isFinite(minutes) || minutes <= 0) return '';
+
+    const hours = Math.floor(minutes / 60);
+    const remainder = Math.round(minutes % 60);
+
+    if (hours === 0) return `약 ${remainder}분`;
+    if (remainder === 0) return `약 ${hours}시간`;
+    return `약 ${hours}시간 ${remainder}분`;
+}
+
+function normalizeThemeCourseCard(course) {
+    return {
+        ...course,
+        imageUrl: course.coverImageUrl,
+        duration: formatCourseDuration(course.totalCourseTimeMinutes),
+        area: course.region,
+    };
+}
 
 // 로그인 기능이 완성되기 전 콘솔 테스트와 기존 프론트 저장값을 함께 지원합니다.
 const LOCAL_RECOMMENDED_COURSE_KEYS = [
@@ -50,7 +78,9 @@ function readLocalRecommendedCourses() {
             const parsed = safelyParse(storage.getItem(key));
             const courses = normalizeRecommendedCourseList(parsed, {
                 fallbackImages,
-            });
+            }).filter(
+                (course) => String(course.courseType || '').toUpperCase() === 'SURVEY',
+            );
 
             if (courses.length > 0) {
                 return courses;
@@ -67,6 +97,32 @@ function RecommendSection() {
     const [myRecommendedCourses, setMyRecommendedCourses] = useState(
         () => (isLoggedIn ? readLocalRecommendedCourses() : []),
     );
+    const [themeSaveCounts, setThemeSaveCounts] = useState({});
+
+    useEffect(() => {
+        const controller = new AbortController();
+
+        getThemeCoursePopularity({ signal: controller.signal })
+            .then((response) => {
+                const saveCounts = Object.fromEntries(
+                    (Array.isArray(response) ? response : [])
+                        .filter((item) => item?.sourceCourseKey)
+                        .map((item) => [
+                            item.sourceCourseKey,
+                            Number(item.saveCount) || 0,
+                        ]),
+                );
+
+                setThemeSaveCounts(saveCounts);
+            })
+            .catch((error) => {
+                if (error?.name !== 'AbortError') {
+                    setThemeSaveCounts({});
+                }
+            });
+
+        return () => controller.abort();
+    }, []);
 
     // 브라우저 임시 추천 코스를 먼저 표시하고,
     // 백엔드에 실제 저장 코스가 있으면 서버 결과로 교체합니다.
@@ -96,11 +152,7 @@ function RecommendSection() {
 
                 // 실제 서버 데이터가 있을 때만 브라우저 임시 데이터를 교체합니다.
                 // 서버가 빈 배열을 반환하면 기존 로컬 추천 코스를 유지합니다.
-                if (serverCourses.length > 0) {
-                    setMyRecommendedCourses(serverCourses);
-                } else if (localCourses.length === 0) {
-                    setMyRecommendedCourses([]);
-                }
+                setMyRecommendedCourses(serverCourses);
             })
             .catch((error) => {
                 if (error?.name === 'AbortError') return;
@@ -116,20 +168,53 @@ function RecommendSection() {
     }, [isLoggedIn, memberId]);
 
     const hasMyRecommendedCourses = isLoggedIn && myRecommendedCourses.length > 0;
+    const popularThemeCourses = useMemo(
+        () => themeCourses
+            .map((course) => ({
+                ...normalizeThemeCourseCard(course),
+                saveCount: themeSaveCounts[course.sourceCourseKey] ?? 0,
+            }))
+            .sort((left, right) => {
+                const saveCountDifference = right.saveCount - left.saveCount;
+
+                if (saveCountDifference !== 0) return saveCountDifference;
+
+                const leftDefaultRank = DEFAULT_COURSE_PRIORITY.indexOf(
+                    left.sourceCourseKey,
+                );
+                const rightDefaultRank = DEFAULT_COURSE_PRIORITY.indexOf(
+                    right.sourceCourseKey,
+                );
+                const normalizedLeftRank = leftDefaultRank < 0
+                    ? DEFAULT_COURSE_PRIORITY.length
+                    : leftDefaultRank;
+                const normalizedRightRank = rightDefaultRank < 0
+                    ? DEFAULT_COURSE_PRIORITY.length
+                    : rightDefaultRank;
+
+                if (normalizedLeftRank !== normalizedRightRank) {
+                    return normalizedLeftRank - normalizedRightRank;
+                }
+
+                return left.courseId - right.courseId;
+            })
+            .slice(0, 4),
+        [themeSaveCounts],
+    );
 
     // 추천받은 코스가 있으면 최신 4개, 없으면 테마별 전체 코스에서 인기순 4개
     const coursesToShow = hasMyRecommendedCourses
         ? myRecommendedCourses.slice(0, 4)
-        : [...themeCourses]
-            .sort((a, b) => b.likeCount - a.likeCount)
-            .slice(0, 4);
+        : popularThemeCourses;
 
     const sectionTitle = hasMyRecommendedCourses ? '취향에 맞는 추천 코스' : '인기 테마 추천 코스';
     const sectionDescription = hasMyRecommendedCourses
         ? '취향 검사로 추천받은 최신 코스 4개를 확인해보세요.'
-        : '아직 추천받은 코스가 없어 테마별 코스 중 인기순 4개를 보여드려요.';
+        : '지금 가장 많은 관심을 받고 있는 테마 코스를 만나보세요';
     // 추천 이력이 있으면 지금까지 추천받은 코스 전체 목록으로 이동합니다.
-    const moreLink = hasMyRecommendedCourses ? '/courses/recommendations' : '/courses/themes';
+    const moreLink = hasMyRecommendedCourses
+        ? '/courses/recommendations'
+        : '/courses/themes/popular';
 
     return (
         <section className="section">
@@ -167,7 +252,7 @@ function RecommendSection() {
 
                     const detailPath = hasMyRecommendedCourses
                         ? `/courses/recommendations/${courseId}`
-                        : `/courses/${courseId}`;
+                        : `/courses/themes/${course.themeSlug}/${courseId}`;
                     const normalizedCourse = { ...course, courseId };
 
                     return (
@@ -176,6 +261,7 @@ function RecommendSection() {
                             course={normalizedCourse}
                             detailPath={detailPath}
                             requiresLogin={hasMyRecommendedCourses}
+                            showBookmark={hasMyRecommendedCourses}
                         />
                     );
                 })}

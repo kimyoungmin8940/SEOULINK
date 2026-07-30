@@ -28,6 +28,8 @@ import CoursePlaceList from '../../components/course/CoursePlaceList';
 import KakaoCourseMap from '../../components/course/KakaoCourseMap';
 import CourseTransportIcon from '../../components/course/CourseTransportIcon';
 import { getCourseDetail } from '../../api/courseApi';
+import useThemeCourseBookmarks from '../../hooks/useThemeCourseBookmarks';
+import { requireLogin } from '../../utils/authGuard';
 import { getCurrentMemberId } from '../../utils/courseHistory';
 import {
     getTransportMeta,
@@ -41,6 +43,8 @@ import {
 } from '../../utils/courseTravelCode';
 import recommendationPreview from '../../mocks/courseRecommendation.json';
 import { mockThemeCourseListResponse } from '../../mocks/homeMockData';
+import { getThemeCourseById } from '../../data/themeCourseData';
+import { getThemePlacesByNames } from '../../api/placeApi';
 import hanokImage from '../../assets/images/moods/mood-hanok-photo.png';
 import walkingImage from '../../assets/images/moods/mood-walking-alley.png';
 import localFoodImage from '../../assets/images/moods/mood-local-food.png';
@@ -84,7 +88,7 @@ const COURSE_DETAIL_ENTRY_KEY = 'seoulinkCourseDetailEntry';
 /** 지원하는 상세 경로 전체가 정확히 일치할 때만 조회할 courseId를 구합니다. */
 function getCourseId() {
     const match = window.location.pathname.match(
-        /^(?:\/courses\/(?:recommendations\/)?|\/mypage\/courses\/)([1-9]\d*)\/?$/,
+        /^(?:\/courses\/themes\/[^/]+\/|\/courses\/(?:recommendations\/)?|\/mypage\/courses\/)([1-9]\d*)\/?$/,
     );
     const courseId = Number(match?.[1]);
 
@@ -93,6 +97,14 @@ function getCourseId() {
 
 /** 현재 상세 경로의 종류에 맞는 안전한 목록 복귀 경로를 반환합니다. */
 function getCourseListPath() {
+    const themeMatch = window.location.pathname.match(
+        /^\/courses\/themes\/([^/]+)\/[1-9]\d*\/?$/,
+    );
+
+    if (themeMatch) {
+        return `/courses/themes/${themeMatch[1]}`;
+    }
+
     if (window.location.pathname.startsWith('/mypage/courses/')) {
         return '/mypage/courses';
     }
@@ -525,21 +537,144 @@ function CourseRouteMap({ day }) {
 function CourseDetailPage() {
     const courseId = useMemo(() => getCourseId(), []);
     const courseListPath = useMemo(() => getCourseListPath(), []);
+    const isThemeCoursePath = useMemo(
+        () => window.location.pathname.startsWith('/courses/themes/'),
+        [],
+    );
+    const themeCourse = useMemo(
+        () => (isThemeCoursePath ? getThemeCourseById(courseId) : null),
+        [courseId, isThemeCoursePath],
+    );
+    const initialThemeCourse = useMemo(
+        () => (themeCourse ? normalizeCourseDetail(themeCourse) : null),
+        [themeCourse],
+    );
     const memberId = useMemo(() => getCurrentMemberId(), []);
     const previewCourse = useMemo(() => buildPreviewCourse(courseId), [courseId]);
-    const [course, setCourse] = useState(null);
-    const [status, setStatus] = useState(courseId ? 'loading' : 'redirecting');
-    const [source, setSource] = useState('api');
-    const [errorMessage, setErrorMessage] = useState('');
+    const [course, setCourse] = useState(initialThemeCourse);
+    const [status, setStatus] = useState(
+        courseId
+            ? isThemeCoursePath
+                ? initialThemeCourse
+                    ? 'success'
+                    : 'not-found'
+                : 'loading'
+            : 'redirecting',
+    );
+    const [source, setSource] = useState(isThemeCoursePath ? 'theme' : 'api');
+    const [errorMessage, setErrorMessage] = useState(
+        isThemeCoursePath && !initialThemeCourse
+            ? '선택한 테마 코스를 찾을 수 없습니다.'
+            : '',
+    );
     const [reloadKey, setReloadKey] = useState(0);
-    const [activeDayNo, setActiveDayNo] = useState(1);
+    const [activeDayNo, setActiveDayNo] = useState(
+        initialThemeCourse?.days[0]?.dayNo ?? 1,
+    );
     // 북마크 API가 연결되기 전까지 상세 화면 안에서 선택 상태만 표시합니다.
     const [isBookmarked, setIsBookmarked] = useState(false);
     const [toast, setToast] = useState(null);
+    const themeBookmarkCourses = useMemo(
+        () => (themeCourse ? [themeCourse] : []),
+        [themeCourse],
+    );
+    const themeBookmarks = useThemeCourseBookmarks(memberId, {
+        enabled: isThemeCoursePath,
+        courses: themeBookmarkCourses,
+    });
+
+    useEffect(() => {
+        if (!isThemeCoursePath || !themeCourse) {
+            return;
+        }
+
+        const loadThemeCoursePlaces = async () => {
+            try {
+                const placeNames = [
+                    ...new Set(
+                        themeCourse.days.flatMap((day) =>
+                            day.places
+                                .map((place) => place.placeName)
+                                .filter(Boolean)
+                        )
+                    ),
+                ];
+
+                if (placeNames.length === 0) {
+                    return;
+                }
+
+                const dbPlaces = await getThemePlacesByNames(placeNames);
+
+                const placeMap = new Map(
+                    (Array.isArray(dbPlaces) ? dbPlaces : []).map(
+                        (place) => [place.name?.trim(), place]
+                    )
+                );
+
+                const courseWithDbPlaces = {
+                    ...themeCourse,
+                    days: themeCourse.days.map((day) => ({
+                        ...day,
+                        places: day.places.map((place) => {
+                            const dbPlace = placeMap.get(
+                                place.placeName?.trim()
+                            );
+
+                            if (!dbPlace) {
+                                return place;
+                            }
+
+                            return {
+                                ...place,
+                                databaseMatched: true,
+                                placeId:
+                                    dbPlace.placeId ?? place.placeId,
+                                placeName:
+                                    dbPlace.name || place.placeName,
+                                category:
+                                    dbPlace.category || place.category,
+                                imageUrl:
+                                    dbPlace.imageUrl || place.imageUrl,
+                                databaseDescription:
+                                    dbPlace.description
+                                    || place.databaseDescription,
+                                address:
+                                    dbPlace.address || place.address,
+                                latitude:
+                                    dbPlace.latitude ?? place.latitude,
+                                longitude:
+                                    dbPlace.longitude ?? place.longitude,
+                            };
+                        }),
+                    })),
+                };
+
+                const normalizedCourse =
+                    normalizeCourseDetail(courseWithDbPlaces);
+
+                setCourse(normalizedCourse);
+                setActiveDayNo(
+                    normalizedCourse.days?.[0]?.dayNo ?? 1
+                );
+            } catch (error) {
+                console.error(
+                    '테마 코스 장소 이미지 조회 실패:',
+                    error
+                );
+            }
+        };
+
+        loadThemeCoursePlaces();
+    }, [isThemeCoursePath, themeCourse]);
 
     useEffect(() => {
         if (!courseId) {
             window.location.replace(courseListPath);
+            return undefined;
+        }
+
+        if (isThemeCoursePath) {
             return undefined;
         }
 
@@ -580,7 +715,7 @@ function CourseDetailPage() {
             });
 
         return () => controller.abort();
-    }, [courseId, courseListPath, memberId, reloadKey]);
+    }, [courseId, courseListPath, isThemeCoursePath, memberId, reloadKey]);
 
     const activeDay = course?.days.find((day) => day.dayNo === activeDayNo)
         || course?.days[0]
@@ -589,15 +724,29 @@ function CourseDetailPage() {
         (day) => day.dayNo === activeDay?.dayNo,
     ) ?? -1;
     const themeTags = course ? getThemeTags(course) : [];
-    const dateRange = course ? getDateRange(course.days) : '';
+    const dateRange = course
+        ? course.courseType === 'THEME'
+            ? course.dayCount > 1
+                ? `${course.dayCount - 1}박 ${course.dayCount}일`
+                : '당일치기'
+            : getDateRange(course.days)
+        : '';
+
     const travelCodeLabels = course?.travelCode
-        ? course.travelCode.split('').map((letter) => travelTypeLabels[letter]).filter(Boolean)
+        ? course.travelCode
+            .split('')
+            .map((letter) => travelTypeLabels[letter])
+            .filter(Boolean)
         : [];
     const transport = getTransportMeta(course?.transportMode);
+    const displayedIsBookmarked = isThemeCoursePath
+        ? themeBookmarks.isSaved(themeCourse?.sourceCourseKey)
+        : isBookmarked;
     const scheduleNotice = course?.estimatedTravelTimes
         ? `일부 ${transport?.label || '이동'} 구간은 경로 조회가 어려워 예상 거리와 시간으로 보완했습니다. ${transport?.scheduleNotice || '실제 이동 상황과 장소 운영 시간에 따라 일정은 달라질 수 있습니다.'}`
         : transport?.scheduleNotice
             || '위 일정은 예상 이동 거리와 시간을 바탕으로 구성된 추천 동선입니다. 실제 이동 상황과 장소 운영 시간에 따라 일정은 달라질 수 있습니다.';
+    const scheduleNoticeParts = scheduleNotice.split('실시간 운행 상황');
 
     const moveActiveDay = (offset) => {
         const targetDay = course?.days[activeDayIndex + offset];
@@ -641,6 +790,38 @@ function CourseDetailPage() {
         }
     };
 
+    const handleBookmark = async () => {
+        if (!isThemeCoursePath) {
+            setIsBookmarked((previous) => !previous);
+            return;
+        }
+
+        if (!requireLogin('코스를 저장하려면 로그인이 필요해요.')) return;
+
+        if (!memberId) {
+            setToast({
+                tone: 'error',
+                message: '회원 정보를 확인할 수 없어요. 다시 로그인해 주세요.',
+            });
+            return;
+        }
+
+        try {
+            const saved = await themeBookmarks.toggle(course);
+            setToast({
+                tone: 'success',
+                message: saved
+                    ? '저장한 추천 코스에 추가했어요.'
+                    : '저장한 추천 코스에서 삭제했어요.',
+            });
+        } catch (error) {
+            setToast({
+                tone: 'error',
+                message: error?.message || '코스 저장 상태를 변경하지 못했어요.',
+            });
+        }
+    };
+
     const handleReturnToCourseList = () => {
         const entry = readCourseDetailEntry(courseId);
         const returnPath = entry?.returnPath;
@@ -672,15 +853,23 @@ function CourseDetailPage() {
                     {status === 'success' && (
                         <div className="course-detail-toolbar-actions">
                             <button
-                                className={isBookmarked ? 'is-active' : ''}
+                                className={displayedIsBookmarked ? 'is-active' : ''}
                                 type="button"
-                                aria-label={isBookmarked ? '북마크 해제' : '북마크 추가'}
-                                aria-pressed={isBookmarked}
-                                onClick={() => setIsBookmarked((previous) => !previous)}
+                                aria-label={displayedIsBookmarked ? '북마크 해제' : '북마크 추가'}
+                                aria-pressed={displayedIsBookmarked}
+                                aria-busy={
+                                    isThemeCoursePath
+                                    && themeBookmarks.isBusy(themeCourse?.sourceCourseKey)
+                                }
+                                disabled={
+                                    isThemeCoursePath
+                                    && themeBookmarks.isBusy(themeCourse?.sourceCourseKey)
+                                }
+                                onClick={handleBookmark}
                             >
                                 <Bookmark
                                     size={17}
-                                    fill={isBookmarked ? 'currentColor' : 'none'}
+                                    fill={displayedIsBookmarked ? 'currentColor' : 'none'}
                                     aria-hidden="true"
                                 />
                                 북마크
@@ -856,7 +1045,9 @@ function CourseDetailPage() {
                                     <div>
                                         <span>
                                             {activeDay
-                                                ? `DAY ${activeDay.dayNo} · ${formatDate(activeDay.visitDate, { compact: true })}`
+                                                ? `DAY ${activeDay.dayNo}${activeDay.visitDate
+                                                    ? ` · ${formatDate(activeDay.visitDate, { compact: true })}`
+                                                    : ''}`
                                                 : '저장된 코스'}
                                         </span>
                                         <h2>상세 일정</h2>
@@ -883,7 +1074,9 @@ function CourseDetailPage() {
                                                         onClick={() => setActiveDayNo(day.dayNo)}
                                                     >
                                                         DAY {day.dayNo}
-                                                        <small>{formatDate(day.visitDate, { compact: true })}</small>
+                                                        {day.visitDate && (
+                                                            <small>{formatDate(day.visitDate, { compact: true })}</small>
+                                                        )}
                                                     </button>
                                                 ))}
                                             </div>
@@ -908,7 +1101,16 @@ function CourseDetailPage() {
 
                                 <p className={`course-detail-schedule-note${course.estimatedTravelTimes ? ' is-estimated' : ''}`}>
                                     <Info size={14} aria-hidden="true" />
-                                    {scheduleNotice}
+                                    <span className="course-detail-schedule-note-copy">
+                                        <span className="course-detail-schedule-note-first-line">
+                                            {scheduleNoticeParts[0]}
+                                        </span>
+                                        {scheduleNoticeParts.length > 1 && (
+                                            <span className="course-detail-schedule-note-line">
+                                                실시간 운행 상황{scheduleNoticeParts.slice(1).join('실시간 운행 상황')}
+                                            </span>
+                                        )}
+                                    </span>
                                 </p>
                                 </section>
                             </div>
