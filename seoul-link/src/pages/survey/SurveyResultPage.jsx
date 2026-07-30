@@ -6,6 +6,7 @@ import { getSurveyResult } from '../../api/surveyApi';
 import SurveyFlowLayout from '../../components/survey/SurveyFlowLayout';
 import { storeCourseRecommendRequest } from '../../utils/courseRecommendationHandoff';
 import PreferenceResultPage from '../PreferenceResultPage';
+import { isLoggedIn } from '../../utils/authGuard';
 
 const SURVEY_ID_STORAGE_KEY = 'seoulinkSurveyId';
 

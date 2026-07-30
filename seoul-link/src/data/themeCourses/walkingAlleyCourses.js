@@ -7,18 +7,18 @@ export const walkingAlleyCourseRecipes = [
     {
         courseId: 1601,
         themeSlug: 'walking-alley',
-        title: '북촌–익선동 한옥 골목',
+        title: '안국–삼청–익선동 골목',
         description:
-            '공예 전시와 삼청동 골목, 한옥 카페를 차례로 경험하며 혼자 사진을 찍고 걷기 좋은 코스예요.',
-        optionName: '북촌 익선동 골목',
+            '안국의 공예 전시와 삼청동·안국의 카페를 즐긴 뒤 익선동 한옥거리를 걷는 코스예요',
+        optionName: '안국 익선동 골목',
         badge: 'BEST',
         tone: 'preference',
-        region: '안국 · 북촌 · 익선동',
-        tags: ['북촌', '익선동', '한옥', '사진'],
+        region: '안국 · 삼청동 · 익선동',
+        tags: ['서울공예박물관', '삼청동', '익선동', '한옥거리'],
         coverImageUrl: walkingAlleyImage,
         days: [
             {
-                startTime: '09:30',
+                startTime: '12:00',
                 center: [37.577, 126.986],
                 places: [
                     ['서울공예박물관', 'TOUR'],
@@ -34,7 +34,7 @@ export const walkingAlleyCourseRecipes = [
         themeSlug: 'walking-alley',
         title: '인사동–을지로 시간여행 골목',
         description:
-            '전통 상권에서 오래된 도심 골목으로 이동하며 혼밥과 카페를 자연스럽게 즐기는 시간여행 코스예요.',
+            '전통 상권에서 오래된 도심 골목으로 이동하며 혼밥과 카페를 자연스럽게 즐기는 시간여행 코스예요',
         optionName: '인사동 을지로 골목',
         badge: 'RETRO',
         tone: 'balanced',
@@ -43,7 +43,7 @@ export const walkingAlleyCourseRecipes = [
         coverImageUrl: walkingAlleyImage,
         days: [
             {
-                startTime: '10:30',
+                startTime: '12:00',
                 center: [37.57, 126.99],
                 places: [
                     ['쌈지길', 'TOUR'],
@@ -59,7 +59,7 @@ export const walkingAlleyCourseRecipes = [
         themeSlug: 'walking-alley',
         title: '연남동–홍대–합정 골목',
         description:
-            '연남동의 차분한 골목에서 시작해 홍대와 합정까지 걸으며 서로 다른 동네의 분위기를 경험하는 코스예요.',
+            '연남동의 차분한 골목에서 시작해 홍대와 합정까지 걸으며 서로 다른 동네의 분위기를 경험하는 코스예요',
         optionName: '연남 홍대 합정 산책',
         badge: 'WALK',
         tone: 'distance',
@@ -68,7 +68,7 @@ export const walkingAlleyCourseRecipes = [
         coverImageUrl: walkingAlleyImage,
         days: [
             {
-                startTime: '11:00',
+                startTime: '12:00',
                 center: [37.557, 126.923],
                 places: [
                     ['경의선숲길 연남동 구간', 'TOUR'],
@@ -84,7 +84,7 @@ export const walkingAlleyCourseRecipes = [
         themeSlug: 'walking-alley',
         title: '문래 철공소 골목',
         description:
-            '철공소와 예술 작업실이 섞인 문래창작촌을 천천히 순환하고 타임스퀘어에서 휴식하는 코스예요.',
+            '철공소와 예술 작업실이 섞인 문래창작촌을 천천히 순환하고 타임스퀘어에서 휴식하는 코스예요',
         optionName: '문래 철공소 골목',
         badge: 'ART',
         tone: 'balanced',
@@ -93,12 +93,12 @@ export const walkingAlleyCourseRecipes = [
         coverImageUrl: walkingAlleyImage,
         days: [
             {
-                startTime: '13:00',
+                startTime: '12:00',
                 center: [37.516, 126.896],
                 places: [
                     ['문래창작촌', 'TOUR'],
-                    ['문래 예술 작업실 거리', 'TOUR'],
-                    ['문래 카페거리', 'CAFE'],
+                    ['안양천 생태초화원', 'TOUR'],
+                    ['맨홀커피', 'CAFE'],
                     ['타임스퀘어', 'TOUR'],
                 ],
             },
@@ -109,7 +109,7 @@ export const walkingAlleyCourseRecipes = [
         themeSlug: 'walking-alley',
         title: '해방촌–한남 취향 골목',
         description:
-            '오래된 시장 골목에서 음악과 커피 공간으로 이어지며 혼자 기록하고 걷기 좋은 취향 산책 코스예요.',
+            '오래된 시장 골목에서 음악과 커피 공간으로 이어지며 혼자 기록하고 걷기 좋은 취향 산책 코스예요',
         optionName: '해방촌 한남 골목',
         badge: 'MUSIC',
         tone: 'preference',
@@ -118,7 +118,7 @@ export const walkingAlleyCourseRecipes = [
         coverImageUrl: walkingAlleyImage,
         days: [
             {
-                startTime: '12:30',
+                startTime: '12:00',
                 center: [37.538, 126.995],
                 places: [
                     ['해방촌 신흥시장', 'TOUR'],

@@ -185,7 +185,7 @@ public class CourseController {
     public List<CourseRecommendationResponse> getSavedRecommendedCourses(
             @PathVariable Long memberId
     ) {
-        return courseService.getMemberCoursesByType(memberId, "SURVEY");
+        return courseService.getSavedMemberCourses(memberId);
     }
 
     @GetMapping("/members/{memberId}/custom")

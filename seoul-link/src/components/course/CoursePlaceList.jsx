@@ -99,7 +99,8 @@ function CoursePlaceList({ day, transportMode }) {
                                     </div>
 
                                     <p className="course-detail-place-description">
-                                        {place.memo
+                                        {place.databaseDescription
+                                            || place.memo
                                             || (hasScore
                                                 ? `취향과 이동 동선을 반영한 추천 장소예요. 추천 점수 ${Math.round(score)}점`
                                                 : '코스 이동 동선을 고려해 선택된 장소예요.')}

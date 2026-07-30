@@ -596,7 +596,6 @@ CREATE TABLE TRAVEL_SURVEY (
                                REGION VARCHAR2(50) NOT NULL,
                                START_DATE DATE NOT NULL,
                                END_DATE DATE NOT NULL,
-                               PEOPLE_COUNT NUMBER NOT NULL,
                                COMPANION_TYPE VARCHAR2(30) NOT NULL,
                                TRANSPORT_TYPE VARCHAR2(30) NOT NULL,
                                CREATED_AT DATE DEFAULT SYSDATE NOT NULL,

@@ -9,7 +9,7 @@ export const sunsetCourseRecipes = [
         themeSlug: 'sunset',
         title: '서울숲 끝에서 만나는 응봉산 노을',
         description:
-            '성수 전시와 카페를 즐긴 뒤 응봉산에서 한강 노을을 감상하는 코스예요. 비교적 짧게 산책하면서 확실한 전망을 즐길 수 있어요.',
+            '성수 전시와 카페를 즐긴 뒤 응봉산에서 한강 노을을 감상하는 코스예요. 비교적 짧게 산책하면서 확실한 전망을 즐길 수 있어요',
         optionName: '서울숲 노을 코스',
         badge: 'BEST',
         tone: 'preference',
@@ -18,7 +18,7 @@ export const sunsetCourseRecipes = [
         coverImageUrl: sunsetImage,
         days: [
             {
-                startTime: '14:30',
+                startTime: '12:00',
                 center: [37.548, 127.043],
                 places: [
                     ['서울숲', 'TOUR'],
@@ -35,16 +35,16 @@ export const sunsetCourseRecipes = [
         themeSlug: 'sunset',
         title: '노들섬으로 이어지는 한강 노을길',
         description:
-            '국립중앙박물관을 관람한 뒤 한강을 따라 노들섬과 동작대교 전망 명소를 둘러보는 반나절 코스예요.',
+            '국립중앙박물관을 관람하고 용산에서 식사와 카페, 쇼핑을 즐긴 뒤 노들섬 노을로 마무리하는 반나절 코스예요',
         optionName: '노들섬 노을 코스',
         badge: 'VIEW',
         tone: 'balanced',
-        region: '용산 · 노들섬 · 동작',
-        tags: ['한강', '노들섬', '박물관', '노을'],
+        region: '이촌 · 용산 · 노들섬',
+        tags: ['국립중앙박물관', '용산', '노들섬', '노을'],
         coverImageUrl: sunsetImage,
         days: [
             {
-                startTime: '13:30',
+                startTime: '12:00',
                 center: [37.514, 126.976],
                 places: [
                     ['국립중앙박물관', 'TOUR'],
@@ -61,23 +61,23 @@ export const sunsetCourseRecipes = [
         themeSlug: 'sunset',
         title: '여의도를 물들이는 황금빛 한강',
         description:
-            '쇼핑과 식사를 즐긴 뒤 여의도 한강변에서 노을과 야경을 감상하는 여행다운 서울 코스예요.',
-        optionName: '여의도 한강 노을',
+            '영등포에서 쇼핑과 식사를 즐기고 여의도의 카페와 더현대 서울을 거쳐 한강공원 노을을 감상하는 코스예요',
+        optionName: '영등포 여의도 노을',
         badge: 'SUNSET',
         tone: 'distance',
-        region: '여의도 · 한강',
-        tags: ['여의도', '한강', '크루즈', '야경'],
+        region: '영등포 · 여의도 · 한강',
+        tags: ['타임스퀘어', '더현대서울', '여의도한강공원', '노을'],
         coverImageUrl: sunsetImage,
         days: [
             {
-                startTime: '15:30',
+                startTime: '12:00',
                 center: [37.524, 126.93],
                 places: [
                     ['타임스퀘어', 'TOUR'],
                     ['대한옥', 'RESTAURANT'],
                     ['카페꼼마 여의도신영증권점', 'CAFE'],
                     ['더현대 서울', 'TOUR'],
-                    ['여의도 한강 공원', 'TOUR'],
+                    ['여의도한강공원', 'TOUR'],
                 ],
             },
         ],
@@ -87,16 +87,16 @@ export const sunsetCourseRecipes = [
         themeSlug: 'sunset',
         title: '세빛섬과 함께 빛나는 반포의 밤',
         description:
-            '실내 쇼핑으로 시작해 세빛섬과 잠수교를 거쳐 한강 노을과 반포대교 야경으로 마무리하는 코스예요.',
-        optionName: '반포 수변 노을',
+            '서초에서 식사와 예술 전시, 카페를 즐기고 고속터미널 쇼핑을 거쳐 세빛섬의 저녁 풍경으로 마무리하는 코스예요',
+        optionName: '서초 세빛섬 저녁',
         badge: 'NIGHT',
         tone: 'balanced',
-        region: '고속터미널 · 반포',
-        tags: ['반포', '세빛섬', '잠수교', '야경'],
+        region: '서초 · 고속터미널 · 반포',
+        tags: ['예술의전당', '고투몰', '세빛섬', '저녁풍경'],
         coverImageUrl: sunsetImage,
         days: [
             {
-                startTime: '15:30',
+                startTime: '12:00',
                 center: [37.506, 126.995],
                 places: [
                     ['봉산옥', 'RESTAURANT'],
@@ -113,16 +113,16 @@ export const sunsetCourseRecipes = [
         themeSlug: 'sunset',
         title: '시장 골목 끝에서 만나는 낙산 노을',
         description:
-            '부암동의 조용한 식당과 카페를 즐기고 인왕산에서 서울 도심의 노을을 바라보는 서정적인 코스예요.',
-        optionName: '부암동 인왕산 노을',
+            '광화문에서 식사와 광장 산책을 즐긴 뒤 광장시장과 카페를 거쳐 낙산공원에서 도심 노을을 바라보는 코스예요',
+        optionName: '광화문 낙산 노을',
         badge: 'HEALING',
         tone: 'preference',
-        region: '부암동 · 인왕산',
-        tags: ['부암동', '인왕산', '전망', '감성'],
+        region: '광화문 · 종로 · 낙산',
+        tags: ['광화문광장', '광장시장', '낙산공원', '도심노을'],
         coverImageUrl: sunsetImage,
         days: [
             {
-                startTime: '14:00',
+                startTime: '12:00',
                 center: [37.592, 126.965],
                 places: [
                     ['광화문미진', 'RESTAURANT'],

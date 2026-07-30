@@ -650,4 +650,20 @@ public class CourseService {
                 ))
                 .orElse(null);
     }
+
+    @Transactional(readOnly = true)
+    public List<CourseRecommendationResponse> getSavedMemberCourses(
+            Long memberId
+    ) {
+        validateMemberId(memberId);
+
+        return travelCourseRepository
+                .findByMemberIdAndCourseTypeInOrderByCreatedAtDesc(
+                        memberId,
+                        List.of("SURVEY", "THEME")
+                )
+                .stream()
+                .map(this::toRecommendationResponse)
+                .toList();
+    }
 }

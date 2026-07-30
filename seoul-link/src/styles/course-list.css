@@ -569,6 +569,15 @@
   font-size: 13px;
 }
 
+.theme-course-bookmark-notice {
+  min-height: 20px;
+  margin: -7px 2px 12px;
+  color: #49657b;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: right;
+}
+
 .theme-course-result-list {
   gap: 16px;
 }
@@ -582,6 +591,11 @@
   position: absolute;
   top: 2px;
   right: 0;
+}
+
+.theme-course-card .course-result-bookmark-btn:disabled {
+  cursor: wait;
+  opacity: 0.55;
 }
 
 .theme-course-detail-button {
@@ -628,6 +642,11 @@
 
   .theme-course-list-heading p {
     line-height: 1.55;
+  }
+
+  .theme-course-bookmark-notice {
+    margin-top: -2px;
+    text-align: left;
   }
 
   .theme-course-card .course-result-summary {

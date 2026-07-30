@@ -265,6 +265,8 @@ function CourseRecommendationCard({
     variant = 'recommendation',
     detailPath = null,
     isEstimatedTravelTime,
+    isBookmarked: controlledIsBookmarked,
+    isBookmarking = false,
     isCompared,
     isSelectedForSave,
     isSelectionDisabled,
@@ -273,6 +275,7 @@ function CourseRecommendationCard({
     isRouteDetailsLoading,
     onToggleCompare,
     onToggleSaveSelection,
+    onToggleBookmark,
     onFocusOption,
     onActiveDayChange,
     onRequestRouteDetails,
@@ -282,7 +285,7 @@ function CourseRecommendationCard({
         [option.days],
     );
     // 북마크 API는 회원 기능 담당 범위이므로 연동 전까지 카드 안에서만 임시 토글합니다.
-    const [isBookmarked, setIsBookmarked] = useState(false);
+    const [localIsBookmarked, setLocalIsBookmarked] = useState(false);
     const [isExpanded, setIsExpanded] = useState(false);
     const activeDay = days.find((day) => day.dayNo === activeDayNo) || days[0] || { places: [] };
     const activeDayPlaces = Array.isArray(activeDay.places) ? activeDay.places : [];
@@ -291,6 +294,14 @@ function CourseRecommendationCard({
         [days],
     );
     const isThemeCourse = variant === 'theme';
+    const description = option.description
+        || '취향 결과와 장소 간 이동 거리를 반영해 만든 맞춤 코스예요.';
+    const displayDescription = isThemeCourse
+        ? description
+            .replace(/코스예요(?=\.|$)/g, '코스')
+            .replace(/즐길 수 있어요$/, '즐길 수 있는 코스')
+        : description;
+    const bookmarkActive = controlledIsBookmarked ?? localIsBookmarked;
     const defaultMeta = optionMeta[option.optionType] || optionMeta.BALANCED;
     const meta = isThemeCourse
         ? {
@@ -333,7 +344,9 @@ function CourseRecommendationCard({
         >
             <div className="course-result-card-main">
                 <div className="course-result-cover">
-                    <span className="course-result-rank-badge">{meta.badge}</span>
+                    {(!isThemeCourse || meta.badge === 'BEST') && (
+                        <span className="course-result-rank-badge">{meta.badge}</span>
+                    )}
                     <img
                         src={coverImage}
                         alt={`${option.title || option.optionName} 대표 이미지`}
@@ -362,19 +375,28 @@ function CourseRecommendationCard({
                         </div>
 
                         <button
-                            className={`course-result-bookmark-btn${isBookmarked ? ' bookmarked' : ''}`}
+                            className={`course-result-bookmark-btn${bookmarkActive ? ' bookmarked' : ''}`}
                             type="button"
-                            aria-label={isBookmarked ? '북마크 해제' : '북마크 추가'}
-                            aria-pressed={isBookmarked}
-                            title={isBookmarked ? '북마크 해제' : '북마크 추가'}
-                            onClick={() => setIsBookmarked((previous) => !previous)}
+                            disabled={isBookmarking}
+                            aria-busy={isBookmarking}
+                            aria-label={bookmarkActive ? '북마크 해제' : '북마크 추가'}
+                            aria-pressed={bookmarkActive}
+                            title={bookmarkActive ? '북마크 해제' : '북마크 추가'}
+                            onClick={() => {
+                                if (onToggleBookmark) {
+                                    onToggleBookmark(option);
+                                    return;
+                                }
+
+                                setLocalIsBookmarked((previous) => !previous);
+                            }}
                         >
                             <Bookmark size={20} strokeWidth={1.9} aria-hidden="true" />
                         </button>
                     </div>
 
                     <p className="course-result-description">
-                        {option.description || '취향 결과와 장소 간 이동 거리를 반영해 만든 맞춤 코스예요.'}
+                        {displayDescription}
                     </p>
 
                     <div className="course-result-meta">

@@ -9,7 +9,7 @@ export const localFoodCourseRecipes = [
         themeSlug: 'local-food',
         title: '종로–을지로 시장 미식 여행',
         description:
-            '오래된 노포에서 시작해 시장과 골목 맛집을 걸으며 서울 중심부의 맛을 경험하는 코스예요.',
+            '오래된 노포에서 시작해 시장과 골목 맛집을 걸으며 서울 중심부의 맛을 경험하는 코스예요',
         optionName: '시장 노포 코스',
         badge: 'BEST',
         tone: 'preference',
@@ -18,12 +18,12 @@ export const localFoodCourseRecipes = [
         coverImageUrl: localFoodImage,
         days: [
             {
-                startTime: '09:30',
+                startTime: '10:00',
                 center: [37.57, 126.998],
                 places: [
                     ['이문설농탕', 'RESTAURANT'],
                     ['광장시장', 'TOUR'],
-                    ['광장시장 먹자골목', 'RESTAURANT'],
+                    ['부촌육회 본점', 'RESTAURANT'],
                     ['카페 어니언 광장시장', 'CAFE'],
                     ['방산시장', 'TOUR'],
                     ['우래옥', 'RESTAURANT'],
@@ -37,7 +37,7 @@ export const localFoodCourseRecipes = [
         themeSlug: 'local-food',
         title: '마포 옛 골목 미식 여행',
         description:
-            '설렁탕과 평양냉면, 돼지갈비 사이로 마포의 오래된 맛과 카페를 곁들이는 코스예요.',
+            '설렁탕과 평양냉면, 돼지갈비 사이로 마포의 오래된 맛과 카페를 곁들이는 코스예요',
         optionName: '마포 미식 코스',
         badge: 'TASTE',
         tone: 'balanced',
@@ -46,11 +46,11 @@ export const localFoodCourseRecipes = [
         coverImageUrl: localFoodImage,
         days: [
             {
-                startTime: '10:30',
+                startTime: '10:00',
                 center: [37.54, 126.94],
                 places: [
                     ['마포옥', 'RESTAURANT'],
-                    ['공덕시장', 'TOUR'],
+                    ['문화비축기지', 'TOUR'],
                     ['프릳츠 도화점', 'CAFE'],
                     ['을밀대 본점', 'RESTAURANT'],
                     ['비로소커피', 'CAFE'],
@@ -64,7 +64,7 @@ export const localFoodCourseRecipes = [
         themeSlug: 'local-food',
         title: '성수 로컬과 트렌드 사이',
         description:
-            '성수의 새로운 맛과 오래된 골목을 지나 한강 산책까지 균형 있게 즐기는 코스예요.',
+            '성수의 새로운 맛과 오래된 골목을 지나 한강 산책까지 균형 있게 즐기는 코스예요',
         optionName: '성수 로컬 코스',
         badge: 'TREND',
         tone: 'distance',
@@ -73,7 +73,7 @@ export const localFoodCourseRecipes = [
         coverImageUrl: localFoodImage,
         days: [
             {
-                startTime: '11:30',
+                startTime: '10:00',
                 center: [37.544, 127.045],
                 places: [
                     ['서울숲', 'TOUR'],
@@ -91,7 +91,7 @@ export const localFoodCourseRecipes = [
         themeSlug: 'local-food',
         title: '성북동 오래된 맛과 풍경',
         description:
-            '성북동의 오래된 식당과 찻집을 지나 전망 좋은 언덕까지 오르는 지역 미식 코스예요.',
+            '성북동의 오래된 식당과 찻집을 지나 전망 좋은 언덕까지 오르는 지역 미식 코스예요',
         optionName: '성북동 노포 코스',
         badge: 'LOCAL',
         tone: 'balanced',
@@ -100,14 +100,14 @@ export const localFoodCourseRecipes = [
         coverImageUrl: localFoodImage,
         days: [
             {
-                startTime: '11:00',
+                startTime: '10:00',
                 center: [37.59, 127.0],
                 places: [
-                    ['길상사', 'TOUR'],
+                    ['북악팔각정', 'TOUR'],
                     ['금왕돈까스', 'RESTAURANT'],
                     ['수연산방', 'CAFE'],
                     ['성북동누룽지백숙', 'RESTAURANT'],
-                    ['개운산 전망대', 'TOUR'],
+                    ['한양도성 백악구간', 'TOUR'],
                 ],
             },
         ],
@@ -117,7 +117,7 @@ export const localFoodCourseRecipes = [
         themeSlug: 'local-food',
         title: '서울 서남권 로컬 미식',
         description:
-            '문래와 영등포, 노량진의 서로 다른 동네 맛을 경험하는 1박 2일 미식 코스예요.',
+            '문래와 영등포, 노량진의 서로 다른 동네 맛을 경험하는 1박 2일 미식 코스예요',
         optionName: '서남권 1박 2일',
         badge: '1N2D',
         tone: 'preference',
@@ -126,23 +126,23 @@ export const localFoodCourseRecipes = [
         coverImageUrl: localFoodImage,
         days: [
             {
-                startTime: '10:30',
+                startTime: '10:00',
                 center: [37.52, 126.88],
                 places: [
                     ['양천뼈다귀본점', 'RESTAURANT'],
                     ['문래창작촌', 'TOUR'],
-                    ['카페 기글', 'CAFE'],
-                    ['부일갈비', 'RESTAURANT'],
+                    ['맨홀커피', 'CAFE'],
+                    ['부일숯불갈비', 'RESTAURANT'],
                     ['코트야드 바이 메리어트 서울 타임스퀘어', 'HOTEL'],
                 ],
             },
             {
-                startTime: '10:30',
+                startTime: '10:00',
                 center: [37.51, 126.95],
                 places: [
-                    ['보라매공원', 'TOUR'],
+                    ['안양천 생태초화원', 'TOUR'],
                     ['정인면옥', 'RESTAURANT'],
-                    ['카페 진정성 종점', 'CAFE'],
+                    ['카페 진정성 한강편 커피하우스', 'CAFE'],
                     ['노량진수산시장', 'RESTAURANT'],
                     ['용양봉저정공원', 'TOUR'],
                 ],

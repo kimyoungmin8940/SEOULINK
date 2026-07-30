@@ -228,3 +228,22 @@ export const getThemeCourseBookmarkStatus = (
         options,
     );
 };
+
+/** 테마 북마크 삭제 함수 */
+export const deleteThemeCourseBookmark = (
+    memberId,
+    sourceCourseKey,
+    options = {},
+) => {
+    const query = new URLSearchParams({
+        memberId: String(
+            requirePositiveId(Number(memberId), '회원 ID')
+        ),
+        sourceCourseKey,
+    });
+
+    return apiClient.delete(
+        `/courses/theme-bookmarks?${query.toString()}`,
+        options,
+    );
+};

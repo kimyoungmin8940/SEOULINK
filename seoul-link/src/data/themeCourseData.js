@@ -10,13 +10,7 @@ import {walkingAlleyCourseRecipes,} from './themeCourses/walkingAlleyCourses';
 import {dateNightCourseRecipes,} from './themeCourses/dateNightCourses';
 import {hanokCourseRecipes,} from './themeCourses/hanokCourses';
 import {localFoodCourseRecipes,} from './themeCourses/localFoodCourses';
-
-const categoryStayMinutes = {
-    TOUR: 80,
-    RESTAURANT: 60,
-    CAFE: 55,
-    HOTEL: 30,
-};
+import { getThemePlaceStayMinutes } from './themePlaceStayMinutes';
 
 const coordinateOffsets = [
     [0, 0],
@@ -167,7 +161,7 @@ function buildDay(course, rawDay, dayIndex) {
     const places = rawDay.places.map(([placeName, category], placeIndex) => {
         const travelTime = placeIndex === 0 ? 0 : 16 + ((placeIndex + dayIndex) % 3) * 4;
         const distance = placeIndex === 0 ? 0 : 0.8 + ((placeIndex + dayIndex) % 4) * 0.35;
-        const stayMinutes = categoryStayMinutes[category] || 60;
+        const stayMinutes = getThemePlaceStayMinutes(placeName, category);
         const [latitudeOffset, longitudeOffset] = coordinateOffsets[
             placeIndex % coordinateOffsets.length
         ];
@@ -232,6 +226,7 @@ function buildCourse(recipe, index) {
         tone: recipe.tone,
         themeCode: definition.themeCode,
         themeSlug: recipe.themeSlug,
+        sourceCourseKey: `${definition.themeCode}_${recipe.courseId}`,
         title: recipe.title,
         description: recipe.description,
         region: recipe.region,
@@ -264,5 +259,78 @@ export function getThemeCourses(themeSlug) {
 export function getThemeCourseById(courseId) {
     const normalizedCourseId = Number(courseId);
     return themeCourses.find((course) => course.courseId === normalizedCourseId) || null;
+}
+
+export function getThemeCoursePlaceNames(courses = themeCourses) {
+    return [
+        ...new Set(
+            courses.flatMap((course) => course.days)
+                .flatMap((day) => day.places)
+                .map((place) => place.placeName)
+                .filter(Boolean),
+        ),
+    ];
+}
+
+export function hydrateThemeCoursesWithPlaces(courses, places) {
+    const placesByName = new Map(
+        (Array.isArray(places) ? places : [])
+            .filter((place) => place?.name)
+            .map((place) => [place.name.trim(), place]),
+    );
+    const missingPlaceNames = new Set();
+
+    const hydratedCourses = courses.map((course) => {
+        const days = course.days.map((day) => ({
+            ...day,
+            places: day.places.map((place) => {
+                const databasePlace = placesByName.get(place.placeName?.trim());
+
+                if (!databasePlace) {
+                    missingPlaceNames.add(place.placeName);
+                    return place;
+                }
+
+                return {
+                    ...place,
+                    databaseMatched: true,
+                    placeId: databasePlace.placeId,
+                    placeName: databasePlace.name,
+                    category: databasePlace.category,
+                    databaseDescription: databasePlace.description,
+                    address: databasePlace.address,
+                    roadAddress: databasePlace.roadAddress,
+                    imageUrl: databasePlace.imageUrl,
+                    latitude: databasePlace.latitude,
+                    longitude: databasePlace.longitude,
+                    recommendationScore: databasePlace.rating,
+                    expectedVisitMinutes:
+                        databasePlace.avgStayMinutes ?? place.expectedVisitMinutes,
+                    themePalaceCultureYn: databasePlace.themePalaceCultureYn,
+                    themeNatureHangangYn: databasePlace.themeNatureHangangYn,
+                    themeDateYn: databasePlace.themeDateYn,
+                    themeFoodTourYn: databasePlace.themeFoodTourYn,
+                    themeCafeTourYn: databasePlace.themeCafeTourYn,
+                    themeShoppingHotplaceYn: databasePlace.themeShoppingHotplaceYn,
+                    themeNightViewYn: databasePlace.themeNightViewYn,
+                    themeHotelStayYn: databasePlace.themeHotelStayYn,
+                };
+            }),
+        }));
+        const databaseCoverImage = days
+            .flatMap((day) => day.places)
+            .find((place) => place.imageUrl)?.imageUrl;
+
+        return {
+            ...course,
+            coverImageUrl: databaseCoverImage || course.coverImageUrl,
+            days,
+        };
+    });
+
+    return {
+        courses: hydratedCourses,
+        missingPlaceNames: [...missingPlaceNames],
+    };
 }
 

@@ -141,18 +141,23 @@ public class CourseSaveService {
             throw new IllegalStateException("저장된 코스 ID를 확인할 수 없습니다.");
         }
 
-        Map<LocalDate, Integer> dayNumbers = createDayNumbers(validated.places());
+        boolean themeCourse = "THEME".equals(validated.courseType());
+        Map<LocalDate, Integer> dayNumbers = themeCourse
+                ? Map.of()
+                : createDayNumbers(validated.places());
         // 장소명·주소 같은 표시 정보는 중복 저장하지 않고 PLACE_ID만 보관해 조회 시 PLACES와 연결한다.
         // 거리·시간·경로 종류는 해당 장소로 들어오는 이전 구간 값이며 첫 장소는 0·0·null이다.
         List<CourseDetail> details = validated.places().stream()
                 .map(place -> CourseDetail.builder()
                         .courseId(savedCourse.getCourseId())
                         .placeId(place.getPlaceId())
-                        .dayNo(dayNumbers.get(place.getVisitDate()))
+                        .dayNo(themeCourse
+                                ? place.getDayNo()
+                                : dayNumbers.get(place.getVisitDate()))
                         .placeOrder(place.getVisitOrder())
                         .visitTime(trimToNull(place.getVisitTime()))
                         .stayMinutes(normalizedStayMinutes(place))
-                        .visitDate(place.getVisitDate())
+                        .visitDate(themeCourse ? null : place.getVisitDate())
                         .distanceFromPreviousKm(round(
                                 place.getDistanceFromPreviousKm(),
                                 3
@@ -176,7 +181,9 @@ public class CourseSaveService {
                 // 전체 이동수단은 TRAVEL_SURVEY.TRANSPORT_TYPE에 저장되므로 요청 검증값을 반환한다.
                 .transportMode(validated.transportMode())
                 .placeCount(details.size())
-                .dayCount(dayNumbers.size())
+                .dayCount(themeCourse
+                        ? countThemeDays(validated.places())
+                        : dayNumbers.size())
                 .totalDistanceKm(storedTotalDistanceKm)
                 .totalTravelTimeMinutes(storedTotalTravelTimeMinutes)
                 .totalVisitTimeMinutes(totalVisitTimeMinutes)
@@ -276,29 +283,44 @@ public class CourseSaveService {
 
         List<CourseSavePlaceDto> sortedPlaces = new ArrayList<>(places);
         Map<Long, CourseSavePlaceDto> firstPlaceById = new LinkedHashMap<>();
-        Map<Long, Set<LocalDate>> visitDatesByPlaceId = new LinkedHashMap<>();
+        boolean themeCourse = "THEME".equals(courseType);
+        Map<Long, Set<Object>> scheduleDaysByPlaceId = new LinkedHashMap<>();
         for (CourseSavePlaceDto place : sortedPlaces) {
-            validatePlace(place);
+            validatePlace(place, themeCourse);
             CourseSavePlaceDto previous =
                     firstPlaceById.putIfAbsent(place.getPlaceId(), place);
-            Set<LocalDate> usedDates = visitDatesByPlaceId.computeIfAbsent(
+            Set<Object> usedDays = scheduleDaysByPlaceId.computeIfAbsent(
                     place.getPlaceId(),
                     ignored -> new HashSet<>()
             );
-            boolean newVisitDate = usedDates.add(place.getVisitDate());
+            boolean newScheduleDay = usedDays.add(scheduleDayKey(
+                    place,
+                    themeCourse
+            ));
             if (previous != null
-                    && (!newVisitDate
-                    || !isRepeatedHotelOnAnotherDate(previous, place))) {
+                    && (!newScheduleDay
+                    || !isRepeatedHotelOnAnotherDay(
+                            previous,
+                            place,
+                            themeCourse
+                    ))) {
                 throw new IllegalArgumentException(
                         "동일한 장소를 코스에 중복 저장할 수 없습니다. placeId="
                                 + place.getPlaceId()
                 );
             }
         }
-        sortedPlaces.sort(Comparator
-                .comparing(CourseSavePlaceDto::getVisitDate)
-                .thenComparing(CourseSavePlaceDto::getVisitOrder));
-        validateSequentialOrders(sortedPlaces);
+        if (themeCourse) {
+            sortedPlaces.sort(Comparator
+                    .comparing(CourseSavePlaceDto::getDayNo)
+                    .thenComparing(CourseSavePlaceDto::getVisitOrder));
+            validateSequentialThemeDays(sortedPlaces);
+        } else {
+            sortedPlaces.sort(Comparator
+                    .comparing(CourseSavePlaceDto::getVisitDate)
+                    .thenComparing(CourseSavePlaceDto::getVisitOrder));
+        }
+        validateSequentialOrders(sortedPlaces, themeCourse);
         validateTransitPathTypes(sortedPlaces, transportMode);
 
         return new ValidatedCourse(
@@ -314,13 +336,23 @@ public class CourseSaveService {
      * 2일 이상 일정의 같은 숙소만 서로 다른 날짜에 반복 저장할 수 있도록 예외 처리한다.
      * 같은 날짜 중복 또는 HOTEL이 아닌 일반 장소 중복은 기존처럼 거부한다.
      */
-    private boolean isRepeatedHotelOnAnotherDate(
+    private boolean isRepeatedHotelOnAnotherDay(
             CourseSavePlaceDto previous,
-            CourseSavePlaceDto current
+            CourseSavePlaceDto current,
+            boolean themeCourse
     ) {
         return isHotel(previous.getCategory())
                 && isHotel(current.getCategory())
-                && !previous.getVisitDate().equals(current.getVisitDate());
+                && !scheduleDayKey(previous, themeCourse).equals(
+                        scheduleDayKey(current, themeCourse)
+                );
+    }
+
+    private Object scheduleDayKey(
+            CourseSavePlaceDto place,
+            boolean themeCourse
+    ) {
+        return themeCourse ? place.getDayNo() : place.getVisitDate();
     }
 
     private boolean isHotel(String category) {
@@ -343,12 +375,21 @@ public class CourseSaveService {
     }
 
     /** 상세 장소 한 건의 필수값과 음수가 될 수 없는 계산값을 검증한다. */
-    private void validatePlace(CourseSavePlaceDto place) {
+    private void validatePlace(
+            CourseSavePlaceDto place,
+            boolean themeCourse
+    ) {
         if (place == null) {
             throw new IllegalArgumentException("저장할 장소는 null일 수 없습니다.");
         }
         validatePositiveId(place.getPlaceId(), "장소 ID");
-        if (place.getVisitDate() == null) {
+        if (themeCourse
+                && (place.getDayNo() == null || place.getDayNo() < 1)) {
+            throw new IllegalArgumentException(
+                    "테마 코스 장소의 dayNo는 1 이상이어야 합니다."
+            );
+        }
+        if (!themeCourse && place.getVisitDate() == null) {
             throw new IllegalArgumentException("장소 방문 날짜는 필수입니다.");
         }
         if (place.getVisitOrder() == null || place.getVisitOrder() < 1) {
@@ -380,13 +421,17 @@ public class CourseSaveService {
     }
 
     /** 각 날짜의 방문 순서가 반드시 1부터 시작해 중간 번호 없이 이어지는지 확인한다. */
-    private void validateSequentialOrders(List<CourseSavePlaceDto> places) {
-        LocalDate currentDate = null;
+    private void validateSequentialOrders(
+            List<CourseSavePlaceDto> places,
+            boolean themeCourse
+    ) {
+        Object currentDay = null;
         int expectedOrder = 1;
 
         for (CourseSavePlaceDto place : places) {
-            if (!place.getVisitDate().equals(currentDate)) {
-                currentDate = place.getVisitDate();
+            Object scheduleDay = scheduleDayKey(place, themeCourse);
+            if (!scheduleDay.equals(currentDay)) {
+                currentDay = scheduleDay;
                 expectedOrder = 1;
             }
             if (place.getVisitOrder() != expectedOrder) {
@@ -395,6 +440,25 @@ public class CourseSaveService {
                 );
             }
             expectedOrder++;
+        }
+    }
+
+    private void validateSequentialThemeDays(
+            List<CourseSavePlaceDto> places
+    ) {
+        int expectedDayNo = 1;
+        Integer previousDayNo = null;
+        for (CourseSavePlaceDto place : places) {
+            if (place.getDayNo().equals(previousDayNo)) {
+                continue;
+            }
+            if (place.getDayNo() != expectedDayNo) {
+                throw new IllegalArgumentException(
+                        "테마 코스 dayNo는 1부터 빈 번호 없이 이어져야 합니다."
+                );
+            }
+            previousDayNo = place.getDayNo();
+            expectedDayNo++;
         }
     }
 
@@ -429,6 +493,13 @@ public class CourseSaveService {
             );
         }
         return dayNumbers;
+    }
+
+    private int countThemeDays(List<CourseSavePlaceDto> places) {
+        return (int) places.stream()
+                .map(CourseSavePlaceDto::getDayNo)
+                .distinct()
+                .count();
     }
 
     /** 코스 유형을 대문자로 통일하고 허용된 생성 출처인지 확인한다. */
