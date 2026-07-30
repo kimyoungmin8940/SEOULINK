@@ -57,7 +57,7 @@ export const walkingAlleyCourseRecipes = [
     {
         courseId: 1603,
         themeSlug: 'walking-alley',
-        title: '연남동–홍대–합정 골목',
+        title: '연남동에서 망원까지 이어지는 로컬 골목 여행',
         description:
             '연남동의 차분한 골목에서 홍대와 합정까지 걷고, 망원과 문화비축기지의 로컬 풍경을 이어서 만나는 1박 2일 코스예요',
         optionName: '연남 홍대 합정 1박 2일',
@@ -71,11 +71,11 @@ export const walkingAlleyCourseRecipes = [
                 startTime: '12:00',
                 center: [37.557, 126.923],
                 places: [
-                    ['경의선숲길 연남동 구간', 'TOUR'],
                     ['KT&G 상상마당 홍대', 'TOUR'],
                     ['홍대 걷고싶은거리', 'TOUR'],
-                    ['앤트러사이트 합정점', 'CAFE'],
-                    ['라이즈 오토그래프 컬렉션', 'HOTEL'],
+                    ['평안도상원냉면', 'RESTAURANT'],
+                    ['경의선숲길 연남동 구간', 'TOUR'],
+                    ['피오니 연남점', 'CAFE'],
                 ],
             },
             {
@@ -93,7 +93,7 @@ export const walkingAlleyCourseRecipes = [
     {
         courseId: 1604,
         themeSlug: 'walking-alley',
-        title: '문래 철공소 골목',
+        title: '문래 철공소 골목에서 만나는 예술과 쉼',
         description:
             '철공소와 예술 작업실이 섞인 문래창작촌을 천천히 순환하고 타임스퀘어에서 휴식하는 코스예요',
         optionName: '문래 철공소 골목',
@@ -118,7 +118,7 @@ export const walkingAlleyCourseRecipes = [
     {
         courseId: 1605,
         themeSlug: 'walking-alley',
-        title: '해방촌–한남 취향 골목',
+        title: '해방촌에서 한남동까지 이어지는 취향 산책',
         description:
             '오래된 시장 골목에서 음악과 커피 공간으로 이어지며 혼자 기록하고 걷기 좋은 취향 산책 코스예요',
         optionName: '해방촌 한남 골목',

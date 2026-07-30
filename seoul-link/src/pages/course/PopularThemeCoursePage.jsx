@@ -231,7 +231,7 @@ function PopularThemeCoursePage() {
                         <span>인기순</span>
                         <h2>서울 인기 테마 코스 {visibleCourses.length}개</h2>
                     </div>
-                    <p>저장 횟수가 같으면 기본 추천 순서로 보여드려요</p>
+                    <p>각 테마를 대표하는 BEST 코스를 한곳에 모았어요</p>
                 </div>
 
                 {bookmarkNotice && (
