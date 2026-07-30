@@ -40,6 +40,14 @@ public class CourseOptimizeRequest {
     @JsonFormat(pattern = "HH:mm")
     private LocalTime dailyStartTime;
 
+    /**
+     * 대중교통 실제 경로 조회 시 40분 상한을 맞추기 위한 장소 교체·삭제를 수행할지 여부이다.
+     * 기본값은 true이며, 프런트가 현재 장소 구성을 그대로 유지한 채 실제 구간만 조회하는
+     * 최종 폴백 요청에서만 false로 전달한다.
+     */
+    @Builder.Default
+    private boolean enforcePublicTransitLimit = true;
+
     // 실제 코스에 배치할 장소 목록이며, 각 장소 내부에 전용 대체 후보를 포함한다.
     @Builder.Default
     private List<PlaceCandidateDto> placeCandidates = new ArrayList<>();
