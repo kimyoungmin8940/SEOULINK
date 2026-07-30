@@ -5,15 +5,17 @@ import {
     CafeIcon,
     DateIcon,
     FoodIcon,
+    MapCategoryIcon,
     NatureIcon,
     NightIcon,
     PalaceIcon,
     ShoppingIcon,
     StayIcon,
-} from "./CourseCategoryIcons";
+} from "../../components/home/CategoryMenu";
 
 const COURSE_CATEGORY_THEMES = COURSE_THEMES;
 const COURSE_CATEGORY_ICONS = {
+    ALL: MapCategoryIcon,
     PALACE_CULTURE: PalaceIcon,
     NATURE_HANGANG: NatureIcon,
     DATE: DateIcon,
@@ -24,6 +26,7 @@ const COURSE_CATEGORY_ICONS = {
     HOTEL_STAY: StayIcon,
 };
 const COURSE_CATEGORY_TYPES = {
+    ALL: "map",
     PALACE_CULTURE: "palace",
     NATURE_HANGANG: "nature",
     DATE: "date",
@@ -162,4 +165,3 @@ CourseBuilderFilter.defaultProps = {
 };
 
 export default CourseBuilderFilter;
-

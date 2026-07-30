@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { loadKakaoMap } from "./loadKakaoMap";
-import { saveCourseBuilderCourse } from "./api/courseBuilderApi";
+import {
+    fetchCourseBuilderCourse,
+    saveCourseBuilderCourse,
+    updateCourseBuilderCourse,
+} from "./api/courseBuilderApi";
 import CourseBuilderFilter from "./CourseBuilderFilter";
 import CourseBuilderMap from "./CourseBuilderMap";
 import CoursePlaceList from "./CoursePlaceList";
@@ -66,7 +70,68 @@ const clampCoursePlacesToDayCount = (coursePlaces, dayCount) => {
     return changed ? resetRouteInfo(clampedPlaces) : coursePlaces;
 };
 
-function CourseBuilderPage({ initialTheme = "ALL" }) {
+const buildEditableCoursePlaces = (days = []) => {
+    const editablePlaces = days
+        .flatMap((day) =>
+            (day.places || []).map((place, index) => ({
+                uid: `COURSE-EDIT-${place.detailId || place.placeId || index}`,
+                courseItemId: `course-detail-${place.detailId || `${place.placeId}-${index}`}`,
+                placeId: place.placeId,
+                apiProvider: null,
+                apiPlaceId: null,
+                contentId: null,
+                name: place.placeName || `장소 ${place.placeId}`,
+                category: normalizeBaseCategory(place.category),
+                themeCategory: getFocusThemeByPlace({ category: place.category }),
+                apiCategory: "",
+                region: place.region || DEFAULT_REGION,
+                address: place.address || place.roadAddress || "",
+                roadAddress: place.roadAddress || "",
+                latitude: Number(place.latitude),
+                longitude: Number(place.longitude),
+                phone: "",
+                placeUrl: "",
+                rating: 0,
+                reviewCount: 0,
+                description: "",
+                imageUrl: place.imageUrl || "",
+                indoorYn: null,
+                dataSource: "DB",
+                dayNo: normalizeDayNo(day.dayNo),
+                visitTime: place.visitTime || "",
+                stayMinutes: normalizeStayMinutes(place.expectedVisitMinutes) ?? 0,
+                moveDistanceM: null,
+                moveDurationMin: null,
+                routeStatusMessage: null,
+                routeToPlaceName: null,
+                routePoints: [],
+                incomingDistanceM: Number(place.distanceFromPreviousKm) * 1000,
+                incomingDurationMin: Number(place.travelTimeFromPreviousMinutes),
+                placeOrder: Number(place.visitOrder || index + 1),
+            }))
+        )
+        .sort((first, second) => {
+            const dayDifference = normalizeDayNo(first.dayNo) - normalizeDayNo(second.dayNo);
+            return dayDifference || first.placeOrder - second.placeOrder;
+        });
+
+    editablePlaces.forEach((place, index) => {
+        const previousPlace = editablePlaces[index - 1];
+        if (!previousPlace || normalizeDayNo(previousPlace.dayNo) !== normalizeDayNo(place.dayNo)) return;
+
+        previousPlace.moveDistanceM = Number.isFinite(place.incomingDistanceM)
+            ? place.incomingDistanceM
+            : null;
+        previousPlace.moveDurationMin = Number.isFinite(place.incomingDurationMin)
+            ? place.incomingDurationMin
+            : null;
+        previousPlace.routeToPlaceName = place.name;
+    });
+
+    return editablePlaces;
+};
+
+function CourseBuilderPage({ initialTheme = "ALL", editCourseId = null }) {
     const normalizedInitialTheme = THEME_BY_VALUE[initialTheme] ? initialTheme : "ALL";
     const mapContainerRef = useRef(null);
     const mapRef = useRef(null);
@@ -100,6 +165,7 @@ function CourseBuilderPage({ initialTheme = "ALL" }) {
     const [courseDescription, setCourseDescription] = useState("");
     const [tripDayCount, setTripDayCount] = useState(1);
     const [activeDayNo, setActiveDayNo] = useState(1);
+    const [isLoadingEditCourse, setIsLoadingEditCourse] = useState(Boolean(editCourseId));
 
     const courseTimeSummary = calculateCourseTimeSummary(coursePlaces);
     const activeDayPlaces = coursePlaces.filter((place) => normalizeDayNo(place.dayNo) === activeDayNo);
@@ -122,6 +188,61 @@ function CourseBuilderPage({ initialTheme = "ALL" }) {
     useEffect(() => {
         activeFoodSubcategoryRef.current = activeFoodSubcategory;
     }, [activeFoodSubcategory]);
+
+    useEffect(() => {
+        if (!editCourseId) return undefined;
+
+        let isCancelled = false;
+        const memberId = Number(authStore.getMember()?.memberId);
+
+        if (!Number.isSafeInteger(memberId) || memberId <= 0) {
+            alert("로그인 정보를 확인할 수 없습니다. 다시 로그인해주세요.");
+            setIsLoadingEditCourse(false);
+            return undefined;
+        }
+
+        fetchCourseBuilderCourse(editCourseId, memberId)
+            .then((course) => {
+                if (isCancelled) return;
+
+                if (String(course.courseType || "").toUpperCase() !== "CUSTOM") {
+                    throw new Error("직접 만든 코스만 수정할 수 있습니다.");
+                }
+
+                const editablePlaces = buildEditableCoursePlaces(course.days);
+                const nextRegion = course.region || DEFAULT_REGION;
+                const nextDayCount = Math.min(
+                    7,
+                    Math.max(1, ...editablePlaces.map((place) => normalizeDayNo(place.dayNo)))
+                );
+
+                setCourseTitle(course.title || "");
+                setCourseDescription(course.description || "");
+                setRegion(nextRegion);
+                regionRef.current = nextRegion;
+                setTripDayCount(nextDayCount);
+                setActiveDayNo(1);
+                setCoursePlaces(editablePlaces);
+                setSelectedMapPlaces([]);
+                setMapStatus("수정할 코스를 불러왔습니다.");
+
+                if (mapRef.current) {
+                    void moveMapToRegion(mapRef.current, nextRegion);
+                }
+            })
+            .catch((error) => {
+                if (isCancelled) return;
+                console.error(error);
+                alert(`코스를 불러오지 못했습니다.\n\n${error.message}`);
+            })
+            .finally(() => {
+                if (!isCancelled) setIsLoadingEditCourse(false);
+            });
+
+        return () => {
+            isCancelled = true;
+        };
+    }, [editCourseId]);
 
     const handleTripDayCountChange = useCallback((event) => {
         const nextDayCount = Math.min(7, Math.max(1, Number(event.target.value) || 1));
@@ -647,8 +768,15 @@ function CourseBuilderPage({ initialTheme = "ALL" }) {
         };
 
         try {
+            if (editCourseId) {
+                await updateCourseBuilderCourse(editCourseId, requestBody);
+                alert("코스가 수정되었습니다.");
+                window.location.assign("/mypage/custom-courses");
+                return;
+            }
+
             await saveCourseBuilderCourse(requestBody);
-            alert("코스가 저장되었습니다");
+            alert("코스가 저장되었습니다.");
             setCourseTitle("");
             setCourseDescription("");
             setCoursePlaces([]);
@@ -657,9 +785,9 @@ function CourseBuilderPage({ initialTheme = "ALL" }) {
             setActiveDayNo(1);
         } catch (error) {
             console.error(error);
-            alert(`코스 저장에 실패했습니다.\n\n${error.message}`);
+            alert(`코스 ${editCourseId ? "수정" : "저장"}에 실패했습니다.\n\n${error.message}`);
         }
-    }, [calculateRoutesForPlaces, courseDescription, coursePlaces, courseTitle, region, setIsCalculatingRoutes]);
+    }, [calculateRoutesForPlaces, courseDescription, coursePlaces, courseTitle, editCourseId, region, setIsCalculatingRoutes]);
 
     useEffect(() => {
         loadKakaoMap()
@@ -871,7 +999,7 @@ function CourseBuilderPage({ initialTheme = "ALL" }) {
             <header className="course-builder-title-bar">
                 <div>
                     <span>SEOULINK COURSE MAKER</span>
-                    <h1>서울 여행 코스 만들기</h1>
+                    <h1>{editCourseId ? "서울 여행 코스 수정하기" : "서울 여행 코스 만들기"}</h1>
                 </div>
                 <div className="course-builder-total-time">
                     <span>총 예상 시간</span>
@@ -923,7 +1051,7 @@ function CourseBuilderPage({ initialTheme = "ALL" }) {
                     courseTitle={courseTitle}
                     courseDescription={courseDescription}
                     dayTimeSummary={activeDayTimeSummary}
-                    isCalculatingRoutes={isCalculatingRoutes}
+                    isCalculatingRoutes={isCalculatingRoutes || isLoadingEditCourse}
                     onCourseTitleChange={setCourseTitle}
                     onCourseDescriptionChange={setCourseDescription}
                     onDayChange={setActiveDayNo}
@@ -933,6 +1061,7 @@ function CourseBuilderPage({ initialTheme = "ALL" }) {
                     onMoveCoursePlace={moveCoursePlace}
                     onRemovePlaceFromCourse={removePlaceFromCourse}
                     onSaveCourse={handleSaveCourse}
+                    saveButtonLabel={editCourseId ? "수정 완료" : "코스 저장"}
                 />
             </main>
         </div>

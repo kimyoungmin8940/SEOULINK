@@ -642,6 +642,32 @@ public class CourseBuilderService {
 
         Long courseId = insertTravelCourse(request);
 
+        insertCourseDetails(courseId, request);
+        updateCourseTotals(courseId);
+        return getSavedCourseResponse(courseId);
+    }
+
+    /** 직접 만든 코스만 소유자가 기존 장소 목록까지 교체해 수정할 수 있다. */
+    @Transactional
+    public CourseSaveResponse updateCourse(Long courseId, CourseBuilderSaveRequest request) {
+        if (courseId == null || courseId <= 0) {
+            throw new IllegalArgumentException("코스 ID가 올바르지 않습니다.");
+        }
+
+        validateRequest(request);
+        validateEditableCourse(courseId, request.memberId());
+        updateTravelCourse(courseId, request);
+        jdbcTemplate.update(
+                "DELETE FROM COURSE_DETAILS WHERE COURSE_ID = :courseId",
+                new MapSqlParameterSource().addValue("courseId", courseId)
+        );
+
+        insertCourseDetails(courseId, request);
+        updateCourseTotals(courseId);
+        return getSavedCourseResponse(courseId);
+    }
+
+    private void insertCourseDetails(Long courseId, CourseBuilderSaveRequest request) {
         for (int i = 0; i < request.places().size(); i++) {
             CourseBuilderSaveRequest.PlaceRequest place = request.places().get(i);
             CourseBuilderSaveRequest.PlaceRequest previousPlace = i == 0 ? null : request.places().get(i - 1);
@@ -667,11 +693,12 @@ public class CourseBuilderService {
             );
         }
 
-        updateCourseTotals(courseId);
-        return getSavedCourseResponse(courseId);
     }
 
     private void validateRequest(CourseBuilderSaveRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("코스 요청 정보가 없습니다.");
+        }
         if (request.memberId() == null) {
             throw new IllegalArgumentException("회원 ID가 없습니다.");
         }
@@ -698,6 +725,36 @@ public class CourseBuilderService {
 
         if (request.places() == null || request.places().isEmpty()) {
             throw new IllegalArgumentException("코스에는 장소가 1개 이상 필요합니다.");
+        }
+
+        for (CourseBuilderSaveRequest.PlaceRequest place : request.places()) {
+            int dayNo = place.dayNo() == null ? 1 : place.dayNo();
+            if (dayNo < 1 || dayNo > 7) {
+                throw new IllegalArgumentException("여행 일차는 1일부터 7일까지만 저장할 수 있습니다.");
+            }
+            if (place.placeOrder() != null && place.placeOrder() < 1) {
+                throw new IllegalArgumentException("장소 순서는 1 이상이어야 합니다.");
+            }
+        }
+    }
+
+    private void validateEditableCourse(Long courseId, Long memberId) {
+        List<Map<String, Object>> courses = jdbcTemplate.queryForList(
+                "SELECT MEMBER_ID, COURSE_TYPE FROM TRAVEL_COURSES WHERE COURSE_ID = :courseId",
+                new MapSqlParameterSource().addValue("courseId", courseId)
+        );
+        if (courses.isEmpty()) {
+            throw new IllegalArgumentException("수정할 코스를 찾을 수 없습니다.");
+        }
+
+        Map<String, Object> course = courses.get(0);
+        Object ownerValue = course.get("MEMBER_ID");
+        Long ownerId = ownerValue instanceof Number number ? number.longValue() : null;
+        if (!memberId.equals(ownerId)) {
+            throw new IllegalArgumentException("본인이 만든 코스만 수정할 수 있습니다.");
+        }
+        if (!"CUSTOM".equalsIgnoreCase(String.valueOf(course.get("COURSE_TYPE")))) {
+            throw new IllegalArgumentException("직접 만든 코스만 수정할 수 있습니다.");
         }
     }
 
@@ -749,6 +806,33 @@ public class CourseBuilderService {
         }
 
         return key.longValue();
+    }
+
+    private void updateTravelCourse(Long courseId, CourseBuilderSaveRequest request) {
+        String sql = """
+                UPDATE TRAVEL_COURSES
+                   SET TITLE = :title,
+                       DESCRIPTION = :description,
+                       REGION = :region,
+                       IS_PUBLIC = :isPublic,
+                       UPDATED_AT = SYSDATE
+                 WHERE COURSE_ID = :courseId
+                   AND MEMBER_ID = :memberId
+                   AND COURSE_TYPE = 'CUSTOM'
+                """;
+        int updatedCount = jdbcTemplate.update(
+                sql,
+                new MapSqlParameterSource()
+                        .addValue("courseId", courseId)
+                        .addValue("memberId", request.memberId())
+                        .addValue("title", request.title().trim())
+                        .addValue("description", request.description().trim())
+                        .addValue("region", blankToNull(request.region()))
+                        .addValue("isPublic", defaultValue(request.isPublic(), "N"))
+        );
+        if (updatedCount != 1) {
+            throw new IllegalArgumentException("코스 수정 권한을 확인할 수 없습니다.");
+        }
     }
 
     private Long findOrInsertPlace(Long memberId, CourseBuilderSaveRequest.PlaceRequest place) {

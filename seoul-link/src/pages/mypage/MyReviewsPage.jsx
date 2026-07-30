@@ -48,7 +48,7 @@ function MyReviewsPage() {
         <div className="my-reviews-profile-actions"><a className="mypage-profile-edit" href="/mypage/profile-edit">프로필 수정</a></div>
         <section className="mypage-v3-profile"><div className="mypage-v3-avatar"><UserRound size={54} strokeWidth={1.5} /></div><strong>{userName}님</strong><span>{member.email || 'user@seoulink.com'}</span></section>
         <nav className="mypage-v3-menu" aria-label="마이페이지 메뉴">{menuItems.map(({ label, path, Icon }) => <a key={label} className={path === '/mypage/reviews' ? 'active' : ''} href={path}><Icon size={20} strokeWidth={1.8} /><span>{label}</span></a>)}</nav>
-        <a className="mypage-retest" href="/map-course"><Plus size={18} /> 지도 코스 만들기</a>
+        <a className="mypage-retest" href="/map-course?category=palace-culture"><Plus size={18} /> 지도 코스 만들기</a>
       </aside>)}
       <MypageSidebar activePath="/mypage/reviews" />
       <section className="my-reviews-content">

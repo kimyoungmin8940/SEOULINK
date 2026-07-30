@@ -81,21 +81,6 @@ const menuItems = [
     },
 ];
 
-const statusFilters = [
-    {
-        value: "ALL",
-        label: "전체",
-    },
-    {
-        value: "COMPLETED",
-        label: "작성 완료",
-    },
-    {
-        value: "DRAFT",
-        label: "작성 중",
-    },
-];
-
 function getUserName(member) {
     return (
         member?.nickname?.trim() ||
@@ -177,7 +162,6 @@ export default function MyCustomCoursesPage() {
         memberId ? "" : "로그인 후 직접 만든 코스를 확인할 수 있습니다."
     );
     const [searchQuery, setSearchQuery] = useState("");
-    const [activeStatus, setActiveStatus] = useState("ALL");
     const [sortOrder, setSortOrder] = useState("UPDATED_DESC");
     const [currentPage, setCurrentPage] = useState(1);
     const [editingCourse, setEditingCourse] = useState(null);
@@ -241,16 +225,11 @@ export default function MyCustomCoursesPage() {
         const normalizedQuery = searchQuery.trim().toLowerCase();
 
         return courses
-            .filter((course) => {
-                const matchesSearch =
+            .filter(
+                (course) =>
                     !normalizedQuery ||
-                    getCourseText(course).includes(normalizedQuery);
-                const matchesStatus =
-                    activeStatus === "ALL" ||
-                    course.status === activeStatus;
-
-                return matchesSearch && matchesStatus;
-            })
+                    getCourseText(course).includes(normalizedQuery)
+            )
             .sort((first, second) => {
                 if (sortOrder === "CREATED_DESC") {
                     return (
@@ -271,7 +250,7 @@ export default function MyCustomCoursesPage() {
                     new Date(first.updatedAt).getTime()
                 );
             });
-    }, [activeStatus, courses, searchQuery, sortOrder]);
+    }, [courses, searchQuery, sortOrder]);
 
     const totalPages = Math.max(
         1,
@@ -451,7 +430,7 @@ export default function MyCustomCoursesPage() {
 
                         <a
                             className="mypage-retest"
-                            href="/map-course"
+                            href="/map-course?category=palace-culture"
                         >
                             <Plus size={18} />
                             지도 코스 만들기
@@ -509,26 +488,6 @@ export default function MyCustomCoursesPage() {
                                 />
                             </label>
 
-                            <div className="custom-course-filters">
-                                {statusFilters.map((filter) => (
-                                    <button
-                                        className={
-                                            activeStatus === filter.value
-                                                ? "active"
-                                                : ""
-                                        }
-                                        type="button"
-                                        onClick={() => {
-                                            setActiveStatus(filter.value);
-                                            setCurrentPage(1);
-                                        }}
-                                        key={filter.value}
-                                    >
-                                        {filter.label}
-                                    </button>
-                                ))}
-                            </div>
-
                             <label className="custom-course-sort">
                                 <select
                                     value={sortOrder}
@@ -584,7 +543,7 @@ export default function MyCustomCoursesPage() {
                                     <p>
                                         지도에서 원하는 장소를 골라 나만의 서울 코스를 만들어보세요.
                                     </p>
-                                    <a href="/map-course">
+                                    <a href="/map-course?category=palace-culture">
                                         새 코스 만들기
                                         <ChevronRight size={16} />
                                     </a>
@@ -698,14 +657,6 @@ export default function MyCustomCoursesPage() {
                                                     </div>
 
                                                     <div className="custom-course-card-body">
-                                                        <span
-                                                            className={`custom-course-status ${(course.status || "COMPLETED").toLowerCase()}`}
-                                                        >
-                                                            {course.status === "DRAFT"
-                                                                ? "작성 중"
-                                                                : "작성 완료"}
-                                                        </span>
-
                                                         <h2>{course.title}</h2>
 
                                                         <p className="custom-course-route">
@@ -744,6 +695,12 @@ export default function MyCustomCoursesPage() {
                                                         >
                                                             <Eye size={16} />
                                                             코스 보기
+                                                        </a>
+                                                        <a
+                                                            href={`/map-course?mode=edit&courseId=${course.courseId}`}
+                                                        >
+                                                            <Pencil size={16} />
+                                                            수정하기
                                                         </a>
                                                         <button
                                                             className="danger"

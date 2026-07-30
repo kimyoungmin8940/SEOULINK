@@ -28,6 +28,10 @@ public class ChatbotHistory {
     @Column(name = "PAYMENT_ID")
     private Long paymentId;
 
+    // 같은 대화창에서 생성된 질문·답변 행을 묶는 클라이언트 UUID다.
+    @Column(name = "CONVERSATION_ID", nullable = false, length = 36)
+    private String conversationId;
+
     @Lob
     @Column(name = "QUESTION", nullable = false)
     private String question;

@@ -82,9 +82,10 @@
 .payment-card-title small { display: block; margin-top: 6px; color: #758ba3; font-size: 12px; }
 .payment-card-date b { display: block; margin-top: 6px; font-size: 13px; }
 .payment-state { padding: 6px 10px; border-radius: 99px; font-size: 12px; font-weight: 800; white-space: nowrap; }
-.payment-state.active { color: #1479df; background: #e3f3ff; }
+.payment-state.completed { color: #1479df; background: #e3f3ff; }
 .payment-state.ended { color: #718399; background: #f0f4f7; }
 .payment-state.pending { color: #bd7a12; background: #fff1d9; }
+.payment-state.failed { color: #c45555; background: #fff0f0; }
 .payment-state.canceled { color: #c45555; background: #fff0f0; }
 .payment-card-amount { color: #1479e7; font-size: 19px; white-space: nowrap; }
 .payment-card-top > svg { width: 18px; color: #52728f; }

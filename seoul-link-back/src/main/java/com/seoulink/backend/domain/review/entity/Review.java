@@ -48,6 +48,7 @@ public class Review {
     @Column(name = "VISIT_DATE")
     private LocalDate visitDate;
 
+    // 서비스에서 혼자·연인·친구·가족 중 하나로 정규화한 뒤 저장한다.
     @Column(name = "COMPANION")
     private String companion;
 

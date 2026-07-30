@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { CalendarDays, Camera, Heart, MapPin, MessageCircle, Pencil, Route, Star, Trash2, UsersRound } from 'lucide-react';
+import html2canvas from 'html2canvas';
+import { CalendarDays, Camera, Download, Heart, MapPin, MessageCircle, Pencil, Route, Star, Trash2, UsersRound } from 'lucide-react';
 import Header from '../../components/common/Header';
 import Footer from '../../components/common/Footer';
 import { createComment, deleteReview, deleteReviewComment, getReviewComments, getReviewDetail, likeReview, recordReviewView } from '../../api/reviewApi';
@@ -20,6 +21,8 @@ function ReviewDetailPage() {
   const [error, setError] = useState('');
   // StrictMode의 개발용 재실행과 좋아요·댓글 후 재조회에도 같은 글의 조회 등록은 한 번만 허용한다.
   const viewedReviewIds = useRef(new Set());
+  const courseSummaryRef = useRef(null);
+  const [isSavingCourseSummary, setIsSavingCourseSummary] = useState(false);
 
 
   // 리뷰 본문과 댓글을 병렬로 요청해 상세 화면의 모든 데이터를 한 번에 갱신한다.
@@ -90,6 +93,28 @@ function ReviewDetailPage() {
   };
 
   // 데이터 로딩 전·후 상태를 분리해 빈 화면이 표시되지 않도록 한다.
+  const saveCourseSummaryImage = async () => {
+    if (!courseSummaryRef.current || isSavingCourseSummary) return;
+
+    setIsSavingCourseSummary(true);
+    try {
+      const canvas = await html2canvas(courseSummaryRef.current, {
+        backgroundColor: '#ffffff',
+        scale: 2,
+        useCORS: true
+      });
+      const link = document.createElement('a');
+      link.download = `seoulink-course-summary-${reviewId}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    } catch (err) {
+      console.error('Failed to save course summary image:', err);
+      window.alert('코스 요약 이미지를 저장하지 못했습니다. 잠시 후 다시 시도해주세요.');
+    } finally {
+      setIsSavingCourseSummary(false);
+    }
+  };
+
   if (error) return <><Header /><p className="review-message">{error}</p></>;
   if (!review) return <><Header /><p className="review-message">후기를 불러오는 중입니다.</p></>;
   const photos = review.imageUrls?.length ? review.imageUrls : [review.placeImageUrl].filter(Boolean);
@@ -122,7 +147,8 @@ function ReviewDetailPage() {
                     </article>
                     <section className="story-comments"><h2>댓글 <em>{comments.length}</em></h2><form onSubmit={submitComment}><div className="comment-avatar">{member?.nickname?.slice(0, 1) || '나'}</div><input required value={comment} onChange={event => setComment(event.target.value)} maxLength="500" placeholder="따뜻한 댓글을 남겨주세요 :)" /><button>등록</button></form><div className="comment-list">{comments.map(item => <article key={item.commentId}><div className="comment-avatar muted">여</div><div className="comment-content"><div><strong>서울 여행자</strong><time>{item.createdAt?.slice(0, 10)}</time>{member?.memberId === item.memberId && <button type="button" className="comment-delete" onClick={() => removeComment(item.commentId)}>삭제</button>}</div><p>{item.content}</p></div></article>)}</div></section>
                 </div>
-                <aside className="review-course-panel">
+                <aside className="review-course-panel" ref={courseSummaryRef}>
+                    <button type="button" className="course-summary-download" onClick={saveCourseSummaryImage} disabled={isSavingCourseSummary} data-html2canvas-ignore="true"><Download size={15} /><span>{isSavingCourseSummary ? '저장 중' : '코스 저장'}</span></button>
                     <h2><Route /> 여행 코스 요약</h2>
                     <div className="course-summary-top"><p><CalendarDays /> {dateText(review.visitDate)}</p><p><UsersRound /> {review.companion || '서울 여행'}</p></div>
                     {course ? <><h3>{course.title}</h3><ol className="course-stop-list">{course.stops.map((stop, index) => <li key={`${stop.order}-${index}`}><b>{index + 1}</b><div><time>{stop.visitTime || '여행 중'}</time><strong>{stop.placeName}</strong>{stop.memo && <span>{stop.memo}</span>}</div></li>)}</ol><p className="course-count">총 {course.stops.length}개 장소</p></> : <div className="course-fallback"><Camera /><strong>{review.placeName}</strong><p>이 후기는 {review.companion || '여행'}과 함께 남긴 서울 여행 기록입니다.</p><span>장소 후기</span></div>}

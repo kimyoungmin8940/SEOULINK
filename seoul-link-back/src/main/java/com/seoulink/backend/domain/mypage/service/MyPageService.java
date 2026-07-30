@@ -8,7 +8,6 @@ import com.seoulink.backend.domain.mypage.dto.response.MyTravelTypeResponse;
 import com.seoulink.backend.domain.review.dto.response.ReviewResponse;
 import com.seoulink.backend.domain.member.entity.Member;
 import com.seoulink.backend.domain.course.entity.TravelCourse;
-import com.seoulink.backend.domain.chatbot.repository.ChatbotHistoryRepository;
 import com.seoulink.backend.domain.course.repository.CourseDetailRepository;
 import com.seoulink.backend.domain.course.repository.TravelCourseRepository;
 import com.seoulink.backend.domain.member.repository.MemberRepository;
@@ -34,7 +33,6 @@ public class MyPageService {
     private final MemberRepository memberRepository;
     private final TravelCourseRepository travelCourseRepository;
     private final PaymentRepository paymentRepository;
-    private final ChatbotHistoryRepository chatbotHistoryRepository;
     private final ReviewRepository reviewRepository;
     private final ReviewLikeRepository reviewLikeRepository;
     private final ReviewCommentRepository reviewCommentRepository;
@@ -47,7 +45,6 @@ public class MyPageService {
             MemberRepository memberRepository,
             TravelCourseRepository travelCourseRepository,
             PaymentRepository paymentRepository,
-            ChatbotHistoryRepository chatbotHistoryRepository,
             ReviewRepository reviewRepository,
             ReviewLikeRepository reviewLikeRepository,
             ReviewCommentRepository reviewCommentRepository,
@@ -59,7 +56,6 @@ public class MyPageService {
         this.memberRepository = memberRepository;
         this.travelCourseRepository = travelCourseRepository;
         this.paymentRepository = paymentRepository;
-        this.chatbotHistoryRepository = chatbotHistoryRepository;
         this.reviewRepository = reviewRepository;
         this.reviewLikeRepository = reviewLikeRepository;
         this.reviewCommentRepository = reviewCommentRepository;
@@ -110,7 +106,6 @@ public class MyPageService {
                 travelTypeResponse,
                 courses,
                 paymentRepository.findByMemberIdOrderByCreatedAtDesc(memberId).stream().limit(5).toList(),
-                chatbotHistoryRepository.findByMemberIdOrderByCreatedAtDesc(memberId).stream().limit(5).toList(),
                 reviewRepository.findByIsDeletedOrderByCreatedAtDesc("N")
                         .stream()
                         .filter(review -> memberId.equals(review.getMemberId()))

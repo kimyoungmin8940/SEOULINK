@@ -170,12 +170,22 @@ export const getIndoorOutdoorLabel = (place) => {
     return "실내/야외";
 };
 
-export const getMarkerImageUrl = (place) => {
+export const getMarkerTheme = (place) => {
     if (place.themeCategory && MARKER_ICON_BY_THEME[place.themeCategory]) {
-        return MARKER_ICON_BY_THEME[place.themeCategory];
+        return place.themeCategory;
     }
 
-    return MARKER_ICON_BY_BASE_CATEGORY[normalizeBaseCategory(place.category)] || MARKER_ICON_BY_THEME.PALACE_CULTURE;
+    const baseCategory = normalizeBaseCategory(place.category);
+
+    if (baseCategory === "RESTAURANT") return "FOOD_TOUR";
+    if (baseCategory === "CAFE") return "CAFE_TOUR";
+    if (baseCategory === "HOTEL") return "HOTEL_STAY";
+    return "PALACE_CULTURE";
+};
+
+export const getMarkerImageUrl = (place) => {
+    const markerTheme = getMarkerTheme(place);
+    return MARKER_ICON_BY_THEME[markerTheme] || MARKER_ICON_BY_BASE_CATEGORY.TOUR;
 };
 
 export const extractRegion = (address, fallbackRegion) => {

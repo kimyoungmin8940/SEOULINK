@@ -7,8 +7,18 @@ import { authStore } from '../../store/authStore';
 import '../../styles/review-pages.css';
 import '../../styles/review-primary-color.css';
 
+// 기존 '부모님/아이와 함께' 데이터도 수정 화면에서는 '가족'으로 정규화한다.
+// 저장 시에는 혼자·연인·친구·가족 중 하나만 백엔드로 전달한다.
+
+const normalizeCompanion = (companion) => {
+  if (['부모님과 함께', '아이와 함께', '가족과 함께'].includes(companion)) return '가족';
+  if (companion === '친구와 함께') return '친구';
+  if (companion === '연인과 함께') return '연인';
+  return ['혼자', '연인', '친구', '가족'].includes(companion) ? companion : '혼자';
+};
+
 const tagOptions = ['혼자 여행', '데이트', '가족 여행', '맛집', '야경', '카페 투어', '사진 명소', '비 오는 날'];
-const companions = ['혼자', '친구와 함께', '연인과 함께', '부모님과 함께', '아이와 함께'];
+const companions = ['혼자', '연인', '친구', '가족'];
 
 function ReviewEditPage() {
   const reviewId = window.location.pathname.split('/').filter(Boolean).at(-2);
@@ -28,7 +38,7 @@ function ReviewEditPage() {
         return;
       }
       setReview(data);
-      setForm({ reviewTitle: data.reviewTitle || '', reviewContent: data.reviewContent || '', rating: data.rating ?? 5, visitDate: data.visitDate || '', companion: data.companion || '친구와 함께', imageUrls: data.imageUrls || (data.imageUrl ? [data.imageUrl] : []), tags: data.tags || [] });
+      setForm({ reviewTitle: data.reviewTitle || '', reviewContent: data.reviewContent || '', rating: data.rating ?? 5, visitDate: data.visitDate || '', companion: normalizeCompanion(data.companion), imageUrls: data.imageUrls || (data.imageUrl ? [data.imageUrl] : []), tags: data.tags || [] });
     }).catch((loadError) => setError(loadError.message || '후기를 불러오지 못했습니다.'));
   }, [reviewId, member?.memberId]);
 

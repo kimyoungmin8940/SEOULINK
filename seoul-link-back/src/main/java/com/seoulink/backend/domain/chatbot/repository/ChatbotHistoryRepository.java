@@ -10,4 +10,11 @@ import java.util.List;
  */
 public interface ChatbotHistoryRepository extends JpaRepository<ChatbotHistory, Long> {
     List<ChatbotHistory> findByMemberIdOrderByCreatedAtDesc(Long memberId);
+
+    List<ChatbotHistory> findByMemberIdAndConversationIdOrderByCreatedAtAsc(
+            Long memberId,
+            String conversationId
+    );
+
+    long deleteByMemberIdAndConversationId(Long memberId, String conversationId);
 }

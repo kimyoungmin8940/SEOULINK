@@ -13,7 +13,6 @@ public class MyPageResponse {
     private MyTravelTypeResponse travelType;
     private List<MyCourseResponse> courses;
     private List<?> payments;
-    private List<?> chatbotHistories;
     private List<ReviewResponse> reviews;
 
     public MyPageResponse(
@@ -21,14 +20,12 @@ public class MyPageResponse {
             MyTravelTypeResponse travelType,
             List<MyCourseResponse> courses,
             List<?> payments,
-            List<?> chatbotHistories,
             List<ReviewResponse> reviews
     ) {
         this.member = member;
         this.travelType = travelType;
         this.courses = courses;
         this.payments = payments;
-        this.chatbotHistories = chatbotHistories;
         this.reviews = reviews;
     }
 }

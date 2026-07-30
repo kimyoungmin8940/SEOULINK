@@ -253,71 +253,23 @@
 }
 
 .course-builder-category-icon {
-    width: 34px;
-    height: 34px;
-    border-radius: 10px;
+    width: 38px;
+    height: 38px;
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 5px 12px rgba(24, 50, 74, 0.05);
 }
 
 .course-builder-category-icon svg {
-    width: 22px;
-    height: 22px;
+    width: 100%;
+    height: 100%;
     display: block;
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 1.75;
-    stroke-linecap: round;
-    stroke-linejoin: round;
     transition: transform 0.18s ease;
 }
 
-.course-builder-category-icon-palace {
-    background: #e9f0f5;
-    color: #65788d;
-}
-
-.course-builder-category-icon-nature {
-    background: #eaf2fc;
-    color: #5d83b5;
-}
-
-.course-builder-category-icon-date {
-    background: #f9ecef;
-    color: #c9828b;
-}
-
-.course-builder-category-icon-food {
-    background: #fff3df;
-    color: #c88b43;
-}
-
-.course-builder-category-icon-cafe {
-    background: #f3ece8;
-    color: #927467;
-}
-
-.course-builder-category-icon-shopping {
-    background: #f1ecf8;
-    color: #9a7bbc;
-}
-
-.course-builder-category-icon-night {
-    background: #ecf3fd;
-    color: #617cba;
-}
-
-.course-builder-category-icon-stay {
-    background: #e9f4f1;
-    color: #5c9a8c;
-}
-
-.course-builder-category-button-all {
-    border-color: #d7e8f7;
-    background: #f7fbff;
-    color: #3f6f9c;
+.course-builder-category-icon-map {
+    width: 40px;
+    height: 40px;
 }
 
 .course-builder-category-button:hover .course-builder-category-icon svg,

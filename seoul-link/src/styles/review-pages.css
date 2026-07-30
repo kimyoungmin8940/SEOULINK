@@ -42,6 +42,7 @@ body:has(.review-hub){background:#f5f9ff}
 
 body:has(.review-story-page){background:#f5f9ff}
 .review-story-page::before{display:none}
+.review-course-panel{position:relative}.course-summary-download{position:absolute;top:19px;right:17px;display:inline-flex;align-items:center;justify-content:center;gap:4px;border:1px solid #bed8fa;border-radius:7px;background:#f7fbff;color:#176ce4;padding:6px 8px;font:inherit;font-size:11px;font-weight:700;line-height:1;white-space:nowrap;cursor:pointer;transition:.18s ease}.course-summary-download:hover:not(:disabled){border-color:#176ce4;background:#eaf4ff}.course-summary-download:disabled{cursor:wait;opacity:.65}
 
 body:has(.review-write-shell){background:#f4f9ff;background-image:radial-gradient(rgba(58,117,184,.12) .55px,transparent .7px),linear-gradient(180deg,#edf7ff 0%,#f8fbff 44%,#f3f8ff 100%);background-size:12px 12px,auto;background-attachment:fixed}
 .review-write-shell::before{display:none}

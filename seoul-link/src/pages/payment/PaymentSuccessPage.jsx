@@ -3,6 +3,9 @@ import { CheckCircle2, LoaderCircle } from 'lucide-react';
 import Header from '../../components/common/Header';
 import { confirmPayment } from '../../api/paymentApi';
 
+// 결제사 successUrl은 결제 성공을 확정하지 않는다. 이 화면에서 서버 승인 API를 한 번만
+// 호출해야 이용권 상태가 실제 승인 결과와 일치한다.
+
 function PaymentSuccessPage() {
   const [state, setState] = useState('loading');
   const [message, setMessage] = useState(

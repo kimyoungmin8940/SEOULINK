@@ -18,13 +18,23 @@ function MapCourseBuilderPage() {
     const searchParams = new URLSearchParams(window.location.search);
     const selectedCategory = searchParams.get('category');
     const initialTheme = THEME_BY_CATEGORY[selectedCategory] ?? 'ALL';
+    const requestedCourseId = Number(searchParams.get('courseId'));
+    const editCourseId =
+        searchParams.get('mode') === 'edit' &&
+        Number.isSafeInteger(requestedCourseId) &&
+        requestedCourseId > 0
+            ? requestedCourseId
+            : null;
 
     return (
         <div className="map-course-page">
             <Header variant="simple" />
 
             <main className="map-course-content">
-                <CourseBuilderPage initialTheme={initialTheme} />
+                <CourseBuilderPage
+                    initialTheme={initialTheme}
+                    editCourseId={editCourseId}
+                />
             </main>
 
             <Footer />

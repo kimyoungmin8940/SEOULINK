@@ -14,8 +14,8 @@ export const getMapLevelByRegion = (regionValue) => (regionValue === DEFAULT_REG
 
 export const createMarkerImage = (place) => {
     const kakao = window.kakao;
-    return new kakao.maps.MarkerImage(getMarkerImageUrl(place), new kakao.maps.Size(46, 46), {
-        offset: new kakao.maps.Point(23, 46),
+    return new kakao.maps.MarkerImage(getMarkerImageUrl(place), new kakao.maps.Size(38, 38), {
+        offset: new kakao.maps.Point(19, 38),
     });
 };
 

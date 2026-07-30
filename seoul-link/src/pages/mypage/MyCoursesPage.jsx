@@ -262,7 +262,6 @@ export default function MyCoursesPage() {
     );
     const [notice, setNotice] = useState("");
     const [searchQuery, setSearchQuery] = useState("");
-    const [activeTheme, setActiveTheme] = useState("ALL");
     const [sortOrder, setSortOrder] = useState("RECENT");
     const [viewMode, setViewMode] = useState("LIST");
     const [currentPage, setCurrentPage] = useState(1);
@@ -325,11 +324,7 @@ export default function MyCoursesPage() {
                 !normalizedQuery ||
                 getCourseText(course).includes(normalizedQuery);
 
-            const matchesTheme =
-                activeTheme === "ALL" ||
-                getCourseTheme(course).value === activeTheme;
-
-            return matchesSearch && matchesTheme;
+            return matchesSearch;
         });
 
         return [...nextCourses].sort((first, second) => {
@@ -352,7 +347,7 @@ export default function MyCoursesPage() {
                 new Date(first.savedAt || first.createdAt).getTime()
             );
         });
-    }, [activeTheme, courses, searchQuery, sortOrder]);
+    }, [courses, searchQuery, sortOrder]);
 
     const featuredCourse = filteredCourses[0] || null;
     const remainingCourses = filteredCourses;
@@ -477,13 +472,16 @@ export default function MyCoursesPage() {
 
                         <a
                             className="mypage-retest"
-                            href="/map-course"
+                            href="/map-course?category=palace-culture"
                         >
                             <Plus size={18} />
                             지도 코스 만들기
                         </a>
                     </aside>)}
-                    <MypageSidebar activePath="/mypage/courses" />
+                    <MypageSidebar
+                        activePath="/mypage/courses"
+                        bottomAction="retest"
+                    />
 
                     <section className="saved-courses-content">
                         <header className="saved-courses-heading">
@@ -528,26 +526,6 @@ export default function MyCoursesPage() {
                                     placeholder="코스명으로 검색"
                                 />
                             </label>
-
-                            <div className="saved-course-filters">
-                                {themeFilters.map((filter) => (
-                                    <button
-                                        className={
-                                            activeTheme === filter.value
-                                                ? "active"
-                                                : ""
-                                        }
-                                        type="button"
-                                        onClick={() => {
-                                            setActiveTheme(filter.value);
-                                            setCurrentPage(1);
-                                        }}
-                                        key={filter.value}
-                                    >
-                                        {filter.label}
-                                    </button>
-                                ))}
-                            </div>
 
                             <div className="saved-course-view-tools">
                                 <label className="saved-course-sort">

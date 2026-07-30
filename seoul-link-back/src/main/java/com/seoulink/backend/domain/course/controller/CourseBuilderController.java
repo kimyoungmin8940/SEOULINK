@@ -11,6 +11,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -51,6 +53,14 @@ public class CourseBuilderController {
             @RequestBody CourseBuilderSaveRequest request
     ) {
         return ResponseEntity.ok(courseBuilderService.saveCourse(request));
+    }
+
+    @PutMapping("/courses/{courseId}")
+    public ResponseEntity<CourseSaveResponse> updateCourse(
+            @PathVariable Long courseId,
+            @RequestBody CourseBuilderSaveRequest request
+    ) {
+        return ResponseEntity.ok(courseBuilderService.updateCourse(courseId, request));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

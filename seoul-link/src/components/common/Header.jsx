@@ -19,7 +19,7 @@ import logoText from '../../assets/images/logo-text.png';
 // 헤더 가운데에 항상 노출하는 주요 기능 4개
 const headerMenuItems = [
     { href: '/courses/recommendations', label: '추천 코스', Icon: Heart, requiresLogin: true },
-    { href: '/map-course', label: '지도 코스 만들기', Icon: MapPin, requiresLogin: true },
+    { href: '/map-course?category=palace-culture', label: '지도 코스 만들기', Icon: MapPin, requiresLogin: true },
     { href: '/reviews', label: '방문 후기', Icon: MessageSquareText, requiresLogin: false },
     { href: '/chatbot', label: 'AI 여행 챗봇', Icon: Bot, requiresLogin: true },
 ];

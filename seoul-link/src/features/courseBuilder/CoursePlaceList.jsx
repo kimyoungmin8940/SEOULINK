@@ -20,6 +20,7 @@ function CoursePlaceList({
     onMoveCoursePlace,
     onRemovePlaceFromCourse,
     onSaveCourse,
+    saveButtonLabel = "코스 저장",
 }) {
     const dayPlaces = coursePlaces
         .map((place, globalIndex) => ({ place, globalIndex }))
@@ -89,7 +90,7 @@ function CoursePlaceList({
             </div>
 
             <div className="course-builder-time-summary" aria-live="polite"><div className="course-builder-time-summary-title"><Clock3 size={20} aria-hidden="true" /><span>예상 시간</span><strong>{formatDurationMinute(dayTimeSummary.totalMinutes)}</strong></div><p>체류 {formatDurationMinute(dayTimeSummary.stayTotalMinutes)} + 차량 이동 {formatDurationMinute(dayTimeSummary.moveTotalMinutes)}</p></div>
-            <button type="button" className="course-builder-save-button" onClick={onSaveCourse} disabled={isCalculatingRoutes}>코스 저장</button>
+            <button type="button" className="course-builder-save-button" onClick={onSaveCourse} disabled={isCalculatingRoutes}>{saveButtonLabel}</button>
         </section>
     );
 }

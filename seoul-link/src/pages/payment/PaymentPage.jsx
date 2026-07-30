@@ -9,6 +9,9 @@ import hanokImage from '../../assets/images/moods/mood-hanok-photo.png';
 import cafeImage from '../../assets/images/moods/mood-rainy-cafe.png';
 import '../../styles/payment-laptop-layout.css';
 
+// 이용권 선택 상태를 서버 주문 생성 결과와 분리한다. 결제 직전에는 서버가 만든
+// orderId·결제 금액을 사용해 토스 결제창을 열어, 화면의 가격 변경을 방지한다.
+
 const t = {
   heading: '\uC5EC\uD589 \uAE30\uAC04\uC5D0 \uB9DE\uB294 AI \uC774\uC6A9\uAD8C\uC744 \uC120\uD0DD\uD558\uC138\uC694',
   subheading: 'AI\uAC00 \uB098\uB9CC\uC758 \uC11C\uC6B8 \uC5EC\uD589\uC744 \uACC4\uD68D\uD558\uACE0 \uC2E4\uC2DC\uAC04\uC73C\uB85C \uB3C4\uC640\uB4DC\uB824\uC694.',

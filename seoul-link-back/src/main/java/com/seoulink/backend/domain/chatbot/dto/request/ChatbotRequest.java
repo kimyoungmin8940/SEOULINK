@@ -22,4 +22,8 @@ public class ChatbotRequest {
     @NotBlank
     @Size(max = 100)
     private String travelConcept;
+
+    @NotBlank
+    @Size(max = 36)
+    private String conversationId;
 }

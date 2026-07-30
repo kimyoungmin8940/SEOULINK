@@ -116,6 +116,56 @@ const traitIconMap = {
     clock: Clock3,
 };
 
+// The hero uses a short, readable sentence while the detailed trait answers remain below the code cards.
+function getTravelTypeTagline(travelCode) {
+    if (travelCode.includes("M") && travelCode.includes("D")) {
+        return "도시의 감각과 새로운 자극을 함께 즐기는 여행자";
+    }
+
+    if (travelCode.includes("H") && travelCode.includes("R")) {
+        return "나만의 속도로 서울의 매력을 천천히 발견하는 여행자";
+    }
+
+    return "나의 취향으로 서울을 더욱 특별하게 즐기는 여행자";
+}
+
+// The dashboard is a preview, not the full survey report. Keep this copy short enough
+// to read cleanly in two lines; the detail page still contains every trait answer.
+function getTravelTypePreview(travelCode) {
+    if (travelCode.includes("H") && travelCode.includes("M")) {
+        return "마음에 드는 장소에서 여유롭게 머물며, 최신 전시와 도시의 새로운 문화를 즐깁니다.";
+    }
+
+    if (travelCode.includes("H")) {
+        return "서두르지 않고 나만의 속도로 서울의 매력을 천천히 발견합니다.";
+    }
+
+    return "나의 여행 취향에 맞춰 서울의 다양한 매력과 새로운 경험을 즐깁니다.";
+}
+
+// Compose two concise sentences from all five letters in the survey code.
+function getTravelTypeSummary(travelCode) {
+    const normalizedCode = String(travelCode || '').trim().toUpperCase();
+    const activitySummary = normalizedCode.charAt(0) === 'A'
+        ? '활동적으로 서울을 누비며'
+        : '여유롭게 머물며';
+    const cultureSummary = normalizedCode.charAt(1) === 'M'
+        ? '세련된 공간을 즐깁니다.'
+        : '서울의 이야기를 만납니다.';
+    const preferenceSummary = {
+        LDP: '좋은 경험에 투자하며 새로운 하루를 채웁니다.',
+        LDR: '좋은 경험에 투자하며 자유롭게 움직입니다.',
+        LSP: '좋은 경험에 투자해 안정적인 하루를 만듭니다.',
+        LSR: '좋은 경험에 투자하며 여유롭게 움직입니다.',
+        BDP: '가성비 있게 새로운 하루를 채웁니다.',
+        BDR: '가성비 있게 자유로운 동선을 즐깁니다.',
+        BSP: '가성비 있게 안정적인 하루를 만듭니다.',
+        BSR: '가성비 있게 여유로운 하루를 보냅니다.',
+    }[normalizedCode.slice(2)] || '나의 방식으로 서울을 즐깁니다.';
+
+    return `${activitySummary} ${cultureSummary} ${preferenceSummary}`;
+}
+
 const COURSE_FALLBACK_IMAGES = [
     hanokImage,
     sunsetImage,
@@ -532,7 +582,7 @@ export default function MyPage() {
                             )}
                         </nav>
 
-                        <a className="mypage-map-promo" href="/map-course">
+                        <a className="mypage-map-promo" href="/map-course?category=palace-culture">
                             <span>새로운 여행을</span>
                             <strong>계획해 보세요!</strong>
                             <p>
@@ -563,10 +613,11 @@ export default function MyPage() {
                                     backgroundImage: `
                                         linear-gradient(
                                             90deg,
-                                            rgba(255,255,255,0.98) 0%,
-                                            rgba(255,255,255,0.92) 42%,
-                                            rgba(255,255,255,0.2) 72%,
-                                            rgba(255,255,255,0.04) 100%
+                                            rgba(255,255,255,0.99) 0%,
+                                            rgba(255,255,255,0.97) 55%,
+                                            rgba(255,255,255,0.82) 68%,
+                                            rgba(255,255,255,0.18) 88%,
+                                            rgba(255,255,255,0.05) 100%
                                         ),
                                         url(${heroImage})
                                     `,
@@ -597,12 +648,13 @@ export default function MyPage() {
                                     </div>
                                 ) : travelType && tasteTraits.length === 5 ? (
                                     <>
-                                        <strong className="mypage-type-code">
-                                            {[...travelCode].map((code, index) => (
-                                                <span className={`tone-${code.toLowerCase()}`} key={`${code}-${index}`}>
-                                                    {code}
-                                                </span>
-                                            ))}
+                                        <h1>
+                                            {travelType.typeTitle ||
+                                                `${travelCode} 여행자`}
+                                        </h1>
+
+                                        <strong className="mypage-type-subtitle">
+                                            {getTravelTypeTagline(travelCode)}
                                         </strong>
 
                                         <div
@@ -625,16 +677,8 @@ export default function MyPage() {
                                             )}
                                         </div>
 
-                                        <h1>
-                                            {travelType.typeTitle ||
-                                                `${travelCode} 여행자`}
-                                        </h1>
-
                                         <p>
-                                            {travelType.typeDescription ||
-                                                tasteTraits
-                                                    .map(({ answer }) => answer)
-                                                    .join(", ")}
+                                            {getTravelTypeSummary(travelCode)}
                                         </p>
 
                                         <a href="/mypage/travel-type">

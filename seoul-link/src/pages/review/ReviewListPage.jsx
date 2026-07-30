@@ -9,14 +9,16 @@ import '../../styles/review-sticky-sidebar.css';
 import '../../styles/review-companion-filter.css';
 import '../../styles/review-primary-color.css';
 
+// 화면 필터는 네 가지 표준 동행 카테고리만 노출한다. 과거 데이터의 상세 표기는
+// 각 표준 카테고리 값에 함께 포함해 기존 후기도 목록에서 빠지지 않게 한다.
+
 // 동행 값으로 후기 목록을 구분한다. 부모님 카테고리는 기존 가족 동행 데이터도 함께 표시한다.
 const companionCategories = [
   { id: 'all', label: '전체', values: null },
   { id: 'solo', label: '혼자', values: ['혼자'] },
-  { id: 'friend', label: '친구', values: ['친구와 함께'] },
-  { id: 'couple', label: '연인', values: ['연인과 함께'] },
-  { id: 'parents', label: '부모님', values: ['부모님과 함께', '가족과 함께'] },
-  { id: 'child', label: '아이', values: ['아이와 함께'] },
+  { id: 'couple', label: '연인', values: ['연인', '연인과 함께'] },
+  { id: 'friend', label: '친구', values: ['친구', '친구와 함께'] },
+  { id: 'family', label: '가족', values: ['가족', '가족과 함께', '부모님과 함께', '아이와 함께'] },
 ];
 
 const fallback = 'https://images.unsplash.com/photo-1538485399081-7c897b8c333d?auto=format&fit=crop&w=900&q=80';

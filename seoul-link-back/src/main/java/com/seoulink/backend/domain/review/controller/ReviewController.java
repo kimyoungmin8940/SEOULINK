@@ -19,6 +19,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * 후기 목록, 상세, 작성·수정·삭제, 좋아요와 이미지 업로드 API를 제공한다.
+ * 작성자 확인과 동행 카테고리 정규화는 서비스 계층에서 일관되게 처리한다.
+ */
 @RestController
 @RequestMapping("/api/reviews")
 public class ReviewController {

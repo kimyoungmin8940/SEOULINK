@@ -88,13 +88,18 @@ const formatDateTime = (value) => value
     ? new Intl.DateTimeFormat('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(value)).replace(/\. /g, '.')
     : '-';
 
+const isPaid = (payment) => ['PAID', 'DONE'].includes(payment.paymentStatus);
+
 function paymentState(payment) {
-    if (payment.paymentStatus === 'CANCELED') return { label: '취소됨', key: 'canceled' };
-    if (payment.paymentStatus !== 'PAID') return { label: payment.paymentStatus === 'FAILED' ? '결제 실패' : '결제 대기', key: 'pending' };
-    if (payment.expiredAt && new Date(payment.expiredAt) > new Date()) return { label: '이용 중', key: 'active' };
+    if (payment.paymentStatus === 'CANCELED') return { label: '결제 취소', key: 'canceled' };
+    if (payment.paymentStatus === 'FAILED') return { label: '결제 실패', key: 'failed' };
+    if (!isPaid(payment)) return { label: '결제 대기', key: 'pending' };
+    if (payment.expiredAt && new Date(payment.expiredAt) > new Date()) return { label: '결제 완료', key: 'completed', canUse: true };
     return { label: '이용 종료', key: 'ended' };
 }
 
+// 결제 내역은 회원별 서버 데이터로 렌더링한다. 삭제는 화면에서만 숨기는 것이 아니라
+// 해당 결제 내역을 대상으로 API를 호출한 뒤 목록을 다시 동기화한다.
 export default function PaymentHistoryPage() {
     const member = authStore.getMember() || {};
     const [payments, setPayments] = useState([]);
@@ -136,9 +141,9 @@ export default function PaymentHistoryPage() {
         () => payments.filter((payment) => statusFilter === 'ALL' || paymentState(payment).key === statusFilter),
         [payments, statusFilter],
     );
-    const paidPayments = useMemo(() => payments.filter((payment) => payment.paymentStatus === 'PAID'), [payments]);
+    const paidPayments = useMemo(() => payments.filter(isPaid), [payments]);
     const totalAmount = useMemo(() => paidPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0), [paidPayments]);
-    const activePayment = useMemo(() => paidPayments.find((payment) => paymentState(payment).key === 'active'), [paidPayments]);
+    const activePayment = useMemo(() => paidPayments.find((payment) => paymentState(payment).canUse), [paidPayments]);
 
     const printReceipt = (payment) => {
         const meta = passMeta(payment);
@@ -188,7 +193,7 @@ export default function PaymentHistoryPage() {
                             </a>
                         ))}
                     </nav>
-                    <a className="mypage-retest" href="/map-course"><Plus size={18} />지도 코스 만들기</a>
+                    <a className="mypage-retest" href="/map-course?category=palace-culture"><Plus size={18} />지도 코스 만들기</a>
                 </aside>)}
                 <MypageSidebar activePath="/mypage/payments" />
 
@@ -201,7 +206,7 @@ export default function PaymentHistoryPage() {
                         <article><span className="summary-icon orange"><Ticket /></span><div><small>현재 이용 중인 이용권</small><strong>{activePayment ? passMeta(activePayment).label : '이용권 없음'}</strong></div></article>
                     </section>
 
-                    <section className="payment-history-toolbar"><div className="toolbar-period"><CalendarDays />최근 결제 내역</div><label>상태 <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="ALL">전체 상태</option><option value="active">이용 중</option><option value="ended">이용 종료</option><option value="pending">결제 대기·실패</option><option value="canceled">취소됨</option></select></label></section>
+                    <section className="payment-history-toolbar"><div className="toolbar-period"><CalendarDays />최근 결제 내역</div><label>상태 <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="ALL">전체 상태</option><option value="completed">결제 완료</option><option value="ended">이용 종료</option><option value="pending">결제 대기</option><option value="failed">결제 실패</option><option value="canceled">결제 취소</option></select></label></section>
 
                     {loading && <p className="payment-history-state">결제 내역을 불러오는 중입니다.</p>}
                     {error && <p className="payment-history-state error">{error}</p>}
@@ -229,7 +234,7 @@ export default function PaymentHistoryPage() {
                                     <div className="detail-item"><small>결제 수단</small><b>{payment.paymentMethod || payment.paymentProvider || '-'}</b></div>
                                     <div className="detail-item"><small>주문 번호</small><b>{payment.orderId || '-'}</b></div>
                                     <div className="detail-item"><small>결제 일시</small><b>{formatDateTime(boughtAt)}</b></div>
-                                    <div className="payment-history-actions">{state.key !== 'canceled' && <button type="button" className="payment-delete-button" disabled={deletingPaymentId === payment.paymentId} onClick={() => deletePayment(payment)}>{deletingPaymentId === payment.paymentId ? '삭제 중...' : '결제 취소'}</button>}<button type="button" className="receipt-button" onClick={() => printReceipt(payment)}><FileText />영수증 보기</button>{state.key === 'active' && <a className="chatbot-button" href="/chatbot"><BadgeCheck />AI 챗봇 이용하기</a>}</div>
+                                    <div className="payment-history-actions">{state.key !== 'canceled' && <button type="button" className="payment-delete-button" disabled={deletingPaymentId === payment.paymentId} onClick={() => deletePayment(payment)}>{deletingPaymentId === payment.paymentId ? '삭제 중...' : '결제 취소'}</button>}<button type="button" className="receipt-button" onClick={() => printReceipt(payment)}><FileText />영수증 보기</button>{state.canUse && <a className="chatbot-button" href="/chatbot"><BadgeCheck />AI 챗봇 이용하기</a>}</div>
                                 </div>}
                             </article>;
                         })}

@@ -852,6 +852,9 @@ CREATE TABLE CHATBOT_HISTORY (
                                  RESULT_ID NUMBER,
                                  COURSE_ID NUMBER,
 
+                                 -- UUID shared by all messages sent within one chat window.
+                                 CONVERSATION_ID VARCHAR2(36) NOT NULL,
+
                                  QUESTION CLOB NOT NULL,
                                  TRAVEL_CONCEPT VARCHAR2(100) NOT NULL,
                                  ANSWER CLOB NOT NULL,
@@ -887,7 +890,7 @@ CREATE TABLE REVIEW (
                         COURSE_ID NUMBER,
 
                         VISIT_DATE DATE,
-                        COMPANION VARCHAR2(30),
+                        COMPANION VARCHAR2(30) DEFAULT '혼자' NOT NULL,
 
                         REVIEW_TITLE VARCHAR2(200) NOT NULL,
                         REVIEW_CONTENT CLOB NOT NULL,
@@ -917,6 +920,9 @@ CREATE TABLE REVIEW (
 
                         CONSTRAINT CK_REVIEW_RATING
                             CHECK (RATING BETWEEN 1.0 AND 5.0),
+
+                        CONSTRAINT CK_REVIEW_COMPANION
+                            CHECK (COMPANION IN ('혼자', '연인', '친구', '가족')),
 
                         CONSTRAINT CK_REVIEW_VIEW_COUNT
                             CHECK (VIEW_COUNT >= 0),
@@ -1058,6 +1064,10 @@ CREATE INDEX IDX_CHATBOT_MEMBER
 
 CREATE INDEX IDX_CHATBOT_PAYMENT
     ON CHATBOT_HISTORY(PAYMENT_ID);
+
+-- Allows recent-chat retrieval by member and conversation without scanning all message rows.
+CREATE INDEX IDX_CHATBOT_HISTORY_MEMBER_CONVERSATION
+    ON CHATBOT_HISTORY(MEMBER_ID, CONVERSATION_ID, CREATED_AT DESC);
 
 CREATE INDEX IDX_REVIEW_MEMBER
     ON REVIEW(MEMBER_ID);
@@ -6757,3 +6767,6 @@ END;
 SELECT * FROM TRAVEL_TYPE_MASTER;
 SELECT * FROM SURVEY_QUESTION;
 SELECT * FROM SURVEY_OPTION;
+
+-- Chatbot session metadata used by the recent-conversation list.
+COMMENT ON COLUMN CHATBOT_HISTORY.CONVERSATION_ID IS 'Client-generated UUID identifying one continuous chatbot conversation';

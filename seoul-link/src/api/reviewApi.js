@@ -1,5 +1,8 @@
 import { API_BASE_URL, apiClient } from './apiClient';
 
+// 후기 API의 동행 카테고리는 혼자·연인·친구·가족 네 값으로만 저장한다.
+// 목록 조회 시에는 page/sort/category 같은 필터를 쿼리 문자열로 전달한다.
+
 /** 빈 값은 제외해 리뷰 목록 조회용 쿼리 문자열을 만든다. */
 const query = (params) =>
   new URLSearchParams(

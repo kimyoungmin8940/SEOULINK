@@ -37,6 +37,24 @@ const traitIconMap = {
     clock: CalendarDays,
 };
 
+// The five trait descriptions arrive joined by spaces; restore sentence punctuation for display.
+function formatTypeDescription(description) {
+    const normalizedDescription = String(description || '').trim();
+
+    if (!normalizedDescription) {
+        return '';
+    }
+
+    const punctuatedDescription = normalizedDescription.replace(
+        /(합니다|됩니다|습니다|입니다|이에요|예요|해요|돼요|세요|요)(?=\s|$)/g,
+        '$1.',
+    );
+
+    return /[.!?]$/.test(punctuatedDescription)
+        ? punctuatedDescription
+        : `${punctuatedDescription}.`;
+}
+
 function PreferenceResultPage({
     result,
     onRecommend,
@@ -118,7 +136,7 @@ function PreferenceResultPage({
                         <div className="preference-hero-note">
                             <div className="preference-hero-copy">
                                 <h3>{result.travelTitle}</h3>
-                                <p>{result.description}</p>
+                                <p>{formatTypeDescription(result.description)}</p>
                             </div>
                         </div>
                     </article>

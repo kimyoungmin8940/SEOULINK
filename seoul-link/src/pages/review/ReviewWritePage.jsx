@@ -8,6 +8,9 @@ import { authStore } from '../../store/authStore';
 import '../../styles/review-pages.css';
 import '../../styles/review-primary-color.css';
 
+// 작성 화면은 이미지 업로드를 먼저 완료하고, 반환된 URL 배열만 후기 저장 요청에 담는다.
+// 이렇게 하면 파일 자체를 후기 생성 API로 중복 전송하지 않는다.
+
 // 작성자가 선택할 수 있는 후기 태그 목록이다. 선택된 값만 form.tags에 저장된다.
 const tagOptions = [
   '혼자 여행',
@@ -103,7 +106,7 @@ function ReviewWritePage() {
     reviewContent: '',
     rating: 5,
     visitDate: '',
-    companion: '친구와 함께',
+    companion: '친구',
     imageUrls: [],
     tags: []
   });
@@ -235,7 +238,7 @@ function ReviewWritePage() {
                   value={form.companion}
                   onChange={(event) => set('companion', event.target.value)}
                 >
-                  {['혼자', '친구와 함께', '연인과 함께', '부모님과 함께', '아이와 함께'].map((item) => (
+                  {['혼자', '연인', '친구', '가족'].map((item) => (
                     <option key={item}>{item}</option>
                   ))}
                 </select>

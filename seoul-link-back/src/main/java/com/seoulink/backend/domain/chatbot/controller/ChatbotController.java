@@ -8,6 +8,10 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+/**
+ * 챗봇 답변 생성과 최근 대화 목록 조회·삭제 요청을 연결한다.
+ * conversationId는 같은 대화창에서 이어진 질문들을 한 세션으로 식별한다.
+ */
 @RestController
 @RequestMapping("/api/chatbot")
 /**
@@ -31,5 +35,14 @@ public class ChatbotController {
     @GetMapping("/histories")
     public List<ChatbotHistory> getHistories(@RequestParam Long memberId) {
         return chatbotService.getHistories(memberId);
+    }
+
+    @DeleteMapping("/histories/{conversationId}")
+    @ResponseStatus(org.springframework.http.HttpStatus.NO_CONTENT)
+    public void deleteConversation(
+            @RequestParam Long memberId,
+            @PathVariable String conversationId
+    ) {
+        chatbotService.deleteConversation(memberId, conversationId);
     }
 }

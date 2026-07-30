@@ -27,6 +27,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.*;
 import com.seoulink.backend.domain.review.dto.response.ReviewCourseSummaryResponse;
 import com.seoulink.backend.domain.review.dto.response.ReviewCourseStopResponse;
+/**
+ * 후기 CRUD와 권한 검증을 담당한다. 동행 값은 저장 전에 혼자·연인·친구·가족으로
+ * 정규화해, 과거 부모님/아이 데이터도 동일한 후기 필터에서 조회되게 한다.
+ */
 @Service
 /**
  * 도메인 규칙과 트랜잭션을 처리하는 서비스입니다.
@@ -61,7 +65,7 @@ public class ReviewService {
         Review review = new Review(request.getMemberId(), representativePlaceId, request.getReviewTitle(), request.getReviewContent(), request.getRating(), firstImage(request.getImageUrls()));
         review.setCourseId(request.getCourseId());
         review.setVisitDate(request.getVisitDate());
-        review.setCompanion(request.getCompanion());
+        review.setCompanion(normalizeCompanion(request.getCompanion()));
         Review saved = reviews.save(review);
         replaceImagesAndTags(saved.getReviewId(), request.getImageUrls(), request.getTags());
         return toResponse(saved, request.getMemberId());
@@ -71,7 +75,7 @@ public class ReviewService {
     public ReviewResponse updateReview(Long reviewId, ReviewUpdateRequest request) {
         Review review = activeReview(reviewId);
         requireOwner(review, request.getMemberId());
-        review.update(request.getReviewTitle(), request.getReviewContent(), request.getRating(), firstImage(request.getImageUrls()), request.getVisitDate(), request.getCompanion());
+        review.update(request.getReviewTitle(), request.getReviewContent(), request.getRating(), firstImage(request.getImageUrls()), request.getVisitDate(), normalizeCompanion(request.getCompanion()));
         replaceImagesAndTags(reviewId, request.getImageUrls(), request.getTags());
         return toResponse(review, request.getMemberId());
     }
@@ -215,4 +219,15 @@ public class ReviewService {
     }
     private String normalize(String keyword) {
         return keyword == null || keyword.isBlank() ? null : keyword.trim();
-    }}
+    }
+    private String normalizeCompanion(String companion) {
+        if (companion == null || companion.isBlank()) return "혼자";
+        return switch (companion.trim()) {
+            case "혼자", "연인", "친구", "가족" -> companion.trim();
+            case "연인과 함께" -> "연인";
+            case "친구와 함께" -> "친구";
+            case "부모님과 함께", "아이와 함께", "가족과 함께" -> "가족";
+            default -> throw new IllegalArgumentException("후기 카테고리는 혼자, 연인, 친구, 가족 중 하나여야 합니다.");
+        };
+    }
+}

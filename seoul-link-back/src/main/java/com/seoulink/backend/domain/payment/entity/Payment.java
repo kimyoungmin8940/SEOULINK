@@ -19,8 +19,10 @@ public class Payment {
     @Column(name = "AMOUNT", nullable = false) private Integer amount = 0;
     @Column(name = "PAYMENT_METHOD", nullable = false, length = 30) private String paymentMethod;
     @Column(name = "PAYMENT_PROVIDER", length = 30) private String paymentProvider;
+    // 서버가 생성하는 주문 식별자이며 결제사 승인 콜백과 내부 주문을 연결한다.
     @Column(name = "ORDER_ID", nullable = false, unique = true, length = 100) private String orderId;
     @Column(name = "PAYMENT_KEY", length = 200) private String paymentKey;
+    // READY → DONE/FAILED/CANCELED처럼 결제 처리 결과를 추적하는 상태값이다.
     @Column(name = "PAYMENT_STATUS", nullable = false, length = 20) private String paymentStatus = "READY";
     @Column(name = "EXPIRED_AT") private LocalDateTime expiredAt;
     @Column(name = "PAID_AT") private LocalDateTime paidAt;

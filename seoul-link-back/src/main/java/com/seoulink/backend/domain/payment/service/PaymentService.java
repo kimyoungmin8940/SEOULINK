@@ -13,6 +13,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 
+/**
+ * 결제 주문의 상태 전이를 관리한다. 주문 생성 시 서버 기준 금액을 기록하고,
+ * 승인 시에는 결제사 응답과 저장된 주문 금액을 대조한 뒤 이용권을 활성화한다.
+ */
 @Service
 public class PaymentService {
 
@@ -174,6 +178,29 @@ public class PaymentService {
                 );
 
         payment.markCanceled(reason);
+
+        return payment;
+    }
+
+    /**
+     * 결제사 실패 URL에서 호출한다. 아직 승인되지 않은 READY 주문만 변경하므로,
+     * 이미 완료된 결제를 실패 콜백으로 덮어쓰지 않는다.
+     */
+    @Transactional
+    public Payment failPayment(String orderId, String reason, boolean canceled) {
+        Payment payment = paymentRepository
+                .findByOrderId(orderId)
+                .orElseThrow(() -> new IllegalArgumentException("결제 주문을 찾을 수 없습니다."));
+
+        if (!"READY".equals(payment.getPaymentStatus())) {
+            return payment;
+        }
+
+        if (canceled) {
+            payment.markCanceled(reason);
+        } else {
+            payment.markFailed(reason);
+        }
 
         return payment;
     }
