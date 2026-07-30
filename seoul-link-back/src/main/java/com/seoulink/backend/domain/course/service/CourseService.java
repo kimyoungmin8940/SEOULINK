@@ -5,6 +5,7 @@ import com.seoulink.backend.domain.course.dto.response.CourseDayResponse;
 import com.seoulink.backend.domain.course.dto.response.CoursePlaceResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseRecommendationResponse;
 import com.seoulink.backend.domain.course.dto.response.ThemeCourseBookmarkResponse;
+import com.seoulink.backend.domain.course.dto.response.ThemeCoursePopularityResponse;
 import com.seoulink.backend.domain.course.dto.request.CourseUpdateRequest;
 import com.seoulink.backend.domain.course.entity.CourseDetail;
 import com.seoulink.backend.domain.course.entity.TravelCourse;
@@ -151,10 +152,22 @@ public class CourseService {
         return travelCourseRepository
                 .findByMemberIdAndCourseTypeInOrderByCreatedAtDesc(
                         memberId,
-                        List.of("SURVEY", "THEME")
+                        List.of("SURVEY")
                 )
                 .stream()
                 .map(this::toRecommendationResponse)
+                .toList();
+    }
+
+    /** 원본 테마 코스별 회원 저장 횟수를 인기순으로 반환한다. */
+    @Transactional(readOnly = true)
+    public List<ThemeCoursePopularityResponse> getThemeCoursePopularity() {
+        return travelCourseRepository.findThemeCoursePopularity()
+                .stream()
+                .map(popularity -> new ThemeCoursePopularityResponse(
+                        popularity.getSourceCourseKey(),
+                        popularity.getSaveCount()
+                ))
                 .toList();
     }
 

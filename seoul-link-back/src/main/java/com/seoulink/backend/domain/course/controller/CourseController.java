@@ -15,6 +15,7 @@ import com.seoulink.backend.domain.course.dto.response.CourseRecommendResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseRecommendationResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseSaveResponse;
 import com.seoulink.backend.domain.course.dto.response.ThemeCourseBookmarkResponse;
+import com.seoulink.backend.domain.course.dto.response.ThemeCoursePopularityResponse;
 import com.seoulink.backend.domain.course.service.CourseDraftService;
 import com.seoulink.backend.domain.course.service.CourseOptimizationService;
 import com.seoulink.backend.domain.course.service.CourseRecommendationService;
@@ -179,6 +180,12 @@ public class CourseController {
             @RequestParam Long memberId
     ) {
         return courseService.getRecommendedCourses(memberId);
+    }
+
+    /** 로그인 여부와 관계없이 원본 테마 코스별 저장 횟수를 조회한다. */
+    @GetMapping("/themes/popularity")
+    public List<ThemeCoursePopularityResponse> getThemeCoursePopularity() {
+        return courseService.getThemeCoursePopularity();
     }
 
     @GetMapping("/members/{memberId}/saved")

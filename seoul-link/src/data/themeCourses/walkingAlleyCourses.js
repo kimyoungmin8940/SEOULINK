@@ -59,12 +59,12 @@ export const walkingAlleyCourseRecipes = [
         themeSlug: 'walking-alley',
         title: '연남동–홍대–합정 골목',
         description:
-            '연남동의 차분한 골목에서 시작해 홍대와 합정까지 걸으며 서로 다른 동네의 분위기를 경험하는 코스예요',
-        optionName: '연남 홍대 합정 산책',
-        badge: 'WALK',
+            '연남동의 차분한 골목에서 홍대와 합정까지 걷고, 망원과 문화비축기지의 로컬 풍경을 이어서 만나는 1박 2일 코스예요',
+        optionName: '연남 홍대 합정 1박 2일',
+        badge: '1N2D',
         tone: 'distance',
-        region: '연남동 · 홍대 · 합정',
-        tags: ['연남동', '홍대', '합정', '산책'],
+        region: '연남동 · 홍대 · 합정 · 망원',
+        tags: ['연남동', '홍대', '합정', '1박2일'],
         coverImageUrl: walkingAlleyImage,
         days: [
             {
@@ -75,6 +75,17 @@ export const walkingAlleyCourseRecipes = [
                     ['KT&G 상상마당 홍대', 'TOUR'],
                     ['홍대 걷고싶은거리', 'TOUR'],
                     ['앤트러사이트 합정점', 'CAFE'],
+                    ['라이즈 오토그래프 컬렉션', 'HOTEL'],
+                ],
+            },
+            {
+                startTime: '10:00',
+                center: [37.5605, 126.9076],
+                places: [
+                    ['오레노라멘 본점', 'RESTAURANT'],
+                    ['망원시장', 'TOUR'],
+                    ['문화비축기지', 'TOUR'],
+                    ['프릳츠 도화점', 'CAFE'],
                 ],
             },
         ],

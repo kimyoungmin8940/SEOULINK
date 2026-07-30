@@ -18,7 +18,12 @@ function getCourseId(course) {
     return Number.isInteger(courseId) && courseId > 0 ? courseId : null;
 }
 
-function CourseCard({ course, detailPath, requiresLogin = false }) {
+function CourseCard({
+    course,
+    detailPath,
+    requiresLogin = false,
+    showBookmark = true,
+}) {
     const [isBookmarked, setIsBookmarked] = useState(
         course.bookmarked ?? course.liked ?? false,
     );
@@ -89,6 +94,7 @@ function CourseCard({ course, detailPath, requiresLogin = false }) {
                     현재는 디자인용 버튼이고, 나중에 로그인 사용자 북마크 API와 연결하면 됨
                     카드 클릭 이벤트와 겹치지 않게 stopPropagation 처리함
                 */}
+                {showBookmark && (
                 <button
                     className={`bookmark-btn${isBookmarked ? ' is-bookmarked' : ''}`}
                     type="button"
@@ -107,6 +113,7 @@ function CourseCard({ course, detailPath, requiresLogin = false }) {
                 >
                     <Bookmark className="bookmark-icon" size={24} strokeWidth={1.85} />
                 </button>
+                )}
             </div>
 
             {/* 코스 제목, 설명, 소요시간, 지역, 태그를 보여주는 정보 영역*/}

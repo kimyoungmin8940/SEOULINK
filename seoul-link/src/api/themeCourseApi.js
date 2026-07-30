@@ -82,6 +82,10 @@ export const getThemeCourseBookmarkStatus = (
     return apiClient.get(`/courses/theme-bookmarks/status?${query}`, options);
 };
 
+/** 원본 테마 코스별 회원 저장 횟수를 인기순으로 조회합니다. */
+export const getThemeCoursePopularity = (options = {}) =>
+    apiClient.get('/courses/themes/popularity', options);
+
 /** DB에서 확인된 장소 ID와 방문 순서를 THEME 회원 코스로 저장합니다. */
 export const saveThemeCourse = (course, memberId, options = {}) => saveCourse(
     toThemeSaveRequest(course, memberId),

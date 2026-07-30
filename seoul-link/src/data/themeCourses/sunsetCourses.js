@@ -113,12 +113,12 @@ export const sunsetCourseRecipes = [
         themeSlug: 'sunset',
         title: '시장 골목 끝에서 만나는 낙산 노을',
         description:
-            '광화문에서 식사와 광장 산책을 즐긴 뒤 광장시장과 카페를 거쳐 낙산공원에서 도심 노을을 바라보는 코스예요',
-        optionName: '광화문 낙산 노을',
-        badge: 'HEALING',
+            '광화문과 시장 골목을 지나 낙산의 도심 노을을 감상하고, 다음 날 대학로와 익선동·안국을 여유롭게 걷는 1박 2일 코스예요',
+        optionName: '광화문 낙산 노을 1박 2일',
+        badge: '1N2D',
         tone: 'preference',
-        region: '광화문 · 종로 · 낙산',
-        tags: ['광화문광장', '광장시장', '낙산공원', '도심노을'],
+        region: '광화문 · 종로 · 낙산 · 안국',
+        tags: ['광화문광장', '낙산공원', '도심노을', '1박2일'],
         coverImageUrl: sunsetImage,
         days: [
             {
@@ -130,6 +130,18 @@ export const sunsetCourseRecipes = [
                     ['광장시장', 'TOUR'],
                     ['카페 어니언 광장시장', 'CAFE'],
                     ['낙산공원', 'TOUR'],
+                    ['토요코인 서울동대문2', 'HOTEL'],
+                ],
+            },
+            {
+                startTime: '10:00',
+                center: [37.5782, 126.9886],
+                places: [
+                    ['대학로 공연거리', 'TOUR'],
+                    ['익선동 한옥거리', 'TOUR'],
+                    ['쌈지길', 'TOUR'],
+                    ['카페 어니언 안국', 'CAFE'],
+                    ['경복궁', 'TOUR'],
                 ],
             },
         ],

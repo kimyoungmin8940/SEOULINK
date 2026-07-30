@@ -2,6 +2,7 @@ package com.seoulink.backend.domain.course.repository;
 
 import com.seoulink.backend.domain.course.entity.TravelCourse;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 
 import java.util.List;
 import java.util.Optional;
@@ -39,5 +40,16 @@ public interface TravelCourseRepository extends JpaRepository<TravelCourse, Long
             Long memberId,
             String sourceCourseKey
     );
+
+    @Query("""
+            select course.sourceCourseKey as sourceCourseKey,
+                   count(course) as saveCount
+            from TravelCourse course
+            where upper(course.courseType) = 'THEME'
+              and course.sourceCourseKey is not null
+            group by course.sourceCourseKey
+            order by count(course) desc
+            """)
+    List<ThemeCoursePopularityProjection> findThemeCoursePopularity();
 
 }

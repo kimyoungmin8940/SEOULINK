@@ -7,6 +7,7 @@ import com.seoulink.backend.domain.course.entity.TravelCourse;
 import com.seoulink.backend.domain.course.model.TransportMode;
 import com.seoulink.backend.domain.course.model.TransitPathType;
 import com.seoulink.backend.domain.course.repository.CourseDetailRepository;
+import com.seoulink.backend.domain.course.repository.ThemeCoursePopularityProjection;
 import com.seoulink.backend.domain.course.repository.TravelCourseRepository;
 import com.seoulink.backend.domain.place.entity.Place;
 import com.seoulink.backend.domain.place.repository.PlaceRepository;
@@ -57,6 +58,29 @@ class CourseServiceTest {
                 surveyResultRepository,
                 travelSurveyRepository
         );
+    }
+
+    @Test
+    @DisplayName("원본 테마 코스별 저장 횟수를 인기순으로 반환한다")
+    void getThemeCoursePopularity() {
+        ThemeCoursePopularityProjection sunset =
+                mock(ThemeCoursePopularityProjection.class);
+        ThemeCoursePopularityProjection hanok =
+                mock(ThemeCoursePopularityProjection.class);
+        when(sunset.getSourceCourseKey()).thenReturn("SUNSET_1401");
+        when(sunset.getSaveCount()).thenReturn(8L);
+        when(hanok.getSourceCourseKey()).thenReturn("HANOK_PHOTO_1201");
+        when(hanok.getSaveCount()).thenReturn(5L);
+        when(travelCourseRepository.findThemeCoursePopularity())
+                .thenReturn(List.of(sunset, hanok));
+
+        var response = courseService.getThemeCoursePopularity();
+
+        assertEquals(2, response.size());
+        assertEquals("SUNSET_1401", response.get(0).sourceCourseKey());
+        assertEquals(8L, response.get(0).saveCount());
+        assertEquals("HANOK_PHOTO_1201", response.get(1).sourceCourseKey());
+        assertEquals(5L, response.get(1).saveCount());
     }
 
     @Test
@@ -299,7 +323,7 @@ class CourseServiceTest {
         );
 
         when(travelCourseRepository
-                .findByMemberIdAndCourseTypeInOrderByCreatedAtDesc(1L, List.of("SURVEY", "THEME")))
+                .findByMemberIdAndCourseTypeInOrderByCreatedAtDesc(1L, List.of("SURVEY")))
                 .thenReturn(List.of(recommended));
         when(courseDetailRepository
                 .findByCourseIdOrderByDayNoAscPlaceOrderAsc(20L))
