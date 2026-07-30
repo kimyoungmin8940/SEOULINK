@@ -7,7 +7,13 @@ import lombok.Setter;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "PAYMENT", uniqueConstraints = @UniqueConstraint(name = "UK_PAYMENT_ORDER", columnNames = "ORDER_ID"))
+@Table(
+    name = "PAYMENT",
+    uniqueConstraints = {
+        @UniqueConstraint(name = "UK_PAYMENT_ORDER", columnNames = "ORDER_ID"),
+        @UniqueConstraint(name = "UK_PAYMENT_KEY", columnNames = "PAYMENT_KEY")
+    }
+)
 @Getter @Setter @NoArgsConstructor
 /**
  * 데이터베이스에 저장되는 도메인 엔티티입니다.
@@ -21,7 +27,8 @@ public class Payment {
     @Column(name = "PAYMENT_PROVIDER", length = 30) private String paymentProvider;
     // 서버가 생성하는 주문 식별자이며 결제사 승인 콜백과 내부 주문을 연결한다.
     @Column(name = "ORDER_ID", nullable = false, unique = true, length = 100) private String orderId;
-    @Column(name = "PAYMENT_KEY", length = 200) private String paymentKey;
+    // Each PG approval key may be associated with only one payment record.
+    @Column(name = "PAYMENT_KEY", unique = true, length = 200) private String paymentKey;
     // READY → DONE/FAILED/CANCELED처럼 결제 처리 결과를 추적하는 상태값이다.
     @Column(name = "PAYMENT_STATUS", nullable = false, length = 20) private String paymentStatus = "READY";
     @Column(name = "EXPIRED_AT") private LocalDateTime expiredAt;
