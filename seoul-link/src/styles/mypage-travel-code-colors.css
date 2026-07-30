@@ -1,0 +1,41 @@
+.mypage-type-axes .tone-a,
+.mypage-analysis .tone-a { color: #4f7df3; background: #eef3ff; }
+
+.mypage-type-axes .tone-h,
+.mypage-analysis .tone-h { color: #55a66a; background: #eef8f0; }
+
+.mypage-type-axes .tone-t,
+.mypage-analysis .tone-t { color: #a96f45; background: #faf1ea; }
+
+.mypage-type-axes .tone-m,
+.mypage-analysis .tone-m { color: #8267d8; background: #f3f0fc; }
+
+.mypage-type-axes .tone-b,
+.mypage-analysis .tone-b { color: #2e9e93; background: #eaf8f6; }
+
+.mypage-type-axes .tone-l,
+.mypage-analysis .tone-l { color: #c49a00; background: #fffbe6; }
+
+.mypage-type-axes .tone-s,
+.mypage-analysis .tone-s { color: #e4873b; background: #fff3e8; }
+
+.mypage-type-axes .tone-d,
+.mypage-analysis .tone-d { color: #d84f7d; background: #fcecf2; }
+
+.mypage-type-axes .tone-p,
+.mypage-analysis .tone-p { color: #405c9a; background: #edf1fa; }
+
+.mypage-type-axes .tone-r,
+.mypage-analysis .tone-r { color: #4ca6c8; background: #ebf7fb; }
+
+/* 큰 여행 코드도 아래 세부 코드와 같은 색상을 사용한다. */
+.mypage-type-code .tone-a { color: #4f7df3; }
+.mypage-type-code .tone-h { color: #55a66a; }
+.mypage-type-code .tone-t { color: #a96f45; }
+.mypage-type-code .tone-m { color: #8267d8; }
+.mypage-type-code .tone-b { color: #2e9e93; }
+.mypage-type-code .tone-l { color: #c49a00; }
+.mypage-type-code .tone-s { color: #e4873b; }
+.mypage-type-code .tone-d { color: #d84f7d; }
+.mypage-type-code .tone-p { color: #405c9a; }
+.mypage-type-code .tone-r { color: #4ca6c8; }

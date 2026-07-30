@@ -4,6 +4,7 @@ import Header from '../../components/common/Header';
 import { askChatbot, getChatbotHistory } from '../../api/chatbotApi';
 import { authStore } from '../../store/authStore';
 import heroSeoul from '../../assets/images/hero-seoul-main.png';
+import '../../styles/chatbot-history-layout.css';
 
 const prompts = [
   { text: '성수 감성 카페', icon: Coffee },

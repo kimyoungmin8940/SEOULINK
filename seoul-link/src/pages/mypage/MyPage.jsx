@@ -44,6 +44,7 @@ import {
     storeCourseRecommendRequest
 } from "../../utils/courseRecommendationHandoff";
 import "../../styles/mypage.css";
+import "../../styles/mypage-travel-code-colors.css";
 
 const menuItems = [
     {
@@ -226,6 +227,35 @@ export default function MyPage() {
 
         return () => {
             active = false;
+        };
+    }, [member.memberId]);
+
+    useEffect(() => {
+        if (!member.memberId) {
+            return undefined;
+        }
+
+        const refreshWhenVisible = () => {
+            if (document.visibilityState !== "visible") {
+                return;
+            }
+
+            getMyTravelType(member.memberId)
+                .then((result) => {
+                    setTravelType(result);
+                    setTravelTypeError("");
+                })
+                .catch(() => {
+                    // Keep the already displayed result when a background refresh fails.
+                });
+        };
+
+        window.addEventListener("focus", refreshWhenVisible);
+        document.addEventListener("visibilitychange", refreshWhenVisible);
+
+        return () => {
+            window.removeEventListener("focus", refreshWhenVisible);
+            document.removeEventListener("visibilitychange", refreshWhenVisible);
         };
     }, [member.memberId]);
 
@@ -568,7 +598,11 @@ export default function MyPage() {
                                 ) : travelType && tasteTraits.length === 5 ? (
                                     <>
                                         <strong className="mypage-type-code">
-                                            {travelCode}
+                                            {[...travelCode].map((code, index) => (
+                                                <span className={`tone-${code.toLowerCase()}`} key={`${code}-${index}`}>
+                                                    {code}
+                                                </span>
+                                            ))}
                                         </strong>
 
                                         <div
@@ -576,11 +610,11 @@ export default function MyPage() {
                                             aria-label={`${travelCode} 여행 유형`}
                                         >
                                             {tasteTraits.map(
-                                                ({ code, label, dimensionKey }, index) => (
+                                                ({ code, label, dimensionKey, color }) => (
                                                     <div key={dimensionKey}>
                                                         <strong
                                                             className={
-                                                                `type-axis axis-tone-${index}`
+                                                                `type-axis ${color}`
                                                             }
                                                         >
                                                             {code}
@@ -641,8 +675,8 @@ export default function MyPage() {
                                                     answer,
                                                     icon,
                                                     dimensionKey,
+                                                    color,
                                                 },
-                                                index
                                             ) => {
                                                 const Icon =
                                                     traitIconMap[icon] ||
@@ -652,7 +686,7 @@ export default function MyPage() {
                                                     <div key={dimensionKey}>
                                                         <span
                                                             className={
-                                                                `analysis-icon analysis-tone-${index}`
+                                                                `analysis-icon ${color}`
                                                             }
                                                         >
                                                             <Icon
@@ -667,7 +701,7 @@ export default function MyPage() {
 
                                                         <em
                                                             className={
-                                                                `analysis-code analysis-tone-${index}`
+                                                                `analysis-code ${color}`
                                                             }
                                                         >
                                                             {code}
@@ -814,6 +848,12 @@ export default function MyPage() {
                                                     ]
                                                 }
                                                 alt={course.title}
+                                                onError={(event) => {
+                                                    event.currentTarget.onerror = null;
+                                                    event.currentTarget.src = COURSE_FALLBACK_IMAGES[
+                                                        index % COURSE_FALLBACK_IMAGES.length
+                                                    ];
+                                                }}
                                             />
 
                                             <span className="course-best">

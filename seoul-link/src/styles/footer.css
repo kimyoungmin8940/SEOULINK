@@ -55,9 +55,13 @@
 }
 
 /* footer 링크 기본 효과 */
-.footer-links span {
+.footer-links a {
   color: inherit;
-  cursor: default;
+  transition: color .18s ease;
+}
+
+.footer-links a:hover {
+  color: #1976e8;
 }
 
 /* 오른쪽 SNS 아이콘 목록 */

@@ -1,0 +1,40 @@
+/* Prevent long recent-chat titles from being clipped by the pass card. */
+.chatbot-history-section {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.chatbot-history-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 4px 8px 0;
+  scrollbar-gutter: stable;
+}
+
+.chatbot-history-list button {
+  height: 44px;
+  min-height: 44px;
+  padding: 0 10px;
+  align-items: center;
+  overflow: hidden;
+}
+
+.chatbot-history-list button svg {
+  margin-top: 0;
+}
+
+.chatbot-history-list button span {
+  flex: 1;
+  min-width: 0;
+  height: auto;
+  display: block;
+  overflow: hidden;
+  line-height: 1.45;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.chatbot-pass-card {
+  flex: 0 0 auto;
+}

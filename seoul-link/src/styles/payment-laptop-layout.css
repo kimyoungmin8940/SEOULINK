@@ -1,0 +1,140 @@
+/* Keep the desktop payment composition intact on common laptop widths. */
+@media (min-width: 861px) and (max-width: 1049px) {
+  .payment-reference-page {
+    min-height: 100dvh;
+  }
+
+  .payment-reference-shell {
+    width: min(980px, calc(100% - 40px));
+    grid-template-rows: 88px minmax(0, 1fr) 72px;
+    gap: 14px;
+  }
+
+  .payment-reference-heading {
+    padding: 7px 0 4px;
+  }
+
+  .payment-reference-heading h1 {
+    font-size: clamp(28px, 3vw, 34px);
+  }
+
+  .payment-reference-heading p {
+    margin-top: 6px;
+    font-size: 14px;
+  }
+
+  .payment-reference-plans {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  .payment-reference-plan {
+    min-height: 0;
+    padding: 20px 17px 16px;
+    border-radius: 18px;
+  }
+
+  .payment-reference-plan h2 {
+    padding-left: 34px;
+    font-size: 19px;
+  }
+
+  .payment-reference-plan h2 small,
+  .payment-reference-subtitle {
+    font-size: 12px;
+  }
+
+  .payment-reference-radio {
+    top: 21px;
+    left: 17px;
+    width: 20px;
+    height: 20px;
+  }
+
+  .payment-reference-plan img {
+    height: 142px;
+    margin: 3px 0 14px;
+  }
+
+  .payment-reference-recommend,
+  .payment-reference-includes {
+    font-size: 11px;
+  }
+
+  .payment-reference-copy {
+    min-height: 54px;
+    margin: 5px 0 8px;
+    font-size: 11px;
+    line-height: 1.5;
+  }
+
+  .payment-reference-plan ul {
+    gap: 6px;
+    margin: 7px 0;
+    font-size: 10px;
+  }
+
+  .payment-reference-plan li svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .payment-reference-plan footer b {
+    font-size: 19px;
+  }
+
+  .payment-reference-open-action {
+    width: min(100%, 980px);
+    height: 72px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 145px 270px;
+    align-items: center;
+    gap: 0;
+    padding: 9px 12px 9px 20px;
+  }
+
+  .payment-reference-open-summary {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding-right: 16px;
+  }
+
+  .payment-reference-open-summary > span {
+    width: 40px;
+    height: 40px;
+  }
+
+  .payment-reference-open-summary b {
+    font-size: 15px;
+  }
+
+  .payment-reference-open-total {
+    display: grid;
+    height: 40px;
+    align-content: center;
+    justify-items: center;
+    gap: 4px;
+    padding: 0;
+    border-right: 1px solid #dce8f1;
+    border-left: 1px solid #dce8f1;
+  }
+
+  .payment-reference-open-total strong {
+    font-size: 19px;
+  }
+
+  .payment-reference-open-action button {
+    width: calc(100% - 12px);
+    height: 48px;
+    margin-left: 12px;
+    font-size: 15px;
+  }
+}
+
+@media (min-width: 1050px) {
+  .payment-reference-plan img {
+    height: clamp(170px, 20vh, 230px);
+    margin: 3px 0 14px;
+  }
+}

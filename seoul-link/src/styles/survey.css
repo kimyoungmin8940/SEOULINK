@@ -4,6 +4,9 @@
 */
 
 .survey-flow-page {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
   background:
     radial-gradient(circle at 12% 18%, rgba(var(--sky-blue-rgb), 0.11), transparent 28%),
     radial-gradient(circle at 88% 42%, rgba(var(--main-blue-rgb), 0.08), transparent 30%),
@@ -15,6 +18,11 @@
   flex: 1;
   margin: 0 auto;
   padding: 102px 0 90px;
+}
+
+.survey-flow-page > .footer {
+  flex: 0 0 auto;
+  margin-top: auto;
 }
 
 .recommendation-steps {

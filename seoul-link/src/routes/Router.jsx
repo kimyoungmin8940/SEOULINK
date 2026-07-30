@@ -41,6 +41,7 @@ import PaymentSuccessPage from '../pages/payment/PaymentSuccessPage';
 import PaymentFailPage from '../pages/payment/PaymentFailPage';
 
 import NotFoundPage from '../pages/NotFoundPage';
+import ServiceInfoPage from '../pages/service/ServiceInfoPage';
 import { isLoggedIn } from '../utils/authGuard';
 
 
@@ -70,6 +71,9 @@ function isProtectedPath(pathname) {
         pathname === '/courses' ||
         pathname === '/reviews' ||
         pathname === '/courses/themes' ||
+        pathname === '/terms' ||
+        pathname === '/privacy' ||
+        pathname === '/support' ||
         pathname.startsWith('/courses/themes/') ||
         isPublicReviewDetail ||
         isPublicCourseDetail
@@ -155,6 +159,9 @@ function Router() {
         '/payment': <PaymentPage />,
         '/payment/success': <PaymentSuccessPage />,
         '/payment/fail': <PaymentFailPage />,
+        '/terms': <ServiceInfoPage type="terms" />,
+        '/privacy': <ServiceInfoPage type="privacy" />,
+        '/support': <ServiceInfoPage type="support" />,
     };
 
     if (routes[pathname]) {

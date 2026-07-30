@@ -11,7 +11,7 @@ import {
     resetPassword,
     verifyPasswordResetMember,
 } from "../../api/authApi";
-import passwordResetIllustration from "../../assets/images/signup-seoul-line-art.png";
+import passwordResetIllustration from "../../assets/images/seoul-line-art-transparent.png";
 import "../../styles/FindPasswordPage.css";
 
 const INITIAL_FORM = {

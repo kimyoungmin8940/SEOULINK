@@ -6,7 +6,7 @@ import Header from "../components/common/Header";
 import { apiPost } from "../api/client";
 import { BACKEND_ORIGIN } from "../api/apiClient";
 import { authStore } from "../store/authStore";
-import loginIllustration from "../assets/images/signup-seoul-line-art.png";
+import loginIllustration from "../assets/images/seoul-line-art-transparent.png";
 import kakaoLogo from "../assets/images/social/kakao.svg";
 import naverLogo from "../assets/images/social/naver.svg";
 import googleLogo from "../assets/images/social/google.svg";
@@ -65,16 +65,16 @@ export default function Login() {
 
             <main className="login-page">
                 <section className="login-layout">
-                    <div className="signup-intro">
-                        <div className="signup-intro-copy">
-                            <p className="signup-small">
+                    <div className="login-intro">
+                        <div className="login-intro-copy">
+                            <p className="login-small">
                                 <span aria-hidden="true">
                                     <MapPinned size={22} strokeWidth={1.9} />
                                 </span>
                                 로그인
                             </p>
 
-                            <h1 className="signup-title">
+                            <h1 className="login-title">
                                 서울의 다양한 여행을
                                 <br />
                                 시작해보세요
@@ -84,7 +84,7 @@ export default function Login() {
                                 나만의 방식으로 만나는 서울
                             </strong>
 
-                            <p className="signup-intro-description">
+                            <p className="login-intro-description">
                                 취향에 맞는 코스와 새로운 장소를
                                 <br />
                                 발견해보세요.
@@ -92,7 +92,7 @@ export default function Login() {
                         </div>
 
                         <img
-                            className="signup-illustration"
+                            className="login-illustration"
                             src={loginIllustration}
                             alt=""
                             aria-hidden="true"

@@ -247,6 +247,10 @@ function RecommendedHistoryListItem({ course }) {
                         className="recommended-history-item__image"
                         src={course.imageUrl}
                         alt={course.title}
+                        onError={(event) => {
+                            event.currentTarget.onerror = null;
+                            event.currentTarget.src = fallbackImages[0];
+                        }}
                     />
                 )}
             </div>

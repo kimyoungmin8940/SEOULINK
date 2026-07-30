@@ -88,6 +88,8 @@
 /* 후기 카드의 흰색 박스, 테두리, 그림자 스타일 */
 .review-card {
   min-width: 0;
+  display: flex;
+  flex-direction: column;
   background: rgba(255, 255, 255, 0.96);
   border: 1px solid var(--line-soft);
   border-radius: 18px;
@@ -193,15 +195,33 @@
   color: #d6e8f8;
 }
 
+.review-title {
+  height: 2.9em;
+  margin: 18px 0 0;
+  overflow: hidden;
+  color: var(--text-dark);
+  font-size: clamp(16px, 1vw, 18px);
+  line-height: 1.45;
+  letter-spacing: -0.02em;
+  word-break: keep-all;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
 /* 후기 본문 문장 스타일 */
 .review-text {
-  min-height: 50px;
-  margin: 18px 0 16px;
+  height: 4.95em;
+  margin: 10px 0 16px;
+  overflow: hidden;
   color: #4c596b;
   font-size: clamp(15px, 0.94vw, 17px);
   font-weight: 500;
   line-height: 1.65;
   word-break: keep-all;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
 }
 
 /* 후기 이미지 2장을 그리드로 배치 */
@@ -209,6 +229,7 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+  margin-top: auto;
 }
 
 /* 후기 이미지 크기와 라운드 처리 */
@@ -218,6 +239,15 @@
   object-fit: cover;
   border-radius: 14px;
   display: block;
+}
+
+/* 사진이 한 장인 후기는 빈칸 없이 카드 폭 전체를 활용한다. */
+.review-images.is-single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.review-images.is-single img {
+  height: clamp(184px, 13vw, 236px);
 }
 
 /* 후기 카드 hover 효과 */
@@ -281,5 +311,9 @@
 /* 후기 이미지 크기와 라운드 처리 */
   .review-images img {
     height: 112px;
+  }
+
+  .review-images.is-single img {
+    height: 190px;
   }
 }
