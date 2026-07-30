@@ -7,6 +7,7 @@ import { authStore } from '../../store/authStore';
 import heroSeoul from '../../assets/images/hero-seoul-main.png';
 import hanokImage from '../../assets/images/moods/mood-hanok-photo.png';
 import cafeImage from '../../assets/images/moods/mood-rainy-cafe.png';
+import '../../styles/payment-laptop-layout.css';
 
 const t = {
   heading: '\uC5EC\uD589 \uAE30\uAC04\uC5D0 \uB9DE\uB294 AI \uC774\uC6A9\uAD8C\uC744 \uC120\uD0DD\uD558\uC138\uC694',
@@ -124,7 +125,6 @@ const closePayment = () => {
             {pass.popular && <b className="payment-reference-badge">BEST PICK</b>}
             <span className="payment-reference-radio">{selected.id === pass.id && <Check />}</span>
             <h2>{pass.name} <small>({pass.days}{t.day})</small></h2>
-            <p className="payment-reference-subtitle">{pass.description}</p>
             <img src={pass.image} alt="" />
             <b className="payment-reference-recommend">{t.recommend}</b><p className="payment-reference-copy">{pass.recommendation}</p>
             <div className="payment-reference-divider" />

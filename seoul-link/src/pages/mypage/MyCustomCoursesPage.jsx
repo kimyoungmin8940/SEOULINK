@@ -25,6 +25,7 @@ import {
 
 import Header from "../../components/common/Header";
 import Footer from "../../components/common/Footer";
+import MypageSidebar from "../../components/common/MypageSidebar";
 import {
     deleteCourse,
     getCustomCourses,
@@ -75,7 +76,7 @@ const menuItems = [
     },
     {
         label: "결제 내역",
-        path: "/payment",
+        path: "/mypage/payments",
         Icon: CreditCard,
     },
 ];
@@ -401,7 +402,7 @@ export default function MyCustomCoursesPage() {
 
             <main className="mypage-v3-main">
                 <div className="mypage-v3-layout">
-                    <aside className="mypage-v3-sidebar">
+                    {false && (<aside className="mypage-v3-sidebar">
                         <section className="mypage-v3-profile">
                             <div className="mypage-v3-avatar">
                                 <UserRound
@@ -455,7 +456,8 @@ export default function MyCustomCoursesPage() {
                             <Plus size={18} />
                             지도 코스 만들기
                         </a>
-                    </aside>
+                    </aside>)}
+                    <MypageSidebar activePath="/mypage/custom-courses" />
 
                     <section className="custom-courses-content">
                         <header className="custom-courses-heading">
@@ -892,4 +894,3 @@ export default function MyCustomCoursesPage() {
         </div>
     );
 }
-

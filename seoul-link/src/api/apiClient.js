@@ -5,7 +5,11 @@ export const API_BASE_URL = (
     import.meta.env?.VITE_API_BASE_URL || "/api"
 ).replace(/\/+$/, "");
 
-export const BACKEND_ORIGIN = API_BASE_URL.replace(/\/api$/, "");
+// 일반 API는 Vite의 /api 프록시를 사용하지만, OAuth는 브라우저가 백엔드의
+// 리다이렉트 엔드포인트로 직접 이동해야 한다.
+export const BACKEND_ORIGIN = (
+    import.meta.env?.VITE_BACKEND_ORIGIN || "http://localhost:8080"
+).replace(/\/+$/, "");
 
 /** 화면에서 HTTP 상태와 백엔드 오류 코드를 함께 구분할 수 있는 공통 오류입니다. */
 export class ApiError extends Error {

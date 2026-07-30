@@ -15,6 +15,7 @@ import {
     MessageCircle,
     MoreVertical,
     Pencil,
+    Plus,
     RefreshCw,
     Route,
     Search,
@@ -25,6 +26,7 @@ import {
 
 import Header from "../../components/common/Header";
 import Footer from "../../components/common/Footer";
+import MypageSidebar from "../../components/common/MypageSidebar";
 import {
     getSavedRecommendedCourses,
     removeSavedRecommendedCourse,
@@ -426,7 +428,7 @@ export default function MyCoursesPage() {
 
             <main className="mypage-v3-main">
                 <div className="mypage-v3-layout">
-                    <aside className="mypage-v3-sidebar">
+                    {false && (<aside className="mypage-v3-sidebar">
                         <section className="mypage-v3-profile">
                             <div className="mypage-v3-avatar">
                                 <UserRound
@@ -475,12 +477,13 @@ export default function MyCoursesPage() {
 
                         <a
                             className="mypage-retest"
-                            href="/survey"
+                            href="/map-course"
                         >
-                            <RefreshCw size={17} />
-                            취향 검사 다시하기
+                            <Plus size={18} />
+                            지도 코스 만들기
                         </a>
-                    </aside>
+                    </aside>)}
+                    <MypageSidebar activePath="/mypage/courses" />
 
                     <section className="saved-courses-content">
                         <header className="saved-courses-heading">

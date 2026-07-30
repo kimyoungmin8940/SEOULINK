@@ -10,8 +10,8 @@ import {
     FileText,
     MessageCircle,
     Pencil,
+    Plus,
     ReceiptText,
-    RefreshCw,
     Route,
     Sparkles,
     Ticket,
@@ -20,15 +20,17 @@ import {
 } from 'lucide-react';
 import Header from '../../components/common/Header';
 import Footer from '../../components/common/Footer';
+import MypageSidebar from '../../components/common/MypageSidebar';
 import { deletePaymentHistory, getMyPayments } from '../../api/paymentApi';
 import { authStore } from '../../store/authStore';
 import '../../styles/mypage.css';
 import '../../styles/payment-history.css';
+import '../../styles/mypage-sidebar-unified.css';
 
 const menuItems = [
     { label: '내 여행 정보', path: '/mypage', Icon: BriefcaseBusiness },
     { label: '저장한 추천 코스', path: '/mypage/courses', Icon: Bookmark },
-    { label: '직접 만든 코스', path: '/mypage/courses', Icon: Route },
+    { label: '직접 만든 코스', path: '/mypage/custom-courses', Icon: Route },
     { label: '내가 쓴 후기와 댓글', path: '/mypage/reviews', Icon: MessageCircle },
     { label: '취향 검사 결과', path: '/mypage/travel-type', Icon: Sparkles },
     { label: '결제 내역', path: '/mypage/payments', Icon: CreditCard },
@@ -167,9 +169,9 @@ export default function PaymentHistoryPage() {
 
     return (
         <main className="payment-history-page">
-            <Header variant="simple" />
+            <Header />
             <section className="payment-history-shell">
-                <aside className="mypage-v3-sidebar payment-history-side">
+                {false && (<aside className="mypage-v3-sidebar payment-history-side">
                     <section className="mypage-v3-profile">
                         <div className="mypage-v3-avatar"><UserRound size={54} strokeWidth={1.5} /></div>
                         <strong>{userName}님</strong>
@@ -186,8 +188,9 @@ export default function PaymentHistoryPage() {
                             </a>
                         ))}
                     </nav>
-                    <a className="mypage-retest" href="/survey"><RefreshCw size={17} strokeWidth={2} />취향 검사 다시하기</a>
-                </aside>
+                    <a className="mypage-retest" href="/map-course"><Plus size={18} />지도 코스 만들기</a>
+                </aside>)}
+                <MypageSidebar activePath="/mypage/payments" />
 
                 <section className="payment-history-main">
                     <header className="payment-history-heading"><h1>결제 내역</h1><p>구매한 AI 여행 챗봇 이용권을 확인하세요.</p></header>

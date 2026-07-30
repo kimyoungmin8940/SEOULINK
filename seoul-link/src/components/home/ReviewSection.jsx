@@ -1,13 +1,25 @@
 // ReviewSection은 실제 여행자 후기 미리보기 영역
 // 현재는 화면 확인용 임시 후기 데이터를 사용하고 있음
 // API 응답 형태와 동일한 mockReviewListResponse.data를 사용하고 있음
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ChevronRight, Heart, MessageSquareText } from 'lucide-react';
 import { requireLogin } from '../../utils/authGuard';
+import { getReviews } from '../../api/reviewApi';
 
 import { mockReviewListResponse } from '../../mocks/homeMockData';
 
-const reviews = mockReviewListResponse.data;
+const fallbackReviews = mockReviewListResponse.data;
+
+const toHomeReview = (review) => ({
+    ...review,
+    nickname: review.nickname || review.authorName || '서울 여행자',
+    profileImageUrl: review.profileImageUrl || review.authorProfileImageUrl || 'https://i.pravatar.cc/80?img=12',
+    title: review.reviewTitle || review.title || review.courseTitle || '서울 여행 후기',
+    content: review.content || review.reviewContent || '',
+    imageUrls: Array.isArray(review.imageUrls) ? review.imageUrls : [],
+    rating: Number(review.rating) || 0,
+    liked: Boolean(review.liked || review.likedByMe),
+});
 
 // 별점을 그리기 위한 별 모양 SVG 컴포넌트
 // filled 값이 true면 채워진 별, false면 빈 별처럼 보이도록 CSS 클래스 is-empty를 붙임
@@ -25,9 +37,27 @@ function RoundedStarIcon({ filled }) {
 }
 
 function ReviewSection() {
-    const [likedReviewIds, setLikedReviewIds] = useState(
-        reviews.filter((review) => review.liked).map((review) => review.reviewId),
-    );
+    const [liveReviews, setLiveReviews] = useState([]);
+    const [likedReviewIds, setLikedReviewIds] = useState([]);
+    const reviews = liveReviews.length > 0 ? liveReviews : fallbackReviews.map(toHomeReview);
+
+    // 최신순으로 실제 등록 후기를 세 개만 불러오고, 비어 있을 때만 예시 카드를 유지한다.
+    useEffect(() => {
+        let active = true;
+
+        getReviews({ page: 0, size: 3, sort: 'date' })
+            .then((response) => {
+                if (!active) return;
+                const recentReviews = Array.isArray(response?.content) ? response.content.slice(0, 3) : [];
+                setLiveReviews(recentReviews.map(toHomeReview));
+                setLikedReviewIds(recentReviews.filter((review) => review.liked || review.likedByMe).map((review) => review.reviewId));
+            })
+            .catch(() => {
+                if (active) setLiveReviews([]);
+            });
+
+        return () => { active = false; };
+    }, []);
 
     // 후기 카드 전체를 클릭하면 해당 후기 상세 임시 페이지로 이동
     const moveToReviewDetail = (reviewId) => {
@@ -125,11 +155,13 @@ function ReviewSection() {
                             </button>
                         </div>
 
+                        <h3 className="review-title">{review.title}</h3>
+
                         {/* 후기 본문*/}
                         <p className="review-text">“{review.content}”</p>
 
                         {/* 후기 이미지 2장을 그리드 형태로 보여줌 */}
-                        <div className="review-images">
+                        <div className={`review-images${review.imageUrls?.length === 1 ? ' is-single' : ''}`}>
                             {(review.imageUrls || []).map((url, index) => (
                                 <img key={index} src={url} alt="후기 이미지" />
                             ))}

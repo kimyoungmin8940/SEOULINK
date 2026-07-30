@@ -40,7 +40,11 @@ public class Member {
     @Column(name = "LOGIN_TYPE", nullable = false, length = 20)
     private String loginType = "LOCAL";
 
+    @Column(name = "SOCIAL_PROVIDER", length = 30)
+    private String socialProvider;
 
+    @Column(name = "SOCIAL_ID", length = 100)
+    private String socialId;
 
     @Column(name = "CREATED_AT", nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();

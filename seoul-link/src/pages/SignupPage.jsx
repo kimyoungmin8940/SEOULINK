@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Eye, EyeOff, MapPinned } from "lucide-react";
 import Header from "../components/common/Header";
 import { apiPost } from "../api/client";
-import signupIllustration from "../assets/images/signup-seoul-line-art.png";
+import signupIllustration from "../assets/images/seoul-line-art-transparent.png";
 import "../styles/SignupPage.css";
 
 export default function SignupPage() {

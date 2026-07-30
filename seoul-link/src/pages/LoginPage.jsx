@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { MapPinned } from "lucide-react";
 import "../styles/LoginPage.css";
+import "../styles/SignupPage.css";
 import Header from "../components/common/Header";
 import { apiPost } from "../api/client";
 import { BACKEND_ORIGIN } from "../api/apiClient";
 import { authStore } from "../store/authStore";
-import loginIllustration from "../assets/images/login-seoul-line-art.png";
+import loginIllustration from "../assets/images/seoul-line-art-transparent.png";
 import kakaoLogo from "../assets/images/social/kakao.svg";
 import naverLogo from "../assets/images/social/naver.svg";
 import googleLogo from "../assets/images/social/google.svg";

@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
-import { Bookmark, BriefcaseBusiness, CreditCard, MessageCircle, RefreshCw, Route, Sparkles, UserRound } from 'lucide-react';
+import { Bookmark, BriefcaseBusiness, CreditCard, MessageCircle, Plus, Route, Sparkles, UserRound } from 'lucide-react';
 import Header from '../../components/common/Header';
 import Footer from '../../components/common/Footer';
+import MypageSidebar from '../../components/common/MypageSidebar';
 import { getMyComments, getMyReviews } from '../../api/mypageApi';
 import { authStore } from '../../store/authStore';
 import '../../styles/mypage.css';
 import '../../styles/my-reviews.css';
+import '../../styles/mypage-sidebar-unified.css';
 
 const menuItems = [
   { label: '여행 정보', path: '/mypage', Icon: BriefcaseBusiness },
@@ -40,13 +42,15 @@ function MyReviewsPage() {
 
   const userName = member.nickname || member.name || '여행자';
   return <main className="my-reviews-page">
-    <Header variant="simple" />
+    <Header />
     <section className="my-reviews-shell">
-      <aside className="mypage-v3-sidebar my-reviews-sidebar">
+      {false && (<aside className="mypage-v3-sidebar my-reviews-sidebar">
+        <div className="my-reviews-profile-actions"><a className="mypage-profile-edit" href="/mypage/profile-edit">프로필 수정</a></div>
         <section className="mypage-v3-profile"><div className="mypage-v3-avatar"><UserRound size={54} strokeWidth={1.5} /></div><strong>{userName}님</strong><span>{member.email || 'user@seoulink.com'}</span></section>
         <nav className="mypage-v3-menu" aria-label="마이페이지 메뉴">{menuItems.map(({ label, path, Icon }) => <a key={label} className={path === '/mypage/reviews' ? 'active' : ''} href={path}><Icon size={20} strokeWidth={1.8} /><span>{label}</span></a>)}</nav>
-        <a className="mypage-retest" href="/survey"><RefreshCw size={17} /> 취향 검사 다시하기</a>
-      </aside>
+        <a className="mypage-retest" href="/map-course"><Plus size={18} /> 지도 코스 만들기</a>
+      </aside>)}
+      <MypageSidebar activePath="/mypage/reviews" />
       <section className="my-reviews-content">
         <header className="my-reviews-heading"><div><p>MY TRAVEL STORY</p><h1>내 후기와 댓글</h1><span>작성한 후기와 다른 여행자들의 후기에 남긴 댓글을 확인할 수 있어요.</span></div><a className="my-reviews-write" href="/reviews/write">후기 작성</a></header>
         <div className="my-review-tabs" role="tablist" aria-label="후기와 댓글 목록"><button type="button" className={activeTab === 'reviews' ? 'active' : ''} onClick={() => setActiveTab('reviews')}>내 후기</button><button type="button" className={activeTab === 'comments' ? 'active' : ''} onClick={() => setActiveTab('comments')}>내가 쓴 댓글</button></div>

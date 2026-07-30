@@ -7,22 +7,54 @@ import {
     THEME_BY_VALUE,
 } from "./courseThemes";
 import {
+    BASE_CATEGORY_INCLUDE_WORDS,
     COMMON_EXCLUDE_PLACE_WORDS,
+    HARD_REJECT_KAKAO_GROUP_CODES,
+    HARD_REJECT_PLACE_WORDS,
+    KAKAO_BASE_CATEGORY_BY_GROUP,
     SHOPPING_INCLUDE_PLACE_WORDS,
+    THEME_ALLOWED_BASE_CATEGORIES,
     THEME_EXCLUDE_PLACE_WORDS,
+    THEME_INCLUDE_PLACE_WORDS,
 } from "./placeFilterRules";
 import { includesAnyWord, normalizeSearchText } from "./textUtils";
 
 export const getPlaceSearchText = (place) =>
     `${place?.name || ""} ${place?.apiCategory || ""} ${place?.region || ""} ${place?.address || ""} ${place?.roadAddress || ""} ${place?.description || ""}`;
 
+const getPlaceIdentityText = (place) =>
+    `${place?.name || ""} ${place?.apiCategory || ""}`;
+
+export const isHardRejectedPlace = (place) => {
+    if (!place) return true;
+
+    const groupCode = String(place.apiCategoryGroupCode || "").trim().toUpperCase();
+    const identityText = getPlaceIdentityText(place);
+
+    return (
+        HARD_REJECT_KAKAO_GROUP_CODES.has(groupCode)
+        || includesAnyWord(identityText, HARD_REJECT_PLACE_WORDS)
+        || includesAnyWord(identityText, COMMON_EXCLUDE_PLACE_WORDS)
+    );
+};
+
 export const isValidPlaceForTheme = (place, themeValue) => {
     if (!place) return false;
 
     const searchText = getPlaceSearchText(place);
+    const identityText = getPlaceIdentityText(place);
+    const isKakaoPlace = place.dataSource === "KAKAO";
 
-    if (includesAnyWord(searchText, COMMON_EXCLUDE_PLACE_WORDS)) return false;
-    if (includesAnyWord(searchText, THEME_EXCLUDE_PLACE_WORDS[themeValue] || [])) return false;
+    if (isHardRejectedPlace(place)) return false;
+    if (includesAnyWord(identityText, THEME_EXCLUDE_PLACE_WORDS[themeValue] || [])) return false;
+
+    if (isKakaoPlace) {
+        const allowedCategories = THEME_ALLOWED_BASE_CATEGORIES[themeValue];
+        if (allowedCategories && !allowedCategories.includes(place.category)) return false;
+
+        const requiredWords = THEME_INCLUDE_PLACE_WORDS[themeValue] || [];
+        if (requiredWords.length > 0 && !includesAnyWord(searchText, requiredWords)) return false;
+    }
 
     if (themeValue === "SHOPPING_HOTPLACE") {
         return includesAnyWord(searchText, SHOPPING_INCLUDE_PLACE_WORDS);
@@ -51,15 +83,25 @@ export const normalizeBaseCategory = (category) => {
 };
 
 export const inferBaseCategoryFromKakaoPlace = (item, fallbackBaseCategory) => {
-    if (fallbackBaseCategory) return fallbackBaseCategory;
+    const groupCode = String(item?.category_group_code || "").trim().toUpperCase();
+    const categoryText = `${item?.place_name || ""} ${item?.category_name || ""}`;
 
-    const categoryText = item.category_name || "";
+    if (HARD_REJECT_KAKAO_GROUP_CODES.has(groupCode)) return null;
+    if (includesAnyWord(categoryText, HARD_REJECT_PLACE_WORDS)) return null;
 
-    if (categoryText.includes("카페")) return "CAFE";
-    if (categoryText.includes("음식점")) return "RESTAURANT";
-    if (categoryText.includes("숙박") || categoryText.includes("호텔") || categoryText.includes("모텔") || categoryText.includes("펜션")) return "HOTEL";
+    const groupedCategory = KAKAO_BASE_CATEGORY_BY_GROUP[groupCode];
+    if (groupedCategory) return groupedCategory;
 
-    return "TOUR";
+    for (const [baseCategory, words] of Object.entries(BASE_CATEGORY_INCLUDE_WORDS)) {
+        if (includesAnyWord(categoryText, words)) return baseCategory;
+    }
+
+    if (fallbackBaseCategory) {
+        const fallbackWords = BASE_CATEGORY_INCLUDE_WORDS[fallbackBaseCategory] || [];
+        if (includesAnyWord(categoryText, fallbackWords)) return fallbackBaseCategory;
+    }
+
+    return null;
 };
 
 export const getPlaceDisplayLabel = (place) => {
@@ -89,12 +131,12 @@ export const inferThemeFromSearchText = (text, fallbackTheme = "PALACE_CULTURE")
 
     if (includesAnyWord(keyword, ["카페", "디저트", "베이커리", "보드게임카페", "보드카페"])) return "CAFE_TOUR";
     if (includesAnyWord(keyword, ["맛집", "음식", "식당", "한식", "양식", "중식", "일식", "분식", "고기", "국밥", "파스타", "초밥"])) return "FOOD_TOUR";
-    if (includesAnyWord(keyword, ["호텔", "숙소", "게스트하우스", "모텔"])) return "HOTEL_STAY";
-    if (includesAnyWord(keyword, ["데이트", "루프탑", "전망"])) return "DATE";
-    if (includesAnyWord(keyword, ["야경", "서울타워", "낙산"])) return "NIGHT_VIEW";
-    if (includesAnyWord(keyword, ["한강", "공원", "산책", "숲"])) return "NATURE_HANGANG";
-    if (includesAnyWord(keyword, ["쇼핑", "백화점", "몰", "시장", "핫플", "팝업"])) return "SHOPPING_HOTPLACE";
-    if (includesAnyWord(keyword, ["궁", "궁궐", "문화", "박물관", "미술관", "전시", "전시관", "공연"])) return "PALACE_CULTURE";
+    if (includesAnyWord(keyword, ["호텔", "숙소", "게스트하우스", "모텔", "호스텔"])) return "HOTEL_STAY";
+    if (includesAnyWord(keyword, ["야경", "전망대", "서울타워", "타워", "팔각정", "루프탑", "분수", "대교", "교량", "다리", "잠수교", "스카이"])) return "NIGHT_VIEW";
+    if (includesAnyWord(keyword, ["한강", "공원", "산책", "숲", "산", "둘레길", "생태", "정원", "수목원", "폭포", "하천", "호수", "섬"])) return "NATURE_HANGANG";
+    if (includesAnyWord(keyword, ["쇼핑", "백화점", "몰", "시장", "핫플", "팝업", "아울렛", "편집샵", "쇼룸"])) return "SHOPPING_HOTPLACE";
+    if (includesAnyWord(keyword, ["궁", "궁궐", "문화", "박물관", "미술관", "전시", "전시관", "공연", "기념관", "한옥", "유적"])) return "PALACE_CULTURE";
+    if (includesAnyWord(keyword, ["데이트"])) return "DATE";
 
     return fallbackTheme;
 };
@@ -171,6 +213,11 @@ export const mergeUniquePlaces = (placeList) => {
 
 export const convertKakaoPlace = ({ item, themeValue, regionValue, fallbackBaseCategory }) => {
     const baseCategory = inferBaseCategoryFromKakaoPlace(item, fallbackBaseCategory);
+    if (!baseCategory) return null;
+
+    const addressText = item.address_name || item.road_address_name || "";
+    const actualRegion = extractRegion(addressText, "");
+    if (regionValue && regionValue !== DEFAULT_REGION && actualRegion !== regionValue) return null;
 
     return {
         uid: `KAKAO-${themeValue}-${item.id}`,
@@ -182,7 +229,8 @@ export const convertKakaoPlace = ({ item, themeValue, regionValue, fallbackBaseC
         category: baseCategory,
         themeCategory: themeValue,
         apiCategory: item.category_name || "",
-        region: extractRegion(item.address_name || item.road_address_name, regionValue),
+        apiCategoryGroupCode: item.category_group_code || "",
+        region: actualRegion || regionValue || DEFAULT_REGION,
         address: item.road_address_name || item.address_name || "",
         roadAddress: item.road_address_name || "",
         latitude: Number(item.y),

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Bookmark, Clock3, MapPin } from 'lucide-react';
 import { requireLogin } from '../../utils/authGuard';
+import hanokImage from '../../assets/images/moods/mood-hanok-photo.png';
 
 const COURSE_DETAIL_ENTRY_KEY = 'seoulinkCourseDetailEntry';
 
@@ -73,7 +74,14 @@ function CourseCard({ course, detailPath, requiresLogin = false }) {
             <div className="course-img-wrap">
                 {/* imageUrl이 있을 때만 이미지를 렌더링*/}
                 {course.imageUrl && (
-                    <img src={course.imageUrl} alt={course.title} />
+                    <img
+                        src={course.imageUrl}
+                        alt={course.title}
+                        onError={(event) => {
+                            event.currentTarget.onerror = null;
+                            event.currentTarget.src = hanokImage;
+                        }}
+                    />
                 )}
 
                 {/*

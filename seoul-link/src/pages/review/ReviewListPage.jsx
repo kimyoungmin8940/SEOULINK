@@ -28,7 +28,6 @@ function ReviewListPage() {
   const [keyword, setKeyword] = useState('');
   const [companionFilter, setCompanionFilter] = useState('all');
   const [selectedTag, setSelectedTag] = useState(null);
-  const [selectedPopularReviewId, setSelectedPopularReviewId] = useState(null);
   const [popular, setPopular] = useState([]);
   const [error, setError] = useState('');
   const member = authStore.getMember();
@@ -87,7 +86,7 @@ function ReviewListPage() {
           </div>
 
           {error ? <p className="review-message">{error}</p> : <div className="travel-review-grid">
-            {reviews.map((review) => <article className={`travel-review-card${selectedPopularReviewId === review.reviewId ? ' is-popular-selected' : ''}`} key={review.reviewId}>
+            {reviews.map((review) => <article className="travel-review-card" key={review.reviewId}>
               <button className="review-cover" onClick={() => { window.location.href = `/reviews/${review.reviewId}`; }}><img src={review.imageUrls?.[0] || review.placeImageUrl || fallback} alt="" /><span>{review.companion || review.tags?.[0] || '서울 여행'}</span></button>
               <div className="travel-review-content">
                 <button className="review-title-link" onClick={() => { window.location.href = `/reviews/${review.reviewId}`; }}>{review.reviewTitle}</button>
@@ -104,8 +103,8 @@ function ReviewListPage() {
         <aside className="review-sidebar">
           <h3>인기 태그</h3>
           <div className="tag-cloud">{popular.map((popularTag) => <button className={selectedTag === popularTag ? 'active' : ''} onClick={() => setSelectedTag((currentTag) => currentTag === popularTag ? null : popularTag)} key={popularTag}>#{popularTag}</button>)}</div>
-          <h3>이번 주 인기 후기</h3>
-          <ol>{[...(data.content || [])].sort((left, right) => (right.likeCount || 0) - (left.likeCount || 0)).slice(0, 5).map((review) => <li key={review.reviewId}><button className={selectedPopularReviewId === review.reviewId ? 'active' : ''} onClick={() => setSelectedPopularReviewId((currentReviewId) => currentReviewId === review.reviewId ? null : review.reviewId)}>{review.reviewTitle}<small>★ {review.rating?.toFixed(1)}</small></button></li>)}</ol>
+          <h3>인기 후기</h3>
+          <ol>{[...(data.content || [])].sort((left, right) => (right.likeCount || 0) - (left.likeCount || 0)).slice(0, 5).map((review) => <li key={review.reviewId}><button type="button" onClick={() => { window.location.href = `/reviews/${review.reviewId}`; }}>{review.reviewTitle}<small>★ {review.rating?.toFixed(1)}</small></button></li>)}</ol>
         </aside>
       </div>
     </main>

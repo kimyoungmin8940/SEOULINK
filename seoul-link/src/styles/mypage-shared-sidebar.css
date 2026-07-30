@@ -1,0 +1,19 @@
+/* Four mypage detail screens share one fixed desktop sidebar footprint. */
+.saved-courses-page .mypage-v3-sidebar,
+.custom-courses-page .mypage-v3-sidebar,
+.my-reviews-page .mypage-v3-sidebar,
+.payment-history-page .mypage-v3-sidebar {
+  height: 700px !important;
+  min-height: 700px !important;
+  align-self: start;
+}
+
+@media (max-width: 1000px) {
+  .saved-courses-page .mypage-v3-sidebar,
+  .custom-courses-page .mypage-v3-sidebar,
+  .my-reviews-page .mypage-v3-sidebar,
+  .payment-history-page .mypage-v3-sidebar {
+    height: auto !important;
+    min-height: 0 !important;
+  }
+}

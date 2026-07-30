@@ -8,6 +8,8 @@ import {
     getPlaceSearchText,
     inferThemeFromPlaceAndKeyword,
     inferThemeFromSearchText,
+    isExactPlaceNameMatch,
+    isHardRejectedPlace,
     isValidPlaceForTheme,
     mergeUniquePlaces,
 } from "./placeUtils";
@@ -48,7 +50,7 @@ const fetchDbPlacesByKeyword = async ({ keyword, maxCount }) => {
 
     if (!normalizedKeyword) return [];
 
-    const fallbackTheme = inferThemeFromSearchText(searchKeyword, "PALACE_CULTURE");
+    const fallbackTheme = inferThemeFromSearchText(searchKeyword, "DATE");
     const dbPlaces = await fetchCourseBuilderDbPlaces({
         theme: "ALL",
         region: DEFAULT_REGION,
@@ -68,7 +70,7 @@ const fetchDbPlacesByKeyword = async ({ keyword, maxCount }) => {
 
 export const searchPlacesByKeyword = async ({ keyword, maxCount }) => {
     const searchKeyword = keyword.trim();
-    const inferredTheme = inferThemeFromSearchText(searchKeyword, "PALACE_CULTURE");
+    const inferredTheme = inferThemeFromSearchText(searchKeyword, "DATE");
 
     const dbPlaces = await fetchDbPlacesByKeyword({ keyword: searchKeyword, maxCount });
     const kakaoPlaces = await searchKakaoKeywordBySeoulGrid({
@@ -84,6 +86,13 @@ export const searchPlacesByKeyword = async ({ keyword, maxCount }) => {
             return { ...place, themeCategory };
         })
     )
-        .filter((place) => isValidPlaceForTheme(place, place.themeCategory))
+        .filter((place) => {
+            if (isHardRejectedPlace(place)) return false;
+
+            return (
+                isExactPlaceNameMatch(place, searchKeyword)
+                || isValidPlaceForTheme(place, place.themeCategory)
+            );
+        })
         .slice(0, maxCount);
 };

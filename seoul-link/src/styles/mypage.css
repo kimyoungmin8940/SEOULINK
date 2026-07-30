@@ -1,5 +1,8 @@
 .mypage-v3 {
     min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
     color: #153047;
     background:
             linear-gradient(
@@ -11,6 +14,7 @@
 }
 
 .mypage-v3-main {
+    flex: 1 0 auto;
     width: min(85vw, 1440px);
     margin: 0 auto;
     padding: 118px 0 24px;
@@ -104,7 +108,18 @@
 
 .mypage-v3-menu {
     padding: 15px 0 10px;
+    display: flex;
+    flex-direction: column;
 }
+
+/* 모든 마이페이지 사이드바에서 취향 검사 결과를 두 번째 메뉴로 고정한다. */
+.mypage-v3-menu a[href="/mypage"] { order: 1; }
+.mypage-v3-menu a[href="/mypage/travel-type"] { order: 2; }
+.mypage-v3-menu a[href="/mypage/courses"] { order: 3; }
+.mypage-v3-menu a[href="/mypage/custom-courses"] { order: 4; }
+.mypage-v3-menu a[href="/mypage/reviews"] { order: 5; }
+.mypage-v3-menu a[href="/mypage/payments"],
+.mypage-v3-menu a[href="/payment"] { order: 6; }
 
 .mypage-v3-menu a {
     position: relative;
@@ -855,6 +870,13 @@
     border-radius: 8px;
     background: #fff;
     cursor: pointer;
+}
+
+
+
+.mypage-v3 > .footer {
+    flex: 0 0 auto;
+    margin-top: auto;
 }
 
 .recent-course-card:focus-visible {
