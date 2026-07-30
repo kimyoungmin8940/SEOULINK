@@ -63,7 +63,7 @@ export const themeCourseDefinitions = {
         description:
             '빗소리와 젖은 서울의 풍경을 바라보며 전시와 카페를 여유롭게 즐기는 코스예요.',
         image: rainyCafeImage,
-        tags: ['카페', '실내', '비 오는 날'],
+        tags: ['비 오는 날', '카페', '실내'],
     },
 
     'walking-alley': {
