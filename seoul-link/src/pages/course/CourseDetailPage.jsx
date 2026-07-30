@@ -627,8 +627,13 @@ function CourseDetailPage() {
 
                             return {
                                 ...place,
+                                databaseMatched: true,
                                 placeId:
                                     dbPlace.placeId ?? place.placeId,
+                                placeName:
+                                    dbPlace.name || place.placeName,
+                                category:
+                                    dbPlace.category || place.category,
                                 imageUrl:
                                     dbPlace.imageUrl || place.imageUrl,
                                 databaseDescription:
@@ -802,7 +807,7 @@ function CourseDetailPage() {
         }
 
         try {
-            const saved = await themeBookmarks.toggle(themeCourse);
+            const saved = await themeBookmarks.toggle(course);
             setToast({
                 tone: 'success',
                 message: saved

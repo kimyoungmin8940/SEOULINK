@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
     ArrowLeft,
     CalendarDays,
@@ -9,13 +9,12 @@ import {
 import Header from '../../components/common/Header';
 import Footer from '../../components/common/Footer';
 import CourseRecommendationCard from '../../components/course/CourseRecommendationCard';
+import { getThemeCoursePopularity } from '../../api/themeCourseApi';
 import useThemeCourseCatalog from '../../hooks/useThemeCourseCatalog';
 import useThemeCourseBookmarks from '../../hooks/useThemeCourseBookmarks';
 import { requireLogin } from '../../utils/authGuard';
 import { getCurrentMemberId } from '../../utils/courseHistory';
-import {
-    getThemeCourseDefinition,
-} from '../../data/themeCourseData';
+import { themeCourseDefinitions } from '../../data/themeCourseData';
 import hanokImage from '../../assets/images/moods/mood-hanok-photo.png';
 import walkingImage from '../../assets/images/moods/mood-walking-alley.png';
 import nightImage from '../../assets/images/moods/mood-date-night.png';
@@ -30,30 +29,92 @@ const fallbackImages = [
     walkingImage,
 ];
 
-function getThemeSlug() {
-    const match = window.location.pathname.match(/^\/courses\/themes\/([^/]+)\/?$/);
-    return match?.[1] || null;
+const defaultCoursePriority = [
+    'SUNSET_1401',
+    'RAINY_CAFE_1501',
+    'HANOK_PHOTO_1201',
+    'WALKING_ALLEY_1601',
+];
+
+function getDefaultRank(sourceCourseKey) {
+    const rank = defaultCoursePriority.indexOf(sourceCourseKey);
+    return rank < 0 ? defaultCoursePriority.length : rank;
 }
 
-function ThemeCourseListPage() {
-    const themeSlug = useMemo(() => getThemeSlug(), []);
-    const theme = useMemo(() => getThemeCourseDefinition(themeSlug), [themeSlug]);
+function PopularThemeCoursePage() {
     const {
         courses,
         status: catalogStatus,
         error: catalogError,
         missingPlaceNames,
-    } = useThemeCourseCatalog(themeSlug);
+    } = useThemeCourseCatalog('all');
     const memberId = useMemo(() => getCurrentMemberId(), []);
+    const [activeTheme, setActiveTheme] = useState('all');
     const [activeDayByCourse, setActiveDayByCourse] = useState({});
     const [bookmarkNotice, setBookmarkNotice] = useState('');
+    const [saveCounts, setSaveCounts] = useState({});
     const bookmarks = useThemeCourseBookmarks(memberId, { courses });
 
+    useEffect(() => {
+        const controller = new AbortController();
+
+        getThemeCoursePopularity({ signal: controller.signal })
+            .then((response) => {
+                setSaveCounts(Object.fromEntries(
+                    (Array.isArray(response) ? response : [])
+                        .filter((item) => item?.sourceCourseKey)
+                        .map((item) => [
+                            item.sourceCourseKey,
+                            Number(item.saveCount) || 0,
+                        ]),
+                ));
+            })
+            .catch((error) => {
+                if (error?.name !== 'AbortError') setSaveCounts({});
+            });
+
+        return () => controller.abort();
+    }, []);
+
+    const sortedCourses = useMemo(
+        () => [...courses]
+            .sort((left, right) => {
+                const countDifference = (saveCounts[right.sourceCourseKey] || 0)
+                    - (saveCounts[left.sourceCourseKey] || 0);
+
+                if (countDifference !== 0) return countDifference;
+
+                const rankDifference = getDefaultRank(left.sourceCourseKey)
+                    - getDefaultRank(right.sourceCourseKey);
+
+                if (rankDifference !== 0) return rankDifference;
+                return left.courseId - right.courseId;
+            }),
+        [courses, saveCounts],
+    );
+
+    const bestCourses = useMemo(
+        () => sortedCourses.filter((course) => course.badge === 'BEST'),
+        [sortedCourses],
+    );
+
+    const visibleCourses = useMemo(
+        () => (activeTheme === 'all'
+            ? bestCourses
+            : bestCourses.filter((course) => course.themeSlug === activeTheme)),
+        [activeTheme, bestCourses],
+    );
+
+    const themes = useMemo(
+        () => Object.values(themeCourseDefinitions),
+        [],
+    );
+
     const toggleBookmark = async (course) => {
-        if (!requireLogin('코스를 저장하려면 로그인이 필요해요.')) return;
+        if (!requireLogin('코스를 저장하려면 로그인이 필요해요')) return;
 
         if (!memberId) {
-            setBookmarkNotice('회원 정보를 확인할 수 없어요. 다시 로그인해 주세요.');
+            setBookmarkNotice('회원 정보를 확인할 수 없어요 다시 로그인해 주세요');
             return;
         }
 
@@ -61,32 +122,15 @@ function ThemeCourseListPage() {
             const saved = await bookmarks.toggle(course);
             setBookmarkNotice(
                 saved
-                    ? '저장한 추천 코스에 추가했어요.'
-                    : '저장한 추천 코스에서 삭제했어요.',
+                    ? '저장한 추천 코스에 추가했어요'
+                    : '저장한 추천 코스에서 삭제했어요',
             );
         } catch (error) {
             setBookmarkNotice(
-                error?.message || '코스 저장 상태를 변경하지 못했어요.',
+                error?.message || '코스 저장 상태를 변경하지 못했어요',
             );
         }
     };
-
-    if (!theme || catalogStatus === 'not-found') {
-        return (
-            <div className="page course-result-page theme-course-list-page">
-                <Header variant="default" />
-                <main className="course-result-shell">
-                    <section className="course-result-state-card">
-                        <span><Sparkles size={24} aria-hidden="true" /></span>
-                        <h1>아직 준비 중인 테마예요</h1>
-                        <p>다른 서울 테마에서 추천 코스를 둘러보세요.</p>
-                        <a href="/">홈으로 돌아가기</a>
-                    </section>
-                </main>
-                <Footer />
-            </div>
-        );
-    }
 
     if (catalogStatus === 'loading') {
         return (
@@ -95,8 +139,8 @@ function ThemeCourseListPage() {
                 <main className="course-result-shell">
                     <section className="course-result-state-card" aria-live="polite">
                         <span><Sparkles size={24} aria-hidden="true" /></span>
-                        <h1>DB에서 코스 장소를 불러오고 있어요</h1>
-                        <p>장소 정보와 사진을 준비하는 중입니다.</p>
+                        <h1>인기 테마 코스를 불러오고 있어요</h1>
+                        <p>장소 정보와 저장 순위를 준비하는 중입니다</p>
                     </section>
                 </main>
                 <Footer />
@@ -111,8 +155,8 @@ function ThemeCourseListPage() {
                 <main className="course-result-shell">
                     <section className="course-result-state-card" role="alert">
                         <span><Sparkles size={24} aria-hidden="true" /></span>
-                        <h1>장소 데이터를 불러오지 못했어요</h1>
-                        <p>{catalogError?.message || '백엔드와 DB 연결 상태를 확인해 주세요.'}</p>
+                        <h1>인기 테마 코스를 불러오지 못했어요</h1>
+                        <p>{catalogError?.message || '백엔드와 DB 연결 상태를 확인해 주세요'}</p>
                         <button type="button" onClick={() => window.location.reload()}>
                             다시 불러오기
                         </button>
@@ -124,7 +168,7 @@ function ThemeCourseListPage() {
     }
 
     return (
-        <div className="page course-result-page theme-course-list-page">
+        <div className="page course-result-page theme-course-list-page popular-theme-page">
             <Header variant="default" />
 
             <main className="course-result-shell">
@@ -141,29 +185,53 @@ function ThemeCourseListPage() {
                         <div>
                             <p className="course-result-eyebrow">
                                 <Sparkles size={14} aria-hidden="true" />
-                                SEOUL THEME COURSE
+                                POPULAR THEME COURSE
                             </p>
-                            <h1>{theme.title}</h1>
-                            <p>{theme.description}</p>
+                            <h1>인기 테마 추천 코스 전체보기</h1>
+                            <p>여행자들이 많이 저장한 서울 테마 코스를 인기순으로 둘러보세요</p>
 
                             <div className="theme-course-hero-meta">
                                 <span><CalendarDays size={15} aria-hidden="true" />당일치기 · 1박 2일</span>
-                                <span><MapPinned size={15} aria-hidden="true" />서울 테마 코스 5개</span>
+                                <span><MapPinned size={15} aria-hidden="true" />서울 테마 코스 {courses.length}개</span>
                             </div>
                         </div>
                     </div>
 
                     <div className="course-result-hero-visual" aria-hidden="true">
-                        <img src={theme.image} alt="" />
+                        <img src={sunsetImage} alt="" />
+                    </div>
+                </section>
+
+                <section className="theme-all-toolbar" aria-label="테마 필터">
+                    <div className="theme-all-filters" role="group" aria-label="테마 선택">
+                        <button
+                            className={activeTheme === 'all' ? 'is-active' : ''}
+                            type="button"
+                            aria-pressed={activeTheme === 'all'}
+                            onClick={() => setActiveTheme('all')}
+                        >
+                            전체
+                        </button>
+                        {themes.map((theme) => (
+                            <button
+                                className={activeTheme === theme.slug ? 'is-active' : ''}
+                                type="button"
+                                key={theme.slug}
+                                aria-pressed={activeTheme === theme.slug}
+                                onClick={() => setActiveTheme(theme.slug)}
+                            >
+                                {theme.title}
+                            </button>
+                        ))}
                     </div>
                 </section>
 
                 <div className="theme-course-list-heading">
                     <div>
-                        <span>추천 코스</span>
-                        <h2>{theme.title} 코스 5개</h2>
+                        <span>인기순</span>
+                        <h2>서울 인기 테마 코스 {visibleCourses.length}개</h2>
                     </div>
-                    <p>원하는 코스를 선택하면 장소와 이동 동선을 자세히 볼 수 있어요</p>
+                    <p>저장 횟수가 같으면 기본 추천 순서로 보여드려요</p>
                 </div>
 
                 {bookmarkNotice && (
@@ -174,15 +242,15 @@ function ThemeCourseListPage() {
 
                 {missingPlaceNames.length > 0 && (
                     <p className="theme-course-bookmark-notice" role="status">
-                        DB에서 찾지 못한 장소 {missingPlaceNames.length}개는 임시 정보로 표시 중이에요.
+                        DB에서 찾지 못한 장소 {missingPlaceNames.length}개는 임시 정보로 표시 중이에요
                     </p>
                 )}
 
                 <section
                     className="course-result-list theme-course-result-list"
-                    aria-label={`${theme.title} 추천 코스 목록`}
+                    aria-label="인기 테마 추천 코스 목록"
                 >
-                    {courses.map((course, index) => (
+                    {visibleCourses.map((course, index) => (
                         <CourseRecommendationCard
                             key={course.courseId}
                             option={course}
@@ -190,7 +258,7 @@ function ThemeCourseListPage() {
                             fallbackImage={fallbackImages[index % fallbackImages.length]}
                             activeDayNo={activeDayByCourse[course.courseId] || course.days[0]?.dayNo || 1}
                             variant="theme"
-                            detailPath={`/courses/themes/${themeSlug}/${course.courseId}`}
+                            detailPath={`/courses/themes/${course.themeSlug}/${course.courseId}`}
                             isEstimatedTravelTime={false}
                             isBookmarked={bookmarks.isSaved(course.sourceCourseKey)}
                             isBookmarking={bookmarks.isBusy(course.sourceCourseKey)}
@@ -211,4 +279,4 @@ function ThemeCourseListPage() {
     );
 }
 
-export default ThemeCourseListPage;
+export default PopularThemeCoursePage;

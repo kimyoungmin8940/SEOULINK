@@ -212,7 +212,9 @@ function RecommendSection() {
         ? '취향 검사로 추천받은 최신 코스 4개를 확인해보세요.'
         : '지금 가장 많은 관심을 받고 있는 테마 코스를 만나보세요';
     // 추천 이력이 있으면 지금까지 추천받은 코스 전체 목록으로 이동합니다.
-    const moreLink = hasMyRecommendedCourses ? '/courses/recommendations' : '/courses/themes';
+    const moreLink = hasMyRecommendedCourses
+        ? '/courses/recommendations'
+        : '/courses/themes/popular';
 
     return (
         <section className="section">

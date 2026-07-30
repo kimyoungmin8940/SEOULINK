@@ -19,6 +19,7 @@ import CourseRecommendPage from '../pages/course/CourseRecommendPage';
 import CourseListPage from '../pages/course/CourseListPage';
 import CourseDetailPage from '../pages/course/CourseDetailPage';
 import ThemeCourseAllPage from '../pages/course/ThemeCourseAllPage';
+import PopularThemeCoursePage from '../pages/course/PopularThemeCoursePage';
 import ThemeCourseListPage from '../pages/course/ThemeCourseListPage';
 
 import MapCourseBuilderPage from '../pages/map/MapCourseBuilderPage';
@@ -142,6 +143,7 @@ function Router() {
         '/courses/list': <CourseListPage />,
         '/courses/recommendations': <CourseListPage />,
         '/courses/themes': <ThemeCourseAllPage />,
+        '/courses/themes/popular': <PopularThemeCoursePage />,
 
         '/map-course': <MapCourseBuilderPage />,
 
