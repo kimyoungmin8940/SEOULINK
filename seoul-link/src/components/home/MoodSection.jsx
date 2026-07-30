@@ -199,7 +199,7 @@ function MoodSection() {
                             <Palette className="mood-heading-icon" size={21} strokeWidth={2.2} />
                             <h2>지금 이 순간, 어떤 서울이 끌리시나요?</h2>
                         </div>
-                        <p>원하는 분위기를 선택하면 테마별 추천 코스를 볼 수 있어요.</p>
+                        <p>원하는 분위기를 선택하면 테마별 추천 코스를 볼 수 있어요</p>
                     </div>
 
                     <a className="mood-more-btn" href="/courses/themes">
