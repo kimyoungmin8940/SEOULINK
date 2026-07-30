@@ -18,6 +18,7 @@ import SurveyResultPage from '../pages/survey/SurveyResultPage';
 import CourseRecommendPage from '../pages/course/CourseRecommendPage';
 import CourseListPage from '../pages/course/CourseListPage';
 import CourseDetailPage from '../pages/course/CourseDetailPage';
+import ThemeCourseAllPage from '../pages/course/ThemeCourseAllPage';
 import ThemeCourseListPage from '../pages/course/ThemeCourseListPage';
 
 import MapCourseBuilderPage from '../pages/map/MapCourseBuilderPage';
@@ -140,7 +141,7 @@ function Router() {
         '/courses': <CourseRecommendPage />,
         '/courses/list': <CourseListPage />,
         '/courses/recommendations': <CourseListPage />,
-        '/courses/themes': <CourseListPage />,
+        '/courses/themes': <ThemeCourseAllPage />,
 
         '/map-course': <MapCourseBuilderPage />,
 

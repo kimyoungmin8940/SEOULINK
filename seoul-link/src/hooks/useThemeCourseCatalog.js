@@ -5,11 +5,15 @@ import {
     getThemeCoursePlaceNames,
     getThemeCourses,
     hydrateThemeCoursesWithPlaces,
+    themeCourses,
 } from '../data/themeCourseData';
 
 /** 테마 코스 구성에 PLACES의 최신 장소·좌표·사진 데이터를 결합합니다. */
 export default function useThemeCourseCatalog(themeSlug) {
-    const baseCourses = useMemo(() => getThemeCourses(themeSlug), [themeSlug]);
+    const baseCourses = useMemo(
+        () => (themeSlug === 'all' ? themeCourses : getThemeCourses(themeSlug)),
+        [themeSlug],
+    );
     const [courses, setCourses] = useState(baseCourses);
     const [status, setStatus] = useState(baseCourses.length ? 'loading' : 'not-found');
     const [error, setError] = useState(null);
