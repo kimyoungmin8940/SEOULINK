@@ -1748,7 +1748,6 @@ async function prepareVisibleRoutesBeforeDisplay(
     requestedDayNo,
     transportMode,
     shouldContinue = null,
-    includedOptionNos = null,
 ) {
     if (!responseData || !transportMode) {
         return {
@@ -1761,16 +1760,9 @@ async function prepareVisibleRoutesBeforeDisplay(
     let preparedResponse = responseData;
     let firstBuildError = '';
     let interrupted = false;
-    const includedOptionNoSet = Array.isArray(includedOptionNos)
-        ? new Set(includedOptionNos.map(Number).filter(Number.isFinite))
-        : null;
     const optionNos = (responseData.courseOptions || [])
         .map((option) => option?.optionNo)
-        .filter((optionNo) => optionNo != null)
-        .filter((optionNo) => (
-            !includedOptionNoSet
-            || includedOptionNoSet.has(Number(optionNo))
-        ));
+        .filter((optionNo) => optionNo != null);
 
     // 요청을 미리 전부 만들지 않고 옵션별로 하나씩 생성·병합한다.
     // 앞 옵션에서 실제 경로 보정으로 교체된 장소도 다음 옵션의 예약 장소에 즉시 반영된다.
@@ -2594,15 +2586,6 @@ function CourseRecommendPage() {
                     : null,
             );
 
-            const preparedResponse = preparedResult.response;
-
-            // 화면을 떠난 뒤에도 이미 시작한 실제 경로 조회 결과는
-            // 추천 이력에 반영해 메인·상세에서 예상값으로 되돌아가지 않게 합니다.
-            await syncRecommendationSnapshot(
-                preparedResponse,
-                profile.memberId,
-            );
-
             if (
                 !pageMountedRef.current
                 || dayRouteRequestRef.current?.token !== requestToken
@@ -2610,6 +2593,8 @@ function CourseRecommendPage() {
             ) {
                 return;
             }
+
+            const preparedResponse = preparedResult.response;
             const queuedDayNo = Number(queuedDayActivationRef.current);
             const shouldActivatePreparedDay = Number.isFinite(queuedDayNo)
                 && queuedDayNo === Number(availableDayNo);
@@ -2701,7 +2686,6 @@ function CourseRecommendPage() {
         activeRecommendationKey,
         nextRecommendation,
         previousRecommendation,
-        profile.memberId,
         recommendRequest,
         response,
         showingNextRecommendation,
@@ -3020,7 +3004,7 @@ function CourseRecommendPage() {
     const handleSaveSelected = async () => {
         if (isRecommendingAgain) return;
 
-        const initialSelectedCourses = saveRecommendationEntries.flatMap(({ key, entry }) => (
+        const selectedCourses = saveRecommendationEntries.flatMap(({ key, entry }) => (
             entry.response.courseOptions
                 .filter((option) => {
                     const selectionKey = getSaveSelectionKey(key, option.optionNo);
@@ -3028,14 +3012,13 @@ function CourseRecommendPage() {
                         && !savedCourseIdsBySelectionKey[selectionKey];
                 })
                 .map((option) => ({
-                    recommendationEntryKey: key,
                     selectionKey: getSaveSelectionKey(key, option.optionNo),
                     option,
                     entry,
                 }))
         ));
 
-        if (initialSelectedCourses.length === 0) {
+        if (selectedCourses.length === 0) {
             setNotice({
                 tone: 'info',
                 message: '저장할 코스를 한 개 이상 선택해주세요.',
@@ -3043,7 +3026,7 @@ function CourseRecommendPage() {
             return;
         }
 
-        if (initialSelectedCourses.some(({ entry }) => entry.source === 'preview')) {
+        if (selectedCourses.some(({ entry }) => entry.source === 'preview')) {
             setNotice({
                 tone: 'info',
                 message: '현재는 화면 미리보기입니다. 실제 추천 응답이 들어오면 선택한 코스를 저장할 수 있습니다.',
@@ -3062,166 +3045,10 @@ function CourseRecommendPage() {
 
         setIsSavingSelected(true);
         setLastSavedCourseIds([]);
-        setNotice({
-            tone: 'info',
-            message: transportMode === 'PUBLIC_TRANSIT'
-                ? '저장 전에 남은 대중교통 실제 경로를 확인하고 있어요.'
-                : '저장할 코스를 준비하고 있어요.',
-        });
-        foregroundRoutePriorityRef.current = true;
-
-        let selectedCourses = initialSelectedCourses;
+        setNotice(null);
 
         try {
-            // 진행 중이던 DAY 선조회는 현재 옵션까지만 마치고 저장 작업에 양보합니다.
-            const activeRouteRequest = dayRouteRequestRef.current;
-            if (activeRouteRequest) {
-                await activeRouteRequest.completion;
-            }
-
-            const latestCurrentResponse = responseRef.current || response;
-            const latestSaveEntries = saveRecommendationEntries.map(({ key, entry }) => ({
-                key,
-                entry: key === activeRecommendationKey
-                    ? { ...entry, response: latestCurrentResponse }
-                    : entry,
-            }));
-
-            selectedCourses = latestSaveEntries.flatMap(({ key, entry }) => (
-                entry.response.courseOptions
-                    .filter((option) => {
-                        const selectionKey = getSaveSelectionKey(key, option.optionNo);
-                        return selectedSaveCourseKeys.includes(selectionKey)
-                            && !savedCourseIdsBySelectionKey[selectionKey];
-                    })
-                    .map((option) => ({
-                        recommendationEntryKey: key,
-                        selectionKey: getSaveSelectionKey(key, option.optionNo),
-                        option,
-                        entry,
-                    }))
-            ));
-
-            const selectedByEntry = new Map();
-            selectedCourses.forEach((selectedCourse) => {
-                const group = selectedByEntry.get(
-                    selectedCourse.recommendationEntryKey,
-                ) || {
-                    entry: selectedCourse.entry,
-                    optionNos: [],
-                };
-                group.optionNos.push(selectedCourse.option.optionNo);
-                selectedByEntry.set(
-                    selectedCourse.recommendationEntryKey,
-                    group,
-                );
-            });
-
-            const preparedEntries = new Map();
-            for (const [entryKey, group] of selectedByEntry.entries()) {
-                const selectedTransportMode = resolveTransportMode(
-                    group.entry.response?.transportMode,
-                    group.entry.request?.transportMode,
-                    group.entry.source === 'preview'
-                        ? recommendationPreview.transportMode
-                        : null,
-                );
-                const selectedOptionNoSet = new Set(
-                    group.optionNos.map(Number),
-                );
-                const dayNos = [
-                    ...new Set(
-                        (group.entry.response.courseOptions || [])
-                            .filter((option) => selectedOptionNoSet.has(
-                                Number(option?.optionNo),
-                            ))
-                            .flatMap((option) => (option.days || []).map(
-                                (day) => Number(day?.dayNo),
-                            ))
-                            .filter(Number.isFinite),
-                    ),
-                ].sort((left, right) => left - right);
-
-                let preparedResponse = group.entry.response;
-                for (const dayNo of dayNos) {
-                    const hasUnresolvedSelectedRoute = (
-                        preparedResponse.courseOptions || []
-                    ).some((option) => (
-                        selectedOptionNoSet.has(Number(option?.optionNo))
-                        && (option.days || []).some((day) => (
-                            Number(day?.dayNo) === Number(dayNo)
-                            && !day?.routeDetailsAttempted
-                        ))
-                    ));
-                    if (!hasUnresolvedSelectedRoute) continue;
-
-                    const preparedResult = await prepareVisibleRoutesBeforeDisplay(
-                        preparedResponse,
-                        group.entry.request,
-                        dayNo,
-                        selectedTransportMode,
-                        null,
-                        group.optionNos,
-                    );
-                    preparedResponse = preparedResult.response;
-                }
-
-                await syncRecommendationSnapshot(
-                    preparedResponse,
-                    profile.memberId,
-                );
-                preparedEntries.set(entryKey, {
-                    ...group.entry,
-                    response: preparedResponse,
-                });
-            }
-
-            let updatedPreviousRecommendation = previousRecommendation;
-            let updatedNextRecommendation = nextRecommendation;
-            if (preparedEntries.has('previous')) {
-                updatedPreviousRecommendation = preparedEntries.get('previous');
-                setPreviousRecommendation(updatedPreviousRecommendation);
-            }
-            if (preparedEntries.has('next')) {
-                updatedNextRecommendation = preparedEntries.get('next');
-                setNextRecommendation(updatedNextRecommendation);
-            }
-
-            const activePreparedEntry = preparedEntries.get(
-                activeRecommendationKey,
-            );
-            if (activePreparedEntry) {
-                updateResponse(activePreparedEntry.response);
-                sessionStorage.setItem(
-                    COURSE_RECOMMEND_RESPONSE_KEY,
-                    JSON.stringify(activePreparedEntry.response),
-                );
-            }
-            persistRecommendationHistory(
-                updatedPreviousRecommendation,
-                updatedNextRecommendation,
-                showingNextRecommendation,
-            );
-
-            const preparedSelectedCourses = selectedCourses.map((selectedCourse) => {
-                const preparedEntry = preparedEntries.get(
-                    selectedCourse.recommendationEntryKey,
-                ) || selectedCourse.entry;
-                const preparedOption = (
-                    preparedEntry.response.courseOptions || []
-                ).find((option) => (
-                    Number(option?.optionNo)
-                    === Number(selectedCourse.option.optionNo)
-                )) || selectedCourse.option;
-
-                return {
-                    ...selectedCourse,
-                    entry: preparedEntry,
-                    option: preparedOption,
-                };
-            });
-
-            const requests = preparedSelectedCourses.map(({ option, entry }) => {
+            const requests = selectedCourses.map(({ option, entry }) => {
                 const selectedTransportMode = resolveTransportMode(
                     entry.response?.transportMode,
                     entry.request?.transportMode,
@@ -3239,7 +3066,7 @@ function CourseRecommendPage() {
             const savedCourses = await saveCourseRequests(requests);
 
             const savedIdsBySelectionKey = {};
-            preparedSelectedCourses.forEach(({ selectionKey, entry }, index) => {
+            selectedCourses.forEach(({ selectionKey, entry }, index) => {
                 const savedCourseId = savedCourses[index].courseId;
                 savedIdsBySelectionKey[selectionKey] = savedCourseId;
                 rememberCourseTravelCode(savedCourseId, getStoredTravelCode(entry.response));
@@ -3290,7 +3117,6 @@ function CourseRecommendPage() {
                 });
             }
         } finally {
-            foregroundRoutePriorityRef.current = false;
             setIsSavingSelected(false);
         }
     };

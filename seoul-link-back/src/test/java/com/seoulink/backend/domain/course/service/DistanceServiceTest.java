@@ -476,6 +476,51 @@ class DistanceServiceTest {
     }
 
     @Test
+    @DisplayName("첫 대중교통 구간이 40분을 초과해도 뒤 인접 구간을 모두 실제 조회한다")
+    void publicTransitContinuesAfterFortyMinuteLeg() {
+        OdsayClient odsayClient = mock(OdsayClient.class);
+        DistanceService serviceWithOdsay = new DistanceService(
+                null,
+                odsayClient,
+                new RoutePairCache(100, Duration.ofHours(1))
+        );
+        List<PlaceCandidateDto> candidates = List.of(
+                place(1L, "호텔", 37.5665, 126.9780),
+                place(2L, "첫 장소", 37.5796, 126.9770),
+                place(3L, "둘째 장소", 37.5700, 126.9997),
+                place(4L, "셋째 장소", 37.5610, 127.0100)
+        );
+
+        when(odsayClient.isConfigured()).thenReturn(true);
+        when(odsayClient.calculateRoute(
+                any(RouteCoordinate.class),
+                any(RouteCoordinate.class)
+        )).thenReturn(
+                new TransitRouteResult(18.2, 43.0, TransitPathType.SUBWAY),
+                new TransitRouteResult(1.3, 19.0, TransitPathType.BUS),
+                new TransitRouteResult(1.9, 21.0, TransitPathType.BUS_SUBWAY)
+        );
+
+        DistanceService.RouteMatrix matrix =
+                serviceWithOdsay.calculateRouteLegMatrix(
+                        candidates,
+                        TransportMode.PUBLIC_TRANSIT,
+                        List.of(0, 1, 2, 3)
+                );
+
+        assertFalse(matrix.isEstimated(0, 1));
+        assertFalse(matrix.isEstimated(1, 2));
+        assertFalse(matrix.isEstimated(2, 3));
+        assertEquals(43.0, matrix.getTravelTimeMinutes(0, 1), 0.000001);
+        assertEquals(19.0, matrix.getTravelTimeMinutes(1, 2), 0.000001);
+        assertEquals(21.0, matrix.getTravelTimeMinutes(2, 3), 0.000001);
+        verify(odsayClient, times(3)).calculateRoute(
+                any(RouteCoordinate.class),
+                any(RouteCoordinate.class)
+        );
+    }
+
+    @Test
     @DisplayName("대중교통 후보가 추가되어도 캐시에 있는 장소 쌍은 ODsay를 재호출하지 않는다")
     void publicTransitRequestsOnlyPairsMissingFromCache() {
         OdsayClient odsayClient = mock(OdsayClient.class);

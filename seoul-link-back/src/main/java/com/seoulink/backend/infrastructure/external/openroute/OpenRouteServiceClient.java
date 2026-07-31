@@ -37,26 +37,46 @@ public class OpenRouteServiceClient {
     private final RestClient restClient;
     private final String apiKey;
     private final int dailyCallBudget;
+    private final long minimumRequestIntervalMillis;
+    private final long rateLimitCooldownMillis;
 
     private LocalDate usageDate;
     private int reservedCalls;
-    private LocalDate blockedDate;
+    private LocalDate authenticationBlockedDate;
+    private long rateLimitedUntilMillis;
+    private long lastRequestStartedAtMillis;
 
     @Autowired
     public OpenRouteServiceClient(
             @Qualifier("openRouteServiceRestClient") RestClient restClient,
             @Value("${external.openroute.api-key:}") String apiKey,
             @Value("${external.openroute.daily-call-budget:450}")
-            int dailyCallBudget
+            int dailyCallBudget,
+            @Value("${external.openroute.minimum-request-interval-millis:1100}")
+            long minimumRequestIntervalMillis,
+            @Value("${external.openroute.rate-limit-cooldown-millis:3000}")
+            long rateLimitCooldownMillis
     ) {
         if (dailyCallBudget < 0) {
             throw new IllegalArgumentException(
                     "OpenRouteService 일일 호출 예산은 0 이상이어야 합니다."
             );
         }
+        if (minimumRequestIntervalMillis < 0L) {
+            throw new IllegalArgumentException(
+                    "OpenRouteService 최소 요청 간격은 0 이상이어야 합니다."
+            );
+        }
+        if (rateLimitCooldownMillis < 0L) {
+            throw new IllegalArgumentException(
+                    "OpenRouteService 호출 제한 대기시간은 0 이상이어야 합니다."
+            );
+        }
         this.restClient = restClient;
         this.apiKey = apiKey == null ? "" : apiKey.trim();
         this.dailyCallBudget = dailyCallBudget;
+        this.minimumRequestIntervalMillis = minimumRequestIntervalMillis;
+        this.rateLimitCooldownMillis = rateLimitCooldownMillis;
         this.usageDate = currentUsageDate();
     }
 
@@ -66,6 +86,15 @@ public class OpenRouteServiceClient {
             String apiKey
     ) {
         this(restClient, apiKey, 450);
+    }
+
+    /** 호출 예산을 직접 지정하는 기존 테스트용 호환 생성자이다. */
+    public OpenRouteServiceClient(
+            RestClient restClient,
+            String apiKey,
+            int dailyCallBudget
+    ) {
+        this(restClient, apiKey, dailyCallBudget, 0L, 0L);
     }
 
     /**
@@ -87,7 +116,7 @@ public class OpenRouteServiceClient {
             List<RouteCoordinate> coordinates
     ) {
         validateRequest(requestedProfile, coordinates);
-        reserveDailyCall();
+        reserveDailyCallAndAwaitSlot();
 
         // OpenRouteService 규격은 일반적인 위도·경도 표기와 반대로 [경도, 위도] 순서이다.
         List<List<Double>> locations = coordinates.stream()
@@ -115,14 +144,15 @@ public class OpenRouteServiceClient {
 
             return convertResponse(response, coordinates.size());
         } catch (RestClientResponseException exception) {
-            if (exception.getStatusCode().value() == 401
-                    || exception.getStatusCode().value() == 403
-                    || exception.getStatusCode().value() == 429) {
-                blockForToday();
+            int status = exception.getStatusCode().value();
+            if (status == 401 || status == 403) {
+                blockAuthenticationForToday(status);
+            } else if (status == 429) {
+                activateRateLimitCooldown(exception);
             }
             log.warn(
                     "OpenRouteService 응답 오류: status={}, body={}",
-                    exception.getStatusCode().value(),
+                    status,
                     abbreviate(exception.getResponseBodyAsString())
             );
             throw new IllegalStateException(
@@ -140,20 +170,50 @@ public class OpenRouteServiceClient {
 
     /**
      * 무료 Matrix 한도를 모두 쓰기 전에 서버 자체 예산에서 선차단한다.
-     * 인증·쿼터 오류가 한 번 발생한 날에는 다른 카드에서도 실패 요청을 반복하지 않는다.
+     * 도보·자동차 요청이 동시에 몰려 429가 발생하지 않도록 호출 시작 시각도 직렬로 조정한다.
      */
-    private synchronized void reserveDailyCall() {
+    private synchronized void reserveDailyCallAndAwaitSlot() {
         LocalDate today = currentUsageDate();
         resetDailyStateIfNeeded(today);
 
-        if (today.equals(blockedDate)
-                || reservedCalls >= dailyCallBudget) {
-            blockedDate = today;
+        if (today.equals(authenticationBlockedDate)) {
             throw new IllegalStateException(
-                    "서버에서 정한 OpenRouteService 일일 호출 예산에 도달했습니다."
+                    "OpenRouteService 인증 오류로 오늘 실제 경로 호출을 중단했습니다. "
+                            + "OPENROUTESERVICE_API_KEY를 확인해주세요."
             );
         }
+        if (reservedCalls >= dailyCallBudget) {
+            throw new IllegalStateException(
+                    "서버에서 정한 OpenRouteService 일일 호출 예산에 도달했습니다. "
+                            + "dailyCalls=" + reservedCalls + "/" + dailyCallBudget
+            );
+        }
+
+        while (true) {
+            long now = System.currentTimeMillis();
+            long earliestByInterval = lastRequestStartedAtMillis
+                    + minimumRequestIntervalMillis;
+            long earliestStart = Math.max(
+                    earliestByInterval,
+                    rateLimitedUntilMillis
+            );
+            long waitMillis = earliestStart - now;
+            if (waitMillis <= 0L) {
+                break;
+            }
+            try {
+                wait(waitMillis);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException(
+                        "OpenRouteService 호출 대기 중 요청이 중단되었습니다.",
+                        exception
+                );
+            }
+        }
+
         reservedCalls++;
+        lastRequestStartedAtMillis = System.currentTimeMillis();
         log.info(
                 "외부 경로 API 호출: provider=OpenRouteService, dailyCalls={}/{}, date={}",
                 reservedCalls,
@@ -162,17 +222,64 @@ public class OpenRouteServiceClient {
         );
     }
 
-    private synchronized void blockForToday() {
+    /** 401·403은 키 자체의 문제이므로 같은 날 반복 요청하지 않는다. */
+    private synchronized void blockAuthenticationForToday(int status) {
         LocalDate today = currentUsageDate();
         resetDailyStateIfNeeded(today);
-        blockedDate = today;
+        authenticationBlockedDate = today;
+        log.error(
+                "OpenRouteService 인증 오류로 오늘 실제 경로 호출을 중단합니다: status={}, date={}",
+                status,
+                today
+        );
+    }
+
+    /**
+     * 429는 일일 예산 소진으로 간주하지 않는다. Retry-After 또는 기본 대기시간 뒤
+     * 다음 요청부터 다시 시도해 순간 호출 제한이 도보·자동차 전체를 하루 동안 막지 않게 한다.
+     */
+    private synchronized void activateRateLimitCooldown(
+            RestClientResponseException exception
+    ) {
+        long cooldownMillis = resolveRateLimitCooldownMillis(exception);
+        long nextAllowedAt = System.currentTimeMillis() + cooldownMillis;
+        rateLimitedUntilMillis = Math.max(rateLimitedUntilMillis, nextAllowedAt);
+        log.warn(
+                "OpenRouteService 순간 호출 제한으로 잠시 대기합니다: cooldownMillis={}, dailyCalls={}/{}",
+                cooldownMillis,
+                reservedCalls,
+                dailyCallBudget
+        );
+    }
+
+    private long resolveRateLimitCooldownMillis(
+            RestClientResponseException exception
+    ) {
+        if (exception.getResponseHeaders() != null) {
+            String retryAfter = exception.getResponseHeaders().getFirst(
+                    HttpHeaders.RETRY_AFTER
+            );
+            if (retryAfter != null) {
+                try {
+                    long seconds = Long.parseLong(retryAfter.trim());
+                    if (seconds >= 0L) {
+                        return Math.max(rateLimitCooldownMillis, seconds * 1000L);
+                    }
+                } catch (NumberFormatException ignored) {
+                    // HTTP 날짜 형식은 기본 대기시간을 사용한다.
+                }
+            }
+        }
+        return rateLimitCooldownMillis;
     }
 
     private synchronized void resetDailyStateIfNeeded(LocalDate today) {
         if (!today.equals(usageDate)) {
             usageDate = today;
             reservedCalls = 0;
-            blockedDate = null;
+            authenticationBlockedDate = null;
+            rateLimitedUntilMillis = 0L;
+            lastRequestStartedAtMillis = 0L;
         }
     }
 

@@ -30,7 +30,6 @@ import java.util.Optional;
 public class DistanceService {
 
     private static final double EARTH_RADIUS_KM = 6371.0088;
-    private static final double PUBLIC_TRANSIT_ABSOLUTE_MAX_MINUTES = 40.0;
 
     private final RouteCalculatorFactory routeCalculatorFactory;
     private final RoutePairCache routePairCache;
@@ -262,16 +261,15 @@ public class DistanceService {
                     value.transitPathType();
 
             /*
-             * 실제 40분 초과 구간은 상위 보정 로직이 현재 도착 장소를
-             * 교체하거나 제거한 뒤 경로를 다시 계산한다. 이후 구간은 그때
-             * 달라지므로 지금 미리 호출하지 않아야 ODsay 호출을 낭비하지 않는다.
-             * API 실패로 남은 추정값은 실제 위반으로 단정하지 않고 계속 조회한다.
+             * 앞 구간이 실제 40분을 초과하더라도 현재 DAY의 뒤 인접 구간까지
+             * 모두 실제 조회한다. 40분 위반 장소를 교체하는 상위 보정 단계가
+             * 실행되더라도 변경되지 않은 장소 쌍은 RoutePairCache에서 재사용되므로
+             * 뒤 구간을 미리 확인해도 동일 쌍의 ODsay 호출이 중복되지 않는다.
+             *
+             * 여기서 중단하면 첫 40분 초과 구간 뒤의 모든 장소가 추정값으로
+             * 남아, 최종 폴백에서 현재 장소 구성을 유지할 때 실제 경로를 끝까지
+             * 표시할 수 없으므로 절대 조기 종료하지 않는다.
              */
-            if (!value.estimated()
-                    && value.travelTimeMinutes()
-                    > PUBLIC_TRANSIT_ABSOLUTE_MAX_MINUTES) {
-                break;
-            }
         }
 
         return new RouteMatrix(

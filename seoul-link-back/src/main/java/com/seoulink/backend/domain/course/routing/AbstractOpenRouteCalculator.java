@@ -136,12 +136,12 @@ abstract class AbstractOpenRouteCalculator implements RouteCalculator {
         return false;
     }
 
-    /** 인증·쿼터·요청 오류는 같은 날 다시 성공할 가능성이 낮으므로 즉시 추정값으로 전환한다. */
+    /** 429·5xx·통신 오류는 한 번 재시도하고, 인증 오류와 실제 일일 예산 소진은 즉시 추정값으로 전환한다. */
     private boolean isRetryable(RuntimeException exception) {
         for (Throwable current = exception; current != null; current = current.getCause()) {
             if (current instanceof RestClientResponseException responseException) {
                 int status = responseException.getStatusCode().value();
-                return status >= 500;
+                return status == 429 || status >= 500;
             }
 
             String message = current.getMessage();
@@ -149,10 +149,13 @@ abstract class AbstractOpenRouteCalculator implements RouteCalculator {
                 continue;
             }
             if (message.contains("일일 호출 예산")
+                    || message.contains("인증 오류")
                     || message.contains("HTTP 401")
-                    || message.contains("HTTP 403")
-                    || message.contains("HTTP 429")) {
+                    || message.contains("HTTP 403")) {
                 return false;
+            }
+            if (message.contains("HTTP 429")) {
+                return true;
             }
         }
 

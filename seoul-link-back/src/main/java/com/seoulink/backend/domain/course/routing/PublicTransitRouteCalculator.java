@@ -81,7 +81,6 @@ public class PublicTransitRouteCalculator implements RouteCalculator {
         TransitPathType[][] transitPathTypes = fallback.transitPathTypes();
         boolean apiAvailable = odsayClient != null
                 && odsayClient.isConfigured();
-        int consecutiveUnexpectedFailures = 0;
         if (!apiAvailable) {
             log.warn(
                     "ODsay API 키가 설정되지 않아 대중교통 구간을 추정값으로 표시합니다."
@@ -149,7 +148,6 @@ public class PublicTransitRouteCalculator implements RouteCalculator {
                     transitPathTypes[fromIndex][toIndex] =
                             result.transitPathType();
                     estimatedPairs[fromIndex][toIndex] = false;
-                    consecutiveUnexpectedFailures = 0;
                 } catch (OdsayApiException exception) {
                     if (exception.isPairSpecific()) {
                         applyWalkingRoute(
@@ -191,18 +189,14 @@ public class PublicTransitRouteCalculator implements RouteCalculator {
                         );
                     }
                 } catch (RuntimeException exception) {
-                    consecutiveUnexpectedFailures++;
                     log.warn(
-                            "ODsay 구간 호출 실패로 해당 구간은 추정값을 유지합니다: straightDistanceKm={}, consecutiveFailures={}, reason={}",
+                            "ODsay 구간 호출 실패로 해당 구간만 추정값을 유지하고 다음 구간은 계속 실제 조회합니다: straightDistanceKm={}, reason={}",
                             roundForLog(straightDistanceKm),
-                            consecutiveUnexpectedFailures,
                             exception.getMessage()
                     );
-                    // 한 구간의 네트워크 오류가 나머지 모든 정상 구간까지 막지 않도록
-                    // 다음 구간은 한 번 더 시도한다. 연속 두 번 실패할 때만 남은 요청을 중단한다.
-                    if (consecutiveUnexpectedFailures >= 2) {
-                        apiAvailable = false;
-                    }
+                    // 네트워크 오류나 특정 응답 파싱 실패가 연속되어도 남은 장소쌍을
+                    // 임의로 건너뛰지 않는다. 인증·쿼터·HTTP 차단처럼 명확한 전역
+                    // 오류만 위의 isHardGlobalFailure 분기에서 현재 요청을 중단한다.
                 }
             }
         }

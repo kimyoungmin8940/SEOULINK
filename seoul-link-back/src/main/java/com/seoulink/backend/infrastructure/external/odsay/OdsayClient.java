@@ -481,7 +481,12 @@ public class OdsayClient {
         if (response.result() == null
                 || response.result().path() == null
                 || response.result().path().isEmpty()) {
-            throw new IllegalStateException("ODsay 응답에 대중교통 경로가 없습니다.");
+            // 한 장소쌍에서 경로가 없다는 응답은 API 전체 장애가 아니다.
+            // 호출부가 이 구간만 도보/추정값으로 보완하고 다음 장소쌍은 계속 조회한다.
+            throw new OdsayApiException(
+                    "NO_ROUTE",
+                    "ODsay 응답에 대중교통 경로가 없습니다."
+            );
         }
 
         // 응답 배열 순서에 의존하지 않고 최단시간을 우선하며, 동률이면 더 짧은 경로를 고른다.
@@ -614,8 +619,10 @@ public class OdsayClient {
         /** 정류장·서비스지역·검색결과 문제는 다른 장소 쌍에서 재시도할 수 있다. */
         public boolean isPairSpecific() {
             return errorCode != null
-                    && List.of("3", "4", "5", "6", "-98", "-99")
-                    .contains(errorCode);
+                    && List.of(
+                            "3", "4", "5", "6",
+                            "-98", "-99", "NO_ROUTE"
+                    ).contains(errorCode);
         }
 
         private static String safeValue(String value) {
