@@ -37,12 +37,32 @@ const traitIconMap = {
     clock: CalendarDays,
 };
 
+// The five trait descriptions arrive joined by spaces; restore sentence punctuation for display.
+function formatTypeDescription(description) {
+    const normalizedDescription = String(description || '').trim();
+
+    if (!normalizedDescription) {
+        return '';
+    }
+
+    const punctuatedDescription = normalizedDescription.replace(
+        /(합니다|됩니다|습니다|입니다|이에요|예요|해요|돼요|세요|요)(?=\s|$)/g,
+        '$1.',
+    );
+
+    return /[.!?]$/.test(punctuatedDescription)
+        ? punctuatedDescription
+        : `${punctuatedDescription}.`;
+}
+
 function PreferenceResultPage({
     result,
     onRecommend,
     onRestart,
     isRecommending = false,
     recommendError = '',
+    showRecommendActions = true,
+    recommendRequiresLogin = false,
 }) {
     const resultPageRef = useRef(null);
     const traits = getCodeTraits(result.travelCode);
@@ -118,7 +138,7 @@ function PreferenceResultPage({
                         <div className="preference-hero-note">
                             <div className="preference-hero-copy">
                                 <h3>{result.travelTitle}</h3>
-                                <p>{result.description}</p>
+                                <p>{formatTypeDescription(result.description)}</p>
                             </div>
                         </div>
                     </article>
@@ -222,24 +242,38 @@ function PreferenceResultPage({
                         </div>
                     </article>
 
-                    <article className="preference-card recommendation-cta-card">
-                        <div>
-                            <p className="page-kicker">NEXT STEP</p>
-                            <h2>이제 맞춤 코스를 추천받아보세요!</h2>
-                            <p>취향 코드와 장소 태그를 바탕으로 서울 여행 코스를 준비해드릴게요</p>
-                        </div>
+                    {showRecommendActions && (
+                        <article className="preference-card recommendation-cta-card">
+                            <div>
+                                <p className="page-kicker">NEXT STEP</p>
+                                <h2>
+                                    {recommendRequiresLogin
+                                        ? '로그인 후 맞춤 코스를 추천받아보세요!'
+                                        : '이제 맞춤 코스를 추천받아보세요!'}
+                                </h2>
+                                <p>
+                                    {recommendRequiresLogin
+                                        ? '취향 검사 결과는 확인할 수 있지만, 코스 추천은 로그인 후 이용할 수 있어요.'
+                                        : '취향 코드와 장소 태그를 바탕으로 서울 여행 코스를 준비해드릴게요'}
+                                </p>
+                            </div>
 
-                        <button
-                            className="recommend-primary-button"
-                            type="button"
-                            onClick={handleRecommend}
-                            disabled={isRecommending}
-                        >
-                            <Sparkles size={20} strokeWidth={2.2} />
-                            {isRecommending ? '맞춤 코스 준비 중...' : '맞춤 코스 추천하기'}
-                            <ArrowRight size={19} strokeWidth={2.4} />
-                        </button>
-                    </article>
+                            <button
+                                className="recommend-primary-button"
+                                type="button"
+                                onClick={handleRecommend}
+                                disabled={isRecommending}
+                            >
+                                <Sparkles size={20} strokeWidth={2.2} />
+                                {isRecommending
+                                    ? '맞춤 코스 준비 중...'
+                                    : recommendRequiresLogin
+                                      ? '로그인하고 추천받기'
+                                      : '맞춤 코스 추천하기'}
+                                <ArrowRight size={19} strokeWidth={2.4} />
+                            </button>
+                        </article>
+                    )}
                 </section>
 
                 {recommendError && (
@@ -257,16 +291,22 @@ function PreferenceResultPage({
                         <Download size={18} strokeWidth={2.1} />
                         결과 저장하기
                     </button>
-                    <button
-                        className="preference-solid-button"
-                        type="button"
-                        onClick={handleRecommend}
-                        disabled={isRecommending}
-                    >
-                        <Sparkles size={18} strokeWidth={2.1} />
-                        {isRecommending ? '맞춤 코스 준비 중...' : '맞춤 코스 추천하기'}
-                        <ArrowRight size={18} strokeWidth={2.3} />
-                    </button>
+                    {showRecommendActions && (
+                        <button
+                            className="preference-solid-button"
+                            type="button"
+                            onClick={handleRecommend}
+                            disabled={isRecommending}
+                        >
+                            <Sparkles size={18} strokeWidth={2.1} />
+                            {isRecommending
+                                ? '맞춤 코스 준비 중...'
+                                : recommendRequiresLogin
+                                  ? '로그인하고 추천받기'
+                                  : '맞춤 코스 추천하기'}
+                            <ArrowRight size={18} strokeWidth={2.3} />
+                        </button>
+                    )}
                 </section>
             </main>
         </div>

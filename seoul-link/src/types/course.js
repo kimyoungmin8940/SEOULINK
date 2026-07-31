@@ -53,6 +53,7 @@
  * @property {?string} themeHotelStayYn
  * @property {number} visitOrder
  * @property {?string} memo
+ * @property {?string=} databaseDescription PLACES.DESCRIPTION에서 가져온 장소 설명
  * @property {?string} visitTime
  * @property {number} expectedVisitMinutes
  * @property {number} distanceFromPreviousKm
@@ -221,7 +222,8 @@
  * @typedef {Object} CourseSavePlace
  * @property {number} placeId
  * @property {string=} category 같은 숙소의 날짜별 반복 저장을 판별할 장소 카테고리
- * @property {string} visitDate
+ * @property {number=} dayNo 날짜가 없는 THEME 코스의 일차 번호
+ * @property {string=} visitDate THEME 이외 코스의 YYYY-MM-DD 방문 날짜
  * @property {number} visitOrder
  * @property {?string} visitTime HH:mm
  * @property {number} expectedVisitMinutes
@@ -240,7 +242,8 @@
  * @property {string=} description
  * @property {string=} travelCode
  * @property {TransportMode} transportMode 추천 계산·저장 검증에 사용하며 SURVEY 조회는 연결된 설문값을 사용
- * @property {'CUSTOM'|'SURVEY'|'CHATBOT'=} courseType
+ * @property {'CUSTOM'|'SURVEY'|'CHATBOT'|'THEME'=} courseType
+ * @property {string} [sourceCourseKey] 테마 원본 코스 식별키
  * @property {string=} region
  * @property {boolean=} publicCourse
  * @property {CourseSavePlace[]} places

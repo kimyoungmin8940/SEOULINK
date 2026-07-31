@@ -31,7 +31,7 @@ import java.util.Set;
 public class CourseSaveService {
 
     private static final Set<String> ALLOWED_COURSE_TYPES =
-            Set.of("CUSTOM", "SURVEY", "CHATBOT");
+            Set.of("CUSTOM", "SURVEY", "CHATBOT", "THEME");
     private static final int MAX_BATCH_COURSE_COUNT = 3;
 
     private final TravelCourseRepository travelCourseRepository;
@@ -122,6 +122,34 @@ public class CourseSaveService {
             ValidatedCourse validated,
             boolean markAsSaved
     ) {
+        // SOURCE_COURSE_KEY는 테마 코스 전용이다. 설문 추천 이력은 항상 null로
+        // 저장해 테마 북마크용 중복 키가 추천 코스 저장을 막지 않게 한다.
+        String sourceCourseKey = "THEME".equals(validated.courseType())
+                ? trimToNull(request.getSourceCourseKey())
+                : null;
+
+        if ("THEME".equals(validated.courseType())) {
+            TravelCourse existingThemeCourse = travelCourseRepository
+                    .findByMemberIdAndSourceCourseKey(
+                            request.getMemberId(),
+                            sourceCourseKey
+                    )
+                    .orElse(null);
+
+            if (existingThemeCourse != null) {
+                if (existingThemeCourse.isSaved()) {
+                    throw new IllegalArgumentException("이미 저장한 테마 코스입니다.");
+                }
+
+                return refreshExistingHistoryCourse(
+                        existingThemeCourse,
+                        request,
+                        validated,
+                        true
+                );
+            }
+        }
+
         CourseSaveResponse targetedCourse = refreshTargetedHistoryCourse(
                 request,
                 validated,
@@ -129,6 +157,14 @@ public class CourseSaveService {
         );
         if (targetedCourse != null) {
             return targetedCourse;
+        }
+
+        if (markAsSaved
+                && "SURVEY".equals(validated.courseType())
+                && request.getCourseId() == null) {
+            throw new IllegalArgumentException(
+                    "저장할 추천 코스의 정확한 courseId가 필요합니다."
+            );
         }
 
         CourseSaveResponse existingCourse = findExistingSurveyCourse(
@@ -151,6 +187,7 @@ public class CourseSaveService {
                         .description(trimToNull(request.getDescription()))
                         .travelCode(validated.travelCode())
                         .courseType(validated.courseType())
+                        .sourceCourseKey(sourceCourseKey)
                         .region(trimToNull(request.getRegion()))
                         .publicStatus(Boolean.TRUE.equals(request.getPublicCourse()) ? "Y" : "N")
                         .viewCount(0L)
@@ -168,7 +205,7 @@ public class CourseSaveService {
 
         List<CourseDetail> details = buildDetails(
                 savedCourse.getCourseId(),
-                validated.places()
+                validated
         );
         courseDetailRepository.saveAll(details);
 
@@ -325,7 +362,7 @@ public class CourseSaveService {
 
         List<CourseDetail> updatedDetails = buildDetails(
                 course.getCourseId(),
-                validated.places()
+                validated
         );
         courseDetailRepository.saveAll(updatedDetails);
 
@@ -360,20 +397,26 @@ public class CourseSaveService {
     /** 추천 장소 스냅샷을 COURSE_DETAILS 엔티티로 변환한다. */
     private List<CourseDetail> buildDetails(
             Long courseId,
-            List<CourseSavePlaceDto> places
+            ValidatedCourse validated
     ) {
-        Map<LocalDate, Integer> dayNumbers = createDayNumbers(places);
+        boolean themeCourse = "THEME".equals(validated.courseType());
+        List<CourseSavePlaceDto> places = validated.places();
+        Map<LocalDate, Integer> dayNumbers = themeCourse
+                ? Map.of()
+                : createDayNumbers(places);
 
         // 거리·시간·경로 종류는 해당 장소로 들어오는 이전 구간 값이다.
         return places.stream()
                 .map(place -> CourseDetail.builder()
                         .courseId(courseId)
                         .placeId(place.getPlaceId())
-                        .dayNo(dayNumbers.get(place.getVisitDate()))
+                        .dayNo(themeCourse
+                                ? place.getDayNo()
+                                : dayNumbers.get(place.getVisitDate()))
                         .placeOrder(place.getVisitOrder())
                         .visitTime(trimToNull(place.getVisitTime()))
                         .stayMinutes(normalizedStayMinutes(place))
-                        .visitDate(place.getVisitDate())
+                        .visitDate(themeCourse ? null : place.getVisitDate())
                         .distanceFromPreviousKm(round(
                                 place.getDistanceFromPreviousKm(),
                                 3
@@ -401,7 +444,9 @@ public class CourseSaveService {
                 .title(course.getTitle())
                 .transportMode(validated.transportMode())
                 .placeCount(details.size())
-                .dayCount(createDayNumbers(validated.places()).size())
+                .dayCount("THEME".equals(validated.courseType())
+                        ? countThemeDays(validated.places())
+                        : createDayNumbers(validated.places()).size())
                 .totalDistanceKm(totals.distanceKm())
                 .totalTravelTimeMinutes(totals.travelMinutes())
                 .totalVisitTimeMinutes(totals.visitMinutes())
@@ -518,6 +563,30 @@ public class CourseSaveService {
                     "설문 추천 코스는 설문 결과 ID가 필요합니다."
             );
         }
+
+        String sourceCourseKey =
+                trimToNull(request.getSourceCourseKey());
+
+        if ("THEME".equals(courseType)
+                && sourceCourseKey == null) {
+            throw new IllegalArgumentException(
+                    "테마 코스는 원본 코스 키가 필요합니다."
+            );
+        }
+
+        if (!"THEME".equals(courseType)
+                && sourceCourseKey != null) {
+            throw new IllegalArgumentException(
+                    "원본 코스 키는 테마 코스에만 사용할 수 있습니다."
+            );
+        }
+
+        if (sourceCourseKey != null
+                && sourceCourseKey.length() > 50) {
+            throw new IllegalArgumentException(
+                    "원본 코스 키는 50자를 초과할 수 없습니다."
+            );
+        }
         String travelCode = normalizeTravelCode(request.getTravelCode());
         TransportMode transportMode = requireTransportMode(
                 request.getTransportMode()
@@ -530,29 +599,44 @@ public class CourseSaveService {
 
         List<CourseSavePlaceDto> sortedPlaces = new ArrayList<>(places);
         Map<Long, CourseSavePlaceDto> firstPlaceById = new LinkedHashMap<>();
-        Map<Long, Set<LocalDate>> visitDatesByPlaceId = new LinkedHashMap<>();
+        boolean themeCourse = "THEME".equals(courseType);
+        Map<Long, Set<Object>> scheduleDaysByPlaceId = new LinkedHashMap<>();
         for (CourseSavePlaceDto place : sortedPlaces) {
-            validatePlace(place);
+            validatePlace(place, themeCourse);
             CourseSavePlaceDto previous =
                     firstPlaceById.putIfAbsent(place.getPlaceId(), place);
-            Set<LocalDate> usedDates = visitDatesByPlaceId.computeIfAbsent(
+            Set<Object> usedDays = scheduleDaysByPlaceId.computeIfAbsent(
                     place.getPlaceId(),
                     ignored -> new HashSet<>()
             );
-            boolean newVisitDate = usedDates.add(place.getVisitDate());
+            boolean newScheduleDay = usedDays.add(scheduleDayKey(
+                    place,
+                    themeCourse
+            ));
             if (previous != null
-                    && (!newVisitDate
-                    || !isRepeatedHotelOnAnotherDate(previous, place))) {
+                    && (!newScheduleDay
+                    || !isRepeatedHotelOnAnotherDay(
+                            previous,
+                            place,
+                            themeCourse
+                    ))) {
                 throw new IllegalArgumentException(
                         "동일한 장소를 코스에 중복 저장할 수 없습니다. placeId="
                                 + place.getPlaceId()
                 );
             }
         }
-        sortedPlaces.sort(Comparator
-                .comparing(CourseSavePlaceDto::getVisitDate)
-                .thenComparing(CourseSavePlaceDto::getVisitOrder));
-        validateSequentialOrders(sortedPlaces);
+        if (themeCourse) {
+            sortedPlaces.sort(Comparator
+                    .comparing(CourseSavePlaceDto::getDayNo)
+                    .thenComparing(CourseSavePlaceDto::getVisitOrder));
+            validateSequentialThemeDays(sortedPlaces);
+        } else {
+            sortedPlaces.sort(Comparator
+                    .comparing(CourseSavePlaceDto::getVisitDate)
+                    .thenComparing(CourseSavePlaceDto::getVisitOrder));
+        }
+        validateSequentialOrders(sortedPlaces, themeCourse);
         validateTransitPathTypes(sortedPlaces, transportMode);
 
         return new ValidatedCourse(
@@ -568,13 +652,23 @@ public class CourseSaveService {
      * 2일 이상 일정의 같은 숙소만 서로 다른 날짜에 반복 저장할 수 있도록 예외 처리한다.
      * 같은 날짜 중복 또는 HOTEL이 아닌 일반 장소 중복은 기존처럼 거부한다.
      */
-    private boolean isRepeatedHotelOnAnotherDate(
+    private boolean isRepeatedHotelOnAnotherDay(
             CourseSavePlaceDto previous,
-            CourseSavePlaceDto current
+            CourseSavePlaceDto current,
+            boolean themeCourse
     ) {
         return isHotel(previous.getCategory())
                 && isHotel(current.getCategory())
-                && !previous.getVisitDate().equals(current.getVisitDate());
+                && !scheduleDayKey(previous, themeCourse).equals(
+                        scheduleDayKey(current, themeCourse)
+                );
+    }
+
+    private Object scheduleDayKey(
+            CourseSavePlaceDto place,
+            boolean themeCourse
+    ) {
+        return themeCourse ? place.getDayNo() : place.getVisitDate();
     }
 
     private boolean isHotel(String category) {
@@ -597,12 +691,21 @@ public class CourseSaveService {
     }
 
     /** 상세 장소 한 건의 필수값과 음수가 될 수 없는 계산값을 검증한다. */
-    private void validatePlace(CourseSavePlaceDto place) {
+    private void validatePlace(
+            CourseSavePlaceDto place,
+            boolean themeCourse
+    ) {
         if (place == null) {
             throw new IllegalArgumentException("저장할 장소는 null일 수 없습니다.");
         }
         validatePositiveId(place.getPlaceId(), "장소 ID");
-        if (place.getVisitDate() == null) {
+        if (themeCourse
+                && (place.getDayNo() == null || place.getDayNo() < 1)) {
+            throw new IllegalArgumentException(
+                    "테마 코스 장소의 dayNo는 1 이상이어야 합니다."
+            );
+        }
+        if (!themeCourse && place.getVisitDate() == null) {
             throw new IllegalArgumentException("장소 방문 날짜는 필수입니다.");
         }
         if (place.getVisitOrder() == null || place.getVisitOrder() < 1) {
@@ -628,13 +731,17 @@ public class CourseSaveService {
     }
 
     /** 각 날짜의 방문 순서가 반드시 1부터 시작해 중간 번호 없이 이어지는지 확인한다. */
-    private void validateSequentialOrders(List<CourseSavePlaceDto> places) {
-        LocalDate currentDate = null;
+    private void validateSequentialOrders(
+            List<CourseSavePlaceDto> places,
+            boolean themeCourse
+    ) {
+        Object currentDay = null;
         int expectedOrder = 1;
 
         for (CourseSavePlaceDto place : places) {
-            if (!place.getVisitDate().equals(currentDate)) {
-                currentDate = place.getVisitDate();
+            Object scheduleDay = scheduleDayKey(place, themeCourse);
+            if (!scheduleDay.equals(currentDay)) {
+                currentDay = scheduleDay;
                 expectedOrder = 1;
             }
             if (place.getVisitOrder() != expectedOrder) {
@@ -646,6 +753,25 @@ public class CourseSaveService {
         }
     }
 
+    private void validateSequentialThemeDays(
+            List<CourseSavePlaceDto> places
+    ) {
+        int expectedDayNo = 1;
+        Integer previousDayNo = null;
+        for (CourseSavePlaceDto place : places) {
+            if (place.getDayNo().equals(previousDayNo)) {
+                continue;
+            }
+            if (!place.getDayNo().equals(expectedDayNo)) {
+                throw new IllegalArgumentException(
+                        "테마 코스 dayNo는 1부터 빈 번호 없이 이어져야 합니다."
+                );
+            }
+            previousDayNo = place.getDayNo();
+            expectedDayNo++;
+        }
+    }
+
     /**
      * DAY 2 이후 숙소 출발 구간은 첫 일반 장소에 귀속해 저장할 수 있게 하고,
      * 그 외 첫 장소와 도보·자동차 코스에는 경로 종류가 잘못 저장되지 않게 한다.
@@ -654,14 +780,17 @@ public class CourseSaveService {
             List<CourseSavePlaceDto> places,
             TransportMode transportMode
     ) {
-        Set<LocalDate> datesStartingFromPreviousHotel =
-                findDatesStartingFromPreviousHotel(places);
+        boolean themeCourse = places.stream()
+                .allMatch(place -> place.getVisitDate() == null);
+        Set<LocalDate> datesStartingFromPreviousHotel = themeCourse
+                ? Set.of()
+                : findDatesStartingFromPreviousHotel(places);
 
         for (CourseSavePlaceDto place : places) {
             TransitPathType transitPathType = place.getTransitPathType();
             boolean firstPlace = place.getVisitOrder() == 1;
-            boolean startsFromPreviousHotel =
-                    datesStartingFromPreviousHotel.contains(
+            boolean startsFromPreviousHotel = !themeCourse
+                    && datesStartingFromPreviousHotel.contains(
                             place.getVisitDate()
                     );
 
@@ -737,6 +866,13 @@ public class CourseSaveService {
         return dayNumbers;
     }
 
+    private int countThemeDays(List<CourseSavePlaceDto> places) {
+        return (int) places.stream()
+                .map(CourseSavePlaceDto::getDayNo)
+                .distinct()
+                .count();
+    }
+
     /** 코스 유형을 대문자로 통일하고 허용된 생성 출처인지 확인한다. */
     private String normalizeCourseType(String value) {
         String normalized = trimToNull(value);
@@ -747,7 +883,7 @@ public class CourseSaveService {
         normalized = normalized.toUpperCase(Locale.ROOT);
         if (!ALLOWED_COURSE_TYPES.contains(normalized)) {
             throw new IllegalArgumentException(
-                    "코스 유형은 CUSTOM, SURVEY, CHATBOT 중 하나여야 합니다."
+                    "코스 유형은 CUSTOM, SURVEY, CHATBOT, THEME 중 하나여야 합니다."
             );
         }
         return normalized;

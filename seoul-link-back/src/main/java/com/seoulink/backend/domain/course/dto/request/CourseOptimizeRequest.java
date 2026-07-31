@@ -46,7 +46,7 @@ public class CourseOptimizeRequest {
      * 최종 폴백 요청에서만 false로 전달한다.
      */
     @Builder.Default
-    private boolean enforcePublicTransitLimit = true;
+    private Boolean enforcePublicTransitLimit = Boolean.TRUE;
 
     // 실제 코스에 배치할 장소 목록이며, 각 장소 내부에 전용 대체 후보를 포함한다.
     @Builder.Default

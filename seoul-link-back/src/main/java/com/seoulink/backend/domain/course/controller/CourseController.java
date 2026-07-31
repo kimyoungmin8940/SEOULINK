@@ -5,6 +5,7 @@ import com.seoulink.backend.domain.course.dto.request.CourseDraftRefreshRequest;
 import com.seoulink.backend.domain.course.dto.request.CourseOptimizeRequest;
 import com.seoulink.backend.domain.course.dto.request.CourseRecommendRequest;
 import com.seoulink.backend.domain.course.dto.request.CourseSaveRequest;
+import com.seoulink.backend.domain.course.dto.request.CourseUpdateRequest;
 import com.seoulink.backend.domain.course.dto.response.CourseBatchSaveResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseDetailResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseDraftResponse;
@@ -14,6 +15,8 @@ import com.seoulink.backend.domain.course.dto.response.CourseRecommendResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseRecommendationResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseSaveResponse;
 import com.seoulink.backend.domain.course.exception.PublicTransitMinimumPlaceException;
+import com.seoulink.backend.domain.course.dto.response.ThemeCourseBookmarkResponse;
+import com.seoulink.backend.domain.course.dto.response.ThemeCoursePopularityResponse;
 import com.seoulink.backend.domain.course.service.CourseDraftService;
 import com.seoulink.backend.domain.course.service.CourseOptimizationService;
 import com.seoulink.backend.domain.course.service.CourseRecommendationHistoryService;
@@ -27,8 +30,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -185,6 +190,84 @@ public class CourseController {
             @RequestParam Long memberId
     ) {
         return courseService.getRecommendedCourses(memberId);
+    }
+
+    /** 로그인 여부와 관계없이 원본 테마 코스별 저장 횟수를 조회한다. */
+    @GetMapping("/themes/popularity")
+    public List<ThemeCoursePopularityResponse> getThemeCoursePopularity() {
+        return courseService.getThemeCoursePopularity();
+    }
+
+    @GetMapping("/members/{memberId}/saved")
+    public List<CourseRecommendationResponse> getSavedRecommendedCourses(
+            @PathVariable Long memberId
+    ) {
+        return courseService.getSavedMemberCourses(memberId);
+    }
+
+    @GetMapping("/members/{memberId}/custom")
+    public List<CourseRecommendationResponse> getCustomCourses(
+            @PathVariable Long memberId
+    ) {
+        return courseService.getMemberCoursesByType(memberId, "CUSTOM");
+    }
+
+    @PutMapping("/{courseId}")
+    public CourseRecommendationResponse updateCustomCourse(
+            @PathVariable Long courseId,
+            @RequestParam Long memberId,
+            @RequestBody CourseUpdateRequest request
+    ) {
+        return courseService.updateMemberCustomCourse(courseId, memberId, request);
+    }
+
+    @DeleteMapping("/{courseId}")
+    public ResponseEntity<Void> deleteCustomCourse(
+            @PathVariable Long courseId,
+            @RequestParam Long memberId
+    ) {
+        courseService.deleteMemberCourse(courseId, memberId, "CUSTOM");
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/{courseId}/saved")
+    public ResponseEntity<Void> removeSavedRecommendedCourse(
+            @PathVariable Long courseId,
+            @RequestParam Long memberId
+    ) {
+        courseService.removeSavedRecommendedCourse(courseId, memberId);
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * 회원이 특정 테마 코스를 저장했는지 확인한다.
+     *
+     * <p>로그인 연동 전에는 회원 ID를 쿼리 파라미터로 전달한다.
+     * JWT 인증이 연결되면 memberId는 로그인 정보에서 가져오도록 변경한다.</p>
+     */
+    @GetMapping("/theme-bookmarks/status")
+    public ThemeCourseBookmarkResponse
+    getThemeCourseBookmarkStatus(
+            @RequestParam Long memberId,
+            @RequestParam String sourceCourseKey
+    ) {
+        return courseService.getThemeCourseBookmarkStatus(
+                memberId,
+                sourceCourseKey
+        );
+    }
+
+    /** 회원이 저장한 테마 코스 북마크를 삭제한다. */
+    @DeleteMapping("/theme-bookmarks")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteThemeCourseBookmark(
+            @RequestParam Long memberId,
+            @RequestParam String sourceCourseKey
+    ) {
+        courseService.deleteThemeCourseBookmark(
+                memberId,
+                sourceCourseKey
+        );
     }
 
     /**

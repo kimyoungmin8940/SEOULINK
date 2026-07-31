@@ -1,0 +1,7 @@
+/* 고객센터 소개 영역과 FAQ 사이 간격만 조정합니다. */
+.service-info-page .support-hero { padding-bottom: 20px; }
+.service-info-page .support-faq { margin-top: 18px; }
+
+@media (max-width: 760px) {
+  .service-info-page .support-faq { margin-top: 16px; }
+}

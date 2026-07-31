@@ -1,12 +1,93 @@
 package com.seoulink.backend.domain.chatbot.service;
 
+import com.seoulink.backend.domain.chatbot.dto.request.ChatbotRequest;
+import com.seoulink.backend.domain.chatbot.entity.ChatbotHistory;
+import com.seoulink.backend.domain.payment.entity.Payment;
+import com.seoulink.backend.domain.chatbot.repository.ChatbotHistoryRepository;
+import com.seoulink.backend.domain.member.repository.MemberRepository;
+import com.seoulink.backend.domain.payment.repository.PaymentRepository;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
 /**
- * 챗봇 사용 가능 여부 확인, 질문·응답 저장, 여행 정보 조합 등
- * 챗봇 기능의 전체 흐름을 관리하는 서비스이다.
- *
- * <p>외부 AI API 호출 자체는 {@code OpenAiChatbotService}에 위임하고,
- * 이 클래스는 회원·결제·이력과 관련된 비즈니스 규칙을 담당한다.</p>
+ * AI 답변을 생성한 뒤 질문·답변·세션 ID를 함께 이력으로 저장한다.
+ * 세션 ID를 보존해야 프론트엔드가 여러 메시지를 최근 대화 한 항목으로 묶을 수 있다.
+ */
+@Service
+/**
+ * 도메인 규칙과 트랜잭션을 처리하는 서비스입니다.
  */
 public class ChatbotService {
-    // TODO: 담당 기능의 요구사항과 API 명세가 확정되면 구현한다.
+
+    private final ChatbotHistoryRepository chatbotHistoryRepository;
+    private final PaymentRepository paymentRepository;
+    private final MemberRepository memberRepository;
+    private final OpenAiChatbotService openAiChatbotService;
+
+    public ChatbotService(
+            ChatbotHistoryRepository chatbotHistoryRepository,
+            PaymentRepository paymentRepository,
+            MemberRepository memberRepository,
+            OpenAiChatbotService openAiChatbotService
+    ) {
+        this.chatbotHistoryRepository = chatbotHistoryRepository;
+        this.paymentRepository = paymentRepository;
+        this.memberRepository = memberRepository;
+        this.openAiChatbotService = openAiChatbotService;
+    }
+
+    @Transactional
+    public ChatbotHistory ask(ChatbotRequest request) {
+        validateMemberExists(request.getMemberId());
+
+        // 기간권은 남은 횟수가 아니라 결제 완료 상태와 만료 시각으로 사용 가능 여부를 판단한다.
+        Payment payment = paymentRepository
+                .findFirstByMemberIdAndPaymentStatusAndExpiredAtAfterOrderByPaidAtDesc(
+                        request.getMemberId(),
+                        "PAID",
+                        LocalDateTime.now()
+                )
+                .orElseThrow(() -> new IllegalArgumentException("사용 가능한 챗봇 기간권이 필요합니다."));
+
+        List<ChatbotHistory> previousConversation = chatbotHistoryRepository
+                .findByMemberIdAndConversationIdOrderByCreatedAtAsc(
+                        request.getMemberId(),
+                        request.getConversationId()
+                );
+
+        OpenAiChatbotService.ChatbotRecommendation recommendation =
+                openAiChatbotService.generateCourseRecommendation(request, previousConversation);
+
+
+        ChatbotHistory history = new ChatbotHistory();
+        history.setMemberId(request.getMemberId());
+        history.setPaymentId(payment.getPaymentId());
+        history.setConversationId(request.getConversationId());
+        history.setQuestion(request.getQuestion());
+        history.setTravelConcept(request.getTravelConcept());
+        history.setAnswer(recommendation.answer());
+        history.setCourseSummary(recommendation.courseSummary());
+
+        return chatbotHistoryRepository.save(history);
+    }
+
+    // 최근 생성 순서로 회원의 챗봇 대화 이력을 조회해 화면에 전달한다.
+    public List<ChatbotHistory> getHistories(Long memberId) {
+        return chatbotHistoryRepository.findByMemberIdOrderByCreatedAtDesc(memberId);
+    }
+
+    @Transactional
+    public void deleteConversation(Long memberId, String conversationId) {
+        chatbotHistoryRepository.deleteByMemberIdAndConversationId(memberId, conversationId);
+    }
+
+    // 결제 이용권과 대화 이력이 존재하지 않는 회원에게 연결되지 않도록 먼저 검증한다.
+    private void validateMemberExists(Long memberId) {
+        if (!memberRepository.existsById(memberId)) {
+            throw new IllegalArgumentException("회원 정보를 찾을 수 없습니다.");
+        }
+    }
 }

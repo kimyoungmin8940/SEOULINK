@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import com.seoulink.backend.domain.survey.dto.request.GuestSurveySubmitRequest;
+import com.seoulink.backend.domain.survey.dto.request.GuestSurveyClaimRequest;
 import com.seoulink.backend.domain.survey.dto.response.GuestSurveySubmitResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -56,6 +57,18 @@ public class SurveyController {
         return ResponseEntity
                 .status(HttpStatus.CREATED)
                 .body(response);
+    }
+
+    @PostMapping("/claim")
+    public ResponseEntity<SurveyResultResponse> claimGuestSurvey(
+            @Valid @RequestBody GuestSurveyClaimRequest request
+    ) {
+        return ResponseEntity.ok(
+                surveyService.claimGuestSurvey(
+                        request.guestToken(),
+                        request.memberId()
+                )
+        );
     }
 
     @GetMapping("/{surveyId}/result")

@@ -1,0 +1,12 @@
+/* 후기 화면의 주요 행동 버튼과 선택 카테고리를 메인 CTA와 같은 기본 파란색으로 통일한다. */
+.primary-action,
+.composer-footer > button,
+.review-category-tabs button.active{
+  background:var(--primary-blue);
+}
+
+.primary-action:hover,
+.composer-footer > button:hover,
+.review-category-tabs button.active:hover{
+  background:var(--primary-blue-dark);
+}

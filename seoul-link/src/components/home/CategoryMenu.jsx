@@ -15,7 +15,7 @@ const iconProps = {
 };
 
 // 궁궐/문화 카테고리 아이콘
-function PalaceIcon() {
+export function PalaceIcon() {
     return (
         <svg {...iconProps}>
             <defs>
@@ -41,7 +41,7 @@ function PalaceIcon() {
 }
 
 // 자연/한강 카테고리 아이콘
-function NatureIcon() {
+export function NatureIcon() {
     return (
         <svg {...iconProps}>
             <defs>
@@ -65,7 +65,7 @@ function NatureIcon() {
 }
 
 // 데이트 카테고리 아이콘
-function DateIcon() {
+export function DateIcon() {
     return (
         <svg {...iconProps}>
             <defs>
@@ -82,7 +82,7 @@ function DateIcon() {
 }
 
 // 맛집 탐방 카테고리 아이콘
-function FoodIcon() {
+export function FoodIcon() {
     return (
         <svg {...iconProps}>
             <defs>
@@ -109,7 +109,7 @@ function FoodIcon() {
 }
 
 // 카페 투어 카테고리 아이콘
-function CafeIcon() {
+export function CafeIcon() {
     return (
         <svg {...iconProps}>
             <defs>
@@ -131,7 +131,7 @@ function CafeIcon() {
 }
 
 // 쇼핑/핫플 카테고리 아이콘
-function ShoppingIcon() {
+export function ShoppingIcon() {
     return (
         <svg {...iconProps}>
             <defs>
@@ -150,7 +150,7 @@ function ShoppingIcon() {
 }
 
 // 야경 카테고리 아이콘
-function NightIcon() {
+export function NightIcon() {
     return (
         <svg {...iconProps}>
             <defs>
@@ -169,9 +169,9 @@ function NightIcon() {
 
 // 지도 카테고리 아이콘
 // 전체 카테고리를 포함한 지도 코스 고르기 기능과 연결됨
-function MapIcon() {
+export function MapCategoryIcon({ className, ...svgProps }) {
     return (
-        <svg {...iconProps}>
+        <svg {...iconProps} className={className} {...svgProps}>
             <defs>
                 <linearGradient id="map-left" x1="8" y1="11" x2="25" y2="55" gradientUnits="userSpaceOnUse">
                     <stop stopColor="#75D8F2" />
@@ -193,7 +193,7 @@ function MapIcon() {
 }
 
 // 숙소 카테고리 아이콘
-function StayIcon() {
+export function StayIcon() {
     return (
         <svg {...iconProps}>
             <defs>
@@ -221,7 +221,7 @@ function StayIcon() {
 // href: 지도 코스 고르기 페이지로 이동하면서, category 쿼리로 필터를 전달
 // requiresLogin: 지도 코스 고르기는 개인 기능이므로 전부 로그인 필요
 const categories = [
-    { Icon: MapIcon, title: '지도', type: 'map', href: '/map-course', requiresLogin: true },
+    { Icon: MapCategoryIcon, title: '지도', type: 'map', href: '/map-course', requiresLogin: true },
     { Icon: PalaceIcon, title: '궁궐 · 문화', type: 'palace', href: '/map-course?category=palace-culture', requiresLogin: true },
     { Icon: NatureIcon, title: '자연 · 한강', type: 'nature', href: '/map-course?category=nature-hangang', requiresLogin: true },
     { Icon: DateIcon, title: '데이트', type: 'date', href: '/map-course?category=date', requiresLogin: true },

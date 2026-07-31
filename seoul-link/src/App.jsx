@@ -1,9 +1,4 @@
-// App.css에서 전체 스타일 묶음(styles/index.css)을 불러옴
-// 이 프로젝트는 컴포넌트별 CSS 파일을 styles 폴더에 나누고,
-// App.css -> styles/index.css 순서로 한 번에 import하는 구조
 import './App.css';
-
-// 실제 페이지 이동 구조는 routes/Router.jsx에서 관리
 import Router from './routes/Router';
 import PhotoFilterDefinitions from './components/common/PhotoFilterDefinitions';
 
@@ -17,6 +12,7 @@ function App() {
             <Router />
         </>
     );
+  return <Router />;
 }
 
 export default App;

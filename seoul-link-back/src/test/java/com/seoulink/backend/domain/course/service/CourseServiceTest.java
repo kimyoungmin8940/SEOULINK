@@ -7,6 +7,7 @@ import com.seoulink.backend.domain.course.entity.TravelCourse;
 import com.seoulink.backend.domain.course.model.TransportMode;
 import com.seoulink.backend.domain.course.model.TransitPathType;
 import com.seoulink.backend.domain.course.repository.CourseDetailRepository;
+import com.seoulink.backend.domain.course.repository.ThemeCoursePopularityProjection;
 import com.seoulink.backend.domain.course.repository.TravelCourseRepository;
 import com.seoulink.backend.domain.place.entity.Place;
 import com.seoulink.backend.domain.place.repository.PlaceRepository;
@@ -31,6 +32,8 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /** 저장 엔티티가 상세 응답과 목록 카드 응답으로 올바르게 변환되는지 검증한다. */
@@ -67,6 +70,29 @@ class CourseServiceTest {
                 travelSurveyRepository,
                 placeRecommendationService
         );
+    }
+
+    @Test
+    @DisplayName("원본 테마 코스별 저장 횟수를 인기순으로 반환한다")
+    void getThemeCoursePopularity() {
+        ThemeCoursePopularityProjection sunset =
+                mock(ThemeCoursePopularityProjection.class);
+        ThemeCoursePopularityProjection hanok =
+                mock(ThemeCoursePopularityProjection.class);
+        when(sunset.getSourceCourseKey()).thenReturn("SUNSET_1401");
+        when(sunset.getSaveCount()).thenReturn(8L);
+        when(hanok.getSourceCourseKey()).thenReturn("HANOK_PHOTO_1201");
+        when(hanok.getSaveCount()).thenReturn(5L);
+        when(travelCourseRepository.findThemeCoursePopularity())
+                .thenReturn(List.of(sunset, hanok));
+
+        var response = courseService.getThemeCoursePopularity();
+
+        assertEquals(2, response.size());
+        assertEquals("SUNSET_1401", response.get(0).sourceCourseKey());
+        assertEquals(8L, response.get(0).saveCount());
+        assertEquals("HANOK_PHOTO_1201", response.get(1).sourceCourseKey());
+        assertEquals(5L, response.get(1).saveCount());
     }
 
     @Test
@@ -311,7 +337,10 @@ class CourseServiceTest {
         );
 
         when(travelCourseRepository
-                .findByMemberIdAndCourseTypeOrderByCreatedAtDesc(1L, "SURVEY"))
+                .findByMemberIdAndCourseTypeOrderByCreatedAtDesc(
+                        1L,
+                        "SURVEY"
+                ))
                 .thenReturn(List.of(recommended));
         when(courseDetailRepository
                 .findByCourseIdOrderByDayNoAscPlaceOrderAsc(20L))
@@ -472,6 +501,46 @@ class CourseServiceTest {
         assertEquals("CUSTOM", response.get(0).getCourseType());
         assertEquals(LocalDate.of(2026, 7, 20), response.get(0).getStartDate());
         assertEquals(LocalDate.of(2026, 7, 20), response.get(0).getEndDate());
+    }
+
+    @Test
+    @DisplayName("저장한 설문 추천을 해제해도 추천 이력과 상세 장소는 삭제하지 않는다")
+    void unsaveSurveyCourseWithoutDeletingHistory() {
+        TravelCourse surveyCourse = TravelCourse.builder()
+                .courseId(50L)
+                .memberId(1L)
+                .title("저장한 설문 추천")
+                .courseType("SURVEY")
+                .savedStatus("Y")
+                .build();
+        when(travelCourseRepository.findByCourseIdAndMemberId(50L, 1L))
+                .thenReturn(Optional.of(surveyCourse));
+
+        courseService.removeSavedRecommendedCourse(50L, 1L);
+
+        assertEquals(false, surveyCourse.isSaved());
+        verify(courseDetailRepository, never()).deleteByCourseId(50L);
+        verify(travelCourseRepository, never()).delete(surveyCourse);
+    }
+
+    @Test
+    @DisplayName("저장한 테마 코스를 해제해도 이력 행과 상세 장소는 삭제하지 않는다")
+    void unsaveThemeCourseWithoutDeletingHistory() {
+        TravelCourse themeCourse = TravelCourse.builder()
+                .courseId(51L)
+                .memberId(1L)
+                .title("저장한 테마 코스")
+                .courseType("THEME")
+                .savedStatus("Y")
+                .build();
+        when(travelCourseRepository.findByCourseIdAndMemberId(51L, 1L))
+                .thenReturn(Optional.of(themeCourse));
+
+        courseService.removeSavedRecommendedCourse(51L, 1L);
+
+        assertEquals(false, themeCourse.isSaved());
+        verify(courseDetailRepository, never()).deleteByCourseId(51L);
+        verify(travelCourseRepository, never()).delete(themeCourse);
     }
 
     @Test

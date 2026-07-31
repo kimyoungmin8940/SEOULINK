@@ -490,7 +490,7 @@ public class CourseOptimizationService {
             RouteMatrix routeMatrix;
             if (resolveActualRouteLegs
                     && transportMode == TransportMode.PUBLIC_TRANSIT
-                    && request.isEnforcePublicTransitLimit()) {
+                    && !Boolean.FALSE.equals(request.getEnforcePublicTransitLimit())) {
                 PublicTransitRouteRepair repair =
                         repairActualPublicTransitRoute(
                                 dailyCandidates,

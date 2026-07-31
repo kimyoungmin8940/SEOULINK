@@ -241,6 +241,7 @@
   overflow-wrap: break-word;
 }
 
+
 /* 소요 시간과 지역 정보를 가로로 배치 */
 .course-meta {
   display: flex;
@@ -325,4 +326,147 @@
   .course-img-wrap {
     height: 220px;
   }
+}
+
+/* 메인 추천 영역은 병합 전의 짧고 단정한 카드 비율을 사용한다. */
+.home .course-grid--home {
+  gap: clamp(22px, 1.6vw, 26px);
+}
+
+.home .course-card--home {
+  min-width: 0;
+  height: clamp(390px, 25.7vw, 405px);
+  display: flex;
+  flex-direction: column;
+  border-radius: 17px;
+}
+
+.home .course-card--home .course-img-wrap,
+.home .course-card--home .course-card-loading__image {
+  height: clamp(190px, 13.2vw, 205px);
+  flex: 0 0 clamp(190px, 13.2vw, 205px);
+}
+
+.home .course-card--home .course-info {
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 18px 17px;
+}
+
+.home .course-card--home .course-info h3 {
+  min-height: 1.45em;
+  max-height: 2.9em;
+  margin: 0 0 7px;
+  overflow: hidden;
+  font-size: clamp(16px, 1.02vw, 18px);
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.home .course-card--home .course-info p {
+  min-height: 0;
+  max-height: 4.65em;
+  margin: 0 0 12px;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: clamp(13px, 0.84vw, 15px);
+  line-height: 1.55;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+/* payment-chat.css의 전역 .course-meta가 메인 카드에 섞이지 않도록 복구한다. */
+.home .course-card--home .course-meta {
+  width: auto;
+  min-height: 0;
+  margin: auto 0 11px;
+  padding: 0;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  color: #627184;
+  font-size: clamp(12px, 0.76vw, 13px);
+}
+
+.home .course-card--home .course-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.home .course-card--home .tags {
+  min-height: 27px;
+  flex-wrap: nowrap;
+  gap: 7px;
+  overflow: hidden;
+}
+
+.home .course-card--home .tags span {
+  padding: 6px 9px;
+  font-size: clamp(11px, 0.72vw, 13px);
+  white-space: nowrap;
+}
+
+.home .course-card-heart {
+  position: absolute;
+  top: 12px;
+  right: 13px;
+  z-index: 2;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  pointer-events: none;
+}
+
+.home .course-card-heart svg {
+  fill: none;
+  stroke: currentColor;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.48));
+}
+
+.home .course-grid--home .course-card-loading__body {
+  padding: 17px 18px;
+}
+
+@media (max-width: 1100px) {
+  .home .course-card--home {
+    height: 400px;
+  }
+}
+
+@media (max-width: 720px) {
+  .home .course-card--home {
+    height: auto;
+    min-height: 390px;
+  }
+}
+
+
+/* 실제 장소 사진이 없을 때만 표시하는 대표 예시 사진 안내 */
+.course-card-example-image-label {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 3;
+  padding: 4px 8px;
+  border-radius: 7px;
+  background: rgba(24, 51, 74, 0.82);
+  color: #ffffff;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1.2;
+  pointer-events: none;
 }

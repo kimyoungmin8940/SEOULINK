@@ -110,7 +110,10 @@ class DistanceServiceTest {
                         TransportMode.WALKING
                 );
 
-        verify(apiClient).calculateMatrix(eq("foot-walking"), anyList());
+        verify(apiClient, times(2)).calculateMatrix(
+                eq("foot-walking"),
+                anyList()
+        );
         assertTrue(matrix.getDistanceKm(0, 1) > 0.0);
         assertEquals(
                 matrix.getDistanceKm(0, 1) / 4.5 * 60.0,
@@ -138,7 +141,7 @@ class DistanceServiceTest {
         service.calculateRouteMatrix(candidates, TransportMode.WALKING);
 
         assertEquals(0, cache.size());
-        verify(apiClient, times(2)).calculateMatrix(
+        verify(apiClient, times(4)).calculateMatrix(
                 eq("foot-walking"),
                 anyList()
         );
@@ -601,7 +604,7 @@ class DistanceServiceTest {
         assertFalse(matrix.estimatedTravelTimes());
         assertEquals(7.0, matrix.getTravelTimeMinutes(0, 1), 0.000001);
         assertEquals(TransitPathType.BUS, matrix.getTransitPathType(0, 1));
-        verify(odsayClient, times(1)).calculateRoute(
+        verify(odsayClient, times(2)).calculateRoute(
                 any(RouteCoordinate.class),
                 any(RouteCoordinate.class)
         );

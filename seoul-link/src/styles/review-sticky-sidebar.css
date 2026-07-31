@@ -1,0 +1,17 @@
+/* Keep the related discovery panels visible while the review feed scrolls. */
+.review-layout > .review-sidebar{
+  position:sticky;
+  top:104px;
+  align-self:start;
+  max-height:calc(100vh - 124px);
+  overflow-y:auto;
+  padding-right:3px;
+}
+
+.review-layout > .review-sidebar::-webkit-scrollbar{width:5px}
+.review-layout > .review-sidebar::-webkit-scrollbar-thumb{background:#c7d9ee;border-radius:99px}
+
+/* 작은 화면에서는 본문 너비를 우선해 고정 동작을 해제한다. */
+@media(max-width:980px){
+  .review-layout > .review-sidebar{position:static;max-height:none;overflow:visible}
+}

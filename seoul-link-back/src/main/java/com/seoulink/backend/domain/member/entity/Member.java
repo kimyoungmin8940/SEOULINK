@@ -1,14 +1,63 @@
 package com.seoulink.backend.domain.member.entity;
 
-/**
- * ERD의 {@code MEMBER} 테이블과 매핑될 회원 엔티티이다.
- *
- * <p>이메일, 암호화된 비밀번호, 이름, 닉네임, 연락처,
- * 소셜 로그인 정보, 회원 상태, 생성·수정 시각 등을 관리한다.</p>
- *
- * <p>구현 시 {@code @Entity}, {@code @Table}, 기본 키 전략과
- * 컬럼 길이·NULL·UNIQUE 제약조건을 ERD에 맞춰 지정한다.</p>
- */
+import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+import java.time.LocalDateTime;
+
+@Entity
+@Table(name = "MEMBER")
+@Getter
+@Setter
+@NoArgsConstructor
 public class Member {
-    // TODO: 담당 기능의 요구사항과 API 명세가 확정되면 구현한다.
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "MEMBER_ID")
+    private Long memberId;
+
+    @Column(name = "EMAIL", nullable = false, unique = true, length = 100)
+    private String email;
+
+    @Column(name = "PASSWORD", length = 255)
+    private String password;
+
+    @Column(name = "NAME", nullable = false, length = 50)
+    private String name;
+
+    @Column(name = "NICKNAME", unique = true, length = 50)
+    private String nickname;
+
+    @Column(name = "PHONE", length = 20)
+    private String phone;
+
+    @Column(name = "STATUS", nullable = false, length = 20)
+    private String status = "ACTIVE";
+
+    @Column(name = "LOGIN_TYPE", nullable = false, length = 20)
+    private String loginType = "LOCAL";
+
+    @Column(name = "SOCIAL_PROVIDER", length = 30)
+    private String socialProvider;
+
+    @Column(name = "SOCIAL_ID", length = 100)
+    private String socialId;
+
+    @Column(name = "CREATED_AT", nullable = false)
+    private LocalDateTime createdAt = LocalDateTime.now();
+
+    @Column(name = "UPDATED_AT", nullable = false)
+    private LocalDateTime updatedAt = LocalDateTime.now();
+
+    public Member(String email, String password, String name, String nickname) {
+        this.email = email;
+        this.password = password;
+        this.name = name;
+        this.nickname = nickname;
+        this.status = "ACTIVE";
+        this.loginType = "LOCAL";
+    }
 }

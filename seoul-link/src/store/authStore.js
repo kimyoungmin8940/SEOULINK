@@ -1,14 +1,37 @@
-// 로그인 토큰 저장/삭제를 한 곳에서 관리하는 간단한 저장소입니다.
-// Zustand 같은 상태관리 라이브러리를 쓰게 되면 이 파일을 교체하면 됩니다.
+const MEMBER_STORAGE_KEY = "member";
 
 export const authStore = {
-    getToken() {
-        return localStorage.getItem('accessToken');
+    getMember() {
+        const savedMember = localStorage.getItem(MEMBER_STORAGE_KEY);
+
+        if (!savedMember) {
+            return null;
+        }
+
+        try {
+            return JSON.parse(savedMember);
+        } catch {
+            localStorage.removeItem(MEMBER_STORAGE_KEY);
+            return null;
+        }
     },
-    setToken(token) {
-        localStorage.setItem('accessToken', token);
+
+    setMember(member) {
+        localStorage.setItem(
+            MEMBER_STORAGE_KEY,
+            JSON.stringify(member)
+        );
+
+        window.dispatchEvent(new Event("auth-changed"));
     },
-    clearToken() {
-        localStorage.removeItem('accessToken');
+
+    clearMember() {
+        localStorage.removeItem(MEMBER_STORAGE_KEY);
+        window.dispatchEvent(new Event("auth-changed"));
+    },
+
+    isLoggedIn() {
+        const member = this.getMember();
+        return Boolean(member?.memberId);
     },
 };

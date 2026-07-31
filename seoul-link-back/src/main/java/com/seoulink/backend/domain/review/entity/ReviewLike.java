@@ -1,12 +1,38 @@
 package com.seoulink.backend.domain.review.entity;
 
+import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+import java.time.LocalDateTime;
+
+@Entity
+@Table(name = "REVIEW_LIKE")
+@Getter
+@Setter
+@NoArgsConstructor
 /**
- * ERD의 {@code REVIEW_LIKE} 테이블과 매핑될 후기 좋아요 엔티티이다.
- *
- * <p>한 회원이 어떤 후기에 좋아요를 눌렀는지 기록한다.
- * 동일 회원이 같은 후기에 중복 좋아요를 저장하지 못하도록
- * {@code REVIEW_ID + MEMBER_ID} 조합에 UNIQUE 제약조건을 두는 것이 좋다.</p>
+ * 데이터베이스에 저장되는 도메인 엔티티입니다.
  */
 public class ReviewLike {
-    // TODO: 담당 기능의 요구사항과 API 명세가 확정되면 구현한다.
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "LIKE_ID")
+    private Long likeId;
+
+    @Column(name = "REVIEW_ID", nullable = false)
+    private Long reviewId;
+
+    @Column(name = "MEMBER_ID", nullable = false)
+    private Long memberId;
+
+    @Column(name = "CREATED_AT", nullable = false)
+    private LocalDateTime createdAt = LocalDateTime.now();
+
+    public ReviewLike(Long reviewId, Long memberId) {
+        this.reviewId = reviewId;
+        this.memberId = memberId;
+    }
 }

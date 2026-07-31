@@ -93,8 +93,8 @@
 
 /* 상단 코스 소개 */
 .course-detail-hero {
-  height: clamp(225px, 15vw, 245px);
-  min-height: 225px;
+  height: clamp(200px, 13.4vw, 220px);
+  min-height: 200px;
   position: relative;
   overflow: hidden;
   border: 1px solid rgba(214, 228, 241, 0.92);
@@ -112,6 +112,15 @@
   flex-direction: column;
   align-items: flex-start;
   justify-content: flex-start;
+}
+
+.course-detail-hero.is-meta-wrapped {
+  height: auto;
+  min-height: calc(clamp(200px, 13.4vw, 220px) + 24px);
+}
+
+.course-detail-hero.is-meta-wrapped .course-detail-hero-copy {
+  padding-bottom: 20px;
 }
 
 .course-detail-label-row {
@@ -754,6 +763,18 @@
 .course-detail-schedule-note svg {
   flex: 0 0 auto;
   color: #6da9d9;
+}
+
+.course-detail-schedule-note-copy {
+  min-width: 0;
+}
+
+.course-detail-schedule-note-first-line {
+  white-space: nowrap;
+}
+
+.course-detail-schedule-note-line {
+  display: block;
 }
 
 .course-detail-schedule-note.is-estimated {

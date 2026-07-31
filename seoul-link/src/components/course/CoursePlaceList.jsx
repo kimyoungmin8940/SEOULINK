@@ -34,6 +34,24 @@ function formatMinutes(value) {
     return restMinutes === 0 ? `${hours}시간` : `${hours}시간 ${restMinutes}분`;
 }
 
+
+function formatKoreanSubjectParticle(description) {
+    if (!description) return description;
+
+    const formattedDescription = description.replace(/은\(는\)/g, (particle, offset) => {
+        const previousCharacter = description.slice(0, offset).trim().at(-1);
+        const codePoint = previousCharacter?.charCodeAt(0);
+        const hasFinalConsonant = Number.isInteger(codePoint)
+            && codePoint >= 0xAC00
+            && codePoint <= 0xD7A3
+            && (codePoint - 0xAC00) % 28 !== 0;
+
+        return hasFinalConsonant ? '은' : '는';
+    });
+
+    return formattedDescription.replace(/\.+\s*$/, '');
+}
+
 /** 실제 사진이 없거나 깨지면 예시 이미지와 출처 안내를 함께 표시합니다. */
 function CoursePlaceImage({
     imageUrl,
@@ -93,6 +111,13 @@ function CoursePlaceList({ day, transportMode }) {
                         ? index + 1
                         : place.visitOrder ?? index + 1;
                 const isLast = index === places.length - 1;
+                const description = formatKoreanSubjectParticle(
+                    place.databaseDescription
+                    || place.memo
+                    || (hasScore
+                        ? `취향과 이동 동선을 반영한 추천 장소예요. 추천 점수 ${Math.round(score)}점`
+                        : '코스 이동 동선을 고려해 선택된 장소예요.'),
+                );
                 // 백엔드는 이전 장소→현재 장소의 이동 정보를 현재 장소에 함께 내려줍니다.
                 const legTransport = getTravelLegMeta(
                     transportMode,
@@ -144,10 +169,7 @@ function CoursePlaceList({ day, transportMode }) {
                                     </div>
 
                                     <p className="course-detail-place-description">
-                                        {place.memo
-                                            || (hasScore
-                                                ? `취향과 이동 동선을 반영한 추천 장소예요. 추천 점수 ${Math.round(score)}점`
-                                                : '코스 이동 동선을 고려해 선택된 장소예요.')}
+                                        {description}
                                     </p>
 
                                     {address && (

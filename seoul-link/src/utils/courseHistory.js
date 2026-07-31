@@ -136,8 +136,9 @@ export function normalizeRecommendedCourseList(
         const recommendationKey = String(
             course?.recommendationKey || '',
         ).trim();
+        const resultId = Number(course?.resultId);
         const identity = recommendationKey
-            ? `recommendation:${recommendationKey}`
+            ? `recommendation:${Number.isInteger(resultId) && resultId > 0 ? resultId : 'unknown'}:${recommendationKey}`
             : `course:${course.courseId}`;
 
         if (seenRecommendationKeys.has(identity)) {

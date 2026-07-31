@@ -35,6 +35,8 @@ public class CourseRecommendationResponse {
     @Builder.Default
     private List<String> coverImageUrls = new ArrayList<>();
     private String courseType;
+    private String region;
+    private String publicStatus;
     private TransportMode transportMode;
 
     @Builder.Default
@@ -53,6 +55,7 @@ public class CourseRecommendationResponse {
     private Integer totalVisitTimeMinutes;
     private Double totalCourseTimeMinutes;
     private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
 
     // 하트 도메인 연동 전에는 조회 서비스가 false로 채우는 임시 필드이다.
     private Boolean liked;

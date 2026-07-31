@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
     ArrowRight,
     BedDouble,
+    Bookmark,
     CalendarDays,
     Check,
     ChevronDown,
@@ -18,7 +19,9 @@ import {
     Utensils,
 } from 'lucide-react';
 
+import CourseImage from './CourseImage';
 import CourseTransportIcon from './CourseTransportIcon';
+import { getCourseFallbackImage } from '../../utils/courseImage';
 import { getTransportMeta, getTravelLegMeta } from '../../utils/courseTransport';
 
 const categoryMeta = {
@@ -131,6 +134,8 @@ function getCoverImageCandidates(option, places) {
     return candidates;
 }
 
+// DB에 남아 있는 images/... 형식의 예전 상대경로는 현재 서버에서 제공하지 않는다.
+// 브라우저가 현재 화면 경로 뒤에 붙여 요청하지 않도록, 실제로 제공 가능한 주소만 사용한다.
 function getAverageScore(places) {
     const scores = places
         .map((place) => Number(place.recommendationScore))
@@ -144,6 +149,14 @@ function getAverageScore(places) {
 }
 
 function getThemeTags(option, places) {
+    const explicitTags = Array.isArray(option.tags)
+        ? [...new Set(option.tags.filter(Boolean))]
+        : [];
+
+    if (explicitTags.length > 0) {
+        return explicitTags.slice(0, 4);
+    }
+
     const themeFields = [
         ['themePalaceCultureYn', '궁궐·문화'],
         ['themeNatureHangangYn', '자연·한강'],
@@ -217,7 +230,9 @@ function RouteStop({ place, hasPrevious }) {
 }
 
 /** 상세보기 버튼을 눌렀을 때 현재 일차의 이동·체류 정보를 펼쳐 보여줍니다. */
-function ExpandedSchedule({ days, transportMode }) {
+function ExpandedSchedule({ days, transportMode, isRouteDetailsLoading }) {
+    const transport = getTransportMeta(transportMode);
+
     return (
         <div className="course-result-expanded">
             {days.map((day) => {
@@ -244,13 +259,19 @@ function ExpandedSchedule({ days, transportMode }) {
                         <strong>{day.visitDate || '날짜 미정'}</strong>
                     </div>
 
-                    {routeDetailsUnavailable && (
+                    {isRouteDetailsLoading && (
+                        <p className="course-route-detail-state loading" role="status">
+                            실제 {transport?.label || '이동'} 경로를 확인하고 있어요.
+                        </p>
+                    )}
+                    {!isRouteDetailsLoading && routeDetailsUnavailable && (
                         <p className="course-route-detail-state unavailable" role="status">
                             {routeDetailsErrorMessage
                                 || '이동 경로를 일시적으로 확인할 수 없습니다. 현재는 예상 거리와 시간으로 표시합니다.'}
                         </p>
                     )}
-                    {!routeDetailsUnavailable
+                    {!isRouteDetailsLoading
+                        && !routeDetailsUnavailable
                         && day.routeDetailsAttempted
                         && hasEstimatedLeg
                         && (
@@ -335,21 +356,30 @@ function CourseRecommendationCard({
     option,
     transportMode,
     activeDayNo,
+    variant = 'recommendation',
+    detailPath = null,
     isEstimatedTravelTime,
+    isBookmarked: controlledIsBookmarked,
+    isBookmarking = false,
     isCompared,
     isSelectedForSave,
     isSelectionDisabled,
     isSaving,
     isSaved,
+    isRouteDetailsLoading,
     onToggleCompare,
     onToggleSaveSelection,
+    onToggleBookmark,
     onFocusOption,
     onActiveDayChange,
+    onRequestRouteDetails,
 }) {
     const days = useMemo(
         () => (Array.isArray(option.days) ? option.days : []),
         [option.days],
     );
+    // 북마크 API는 회원 기능 담당 범위이므로 연동 전까지 카드 안에서만 임시 토글합니다.
+    const [localIsBookmarked, setLocalIsBookmarked] = useState(false);
     const [isExpanded, setIsExpanded] = useState(false);
     const activeDay = days.find(
         (day) => Number(day.dayNo) === Number(activeDayNo),
@@ -368,23 +398,35 @@ function CourseRecommendationCard({
         () => days.flatMap((day) => (Array.isArray(day.places) ? day.places : [])),
         [days],
     );
-    const meta = optionMeta[option.optionType] || optionMeta.BALANCED;
+    const isThemeCourse = variant === 'theme';
+    const description = option.description
+        || '취향 결과와 장소 간 이동 거리를 반영해 만든 맞춤 코스예요.';
+    const displayDescription = isThemeCourse
+        ? description
+            .replace(/코스예요(?=\.|$)/g, '코스')
+            .replace(/즐길 수 있어요$/, '즐길 수 있는 코스')
+        : description;
+    const bookmarkActive = controlledIsBookmarked ?? localIsBookmarked;
+    const defaultMeta = optionMeta[option.optionType] || optionMeta.BALANCED;
+    const meta = isThemeCourse
+        ? {
+            badge: option.badge || 'THEME',
+            tone: option.tone || 'balanced',
+            shortLabel: option.optionName || '테마 추천',
+        }
+        : defaultMeta;
     const transport = getTransportMeta(transportMode);
     const coverImageCandidates = useMemo(
         () => getCoverImageCandidates(option, allPlaces),
         [allPlaces, option],
     );
-    const coverImageCandidatesKey = coverImageCandidates.join('\u001f');
-    const [failedCoverImages, setFailedCoverImages] = useState([]);
-
-    useEffect(() => {
-        setFailedCoverImages([]);
-    }, [coverImageCandidatesKey]);
-
-    const coverImage = coverImageCandidates.find(
-        (imageUrl) => !failedCoverImages.includes(imageUrl),
-    ) || null;
-    const hasCoverImage = Boolean(coverImage);
+    const coverFallbackImageUrl = useMemo(
+        () => option?.coverFallbackImageUrl
+            || getCourseFallbackImage(option, allPlaces),
+        [allPlaces, option],
+    );
+    const hasCoverImage = coverImageCandidates.length > 0
+        || Boolean(coverFallbackImageUrl);
     const score = getAverageScore(allPlaces);
     const tags = getThemeTags(option, allPlaces);
     const totalCourseTime = option.totalCourseTimeMinutes
@@ -432,33 +474,28 @@ function CourseRecommendationCard({
                         || `이동시간과 중복 제한을 만족하는 장소가 부족해 DAY ${activeDay.dayNo || 1}는 ${actualPlaceCount}곳으로 조정했어요.`
         : '';
 
+    const hotelNotice = days.length >= 2 && option?.hotelIncluded === false
+        ? option?.hotelNotice
+            || '숙소 도착 30분·다음 DAY 출발 20분 이내 조건을 만족하는 숙소가 없어 제외했어요. 숙소는 따로 확인해 주세요.'
+        : '';
+
     return (
         <article
-            className={`course-result-card ${meta.tone}${isExpanded ? ' expanded' : ''}`}
-            onMouseEnter={() => onFocusOption(option)}
-            onFocusCapture={() => onFocusOption(option)}
+            className={`course-result-card ${meta.tone}${isExpanded ? ' expanded' : ''}${isThemeCourse ? ' theme-course-card' : ''}`}
+            onMouseEnter={() => onFocusOption?.(option)}
+            onFocusCapture={() => onFocusOption?.(option)}
         >
             <div className="course-result-card-main">
                 <div className={`course-result-cover${hasCoverImage ? ' has-image' : ''}`}>
                     <span className="course-result-rank-badge">{meta.badge}</span>
-                    {hasCoverImage ? (
-                        <img
-                            src={coverImage}
-                            alt={`${option.title || option.optionName} 대표 이미지`}
-                            onError={() => {
-                                setFailedCoverImages((previous) => (
-                                    previous.includes(coverImage)
-                                        ? previous
-                                        : [...previous, coverImage]
-                                ));
-                            }}
-                        />
-                    ) : (
-                        <span className="course-result-cover-empty" aria-label="등록된 코스 사진 없음">
-                            <MapPinned size={30} strokeWidth={1.7} aria-hidden="true" />
-                            <small>사진 준비 중</small>
-                        </span>
-                    )}
+                    <CourseImage
+                        imageUrls={coverImageCandidates}
+                        fallbackImageUrl={coverFallbackImageUrl}
+                        alt={`${option.title || option.optionName} 대표 이미지`}
+                        fallbackLabel="예시 사진"
+                        fallbackLabelClassName="course-result-cover-example-label"
+                        emptyClassName="course-result-cover-empty"
+                    />
                     {hasCoverImage && (
                         <span className="course-result-cover-gradient" aria-hidden="true" />
                     )}
@@ -478,18 +515,32 @@ function CourseRecommendationCard({
                             </div>
                             <h2>{option.title || `${meta.shortLabel} 서울 맞춤 코스`}</h2>
                         </div>
+                        {isThemeCourse && (
+                            <button
+                                className={`course-result-bookmark-btn${bookmarkActive ? ' bookmarked' : ''}`}
+                                type="button"
+                                disabled={isBookmarking}
+                                aria-busy={isBookmarking}
+                                aria-label={bookmarkActive ? '저장 해제' : '코스 저장'}
+                                aria-pressed={bookmarkActive}
+                                title={bookmarkActive ? '저장 해제' : '코스 저장'}
+                                onClick={() => {
+                                    if (onToggleBookmark) {
+                                        onToggleBookmark(option);
+                                        return;
+                                    }
+
+                                    setLocalIsBookmarked((previous) => !previous);
+                                }}
+                            >
+                                <Bookmark size={20} strokeWidth={1.9} aria-hidden="true" />
+                            </button>
+                        )}
                     </div>
 
                     <p className="course-result-description">
-                        {option.description || '취향 결과와 장소 간 이동 거리를 반영해 만든 맞춤 코스예요.'}
+                        {displayDescription}
                     </p>
-
-                    {option.hotelNotice && (
-                        <p className="course-result-hotel-notice" role="status">
-                            <TriangleAlert size={14} aria-hidden="true" />
-                            <span>{option.hotelNotice}</span>
-                        </p>
-                    )}
 
                     <div className="course-result-meta">
                         <span><Clock3 size={15} aria-hidden="true" />{formatMinutes(displayCourseTime)}</span>
@@ -508,16 +559,30 @@ function CourseRecommendationCard({
                         {tags.map((tag) => <span key={tag}>{tag}</span>)}
                     </div>
 
-                    {score != null && (
+                    {!isThemeCourse && score != null && (
                         <div className="course-result-score">
                             <Sparkles size={15} strokeWidth={2.2} aria-hidden="true" />
                             추천 점수 <strong>{score}</strong>
                         </div>
                     )}
+
+                    {isThemeCourse && (
+                        <button
+                            className="theme-course-detail-button"
+                            type="button"
+                            onClick={() => {
+                                if (detailPath) window.location.assign(detailPath);
+                            }}
+                        >
+                            코스 상세보기
+                            <ArrowRight size={16} aria-hidden="true" />
+                        </button>
+                    )}
                 </div>
             </div>
 
-            <div className="course-result-route-row">
+            {!isThemeCourse && (
+                <div className="course-result-route-row">
                 <div className="course-result-route-content">
                     {days.length > 1 && (
                         <div className="course-result-day-tabs" aria-label="일차 선택">
@@ -531,13 +596,29 @@ function CourseRecommendationCard({
                                     type="button"
                                     key={`${day.dayNo}-${day.visitDate}`}
                                     onClick={() => {
-                                        onFocusOption(option);
-                                        onActiveDayChange(day.dayNo);
+                                        onFocusOption?.(option);
+                                        onActiveDayChange?.(day.dayNo);
+                                        if (isExpanded) {
+                                            onRequestRouteDetails?.(
+                                                option,
+                                                day.dayNo,
+                                            );
+                                        }
                                     }}
                                 >
                                     DAY {day.dayNo}
                                 </button>
                             ))}
+                        </div>
+                    )}
+
+                    {hotelNotice && (
+                        <div className="course-result-place-reduction-notice compact" role="status">
+                            <BedDouble size={15} aria-hidden="true" />
+                            <span>
+                                <strong>숙소가 제외되었어요</strong>
+                                <small>{hotelNotice}</small>
+                            </span>
                         </div>
                     )}
 
@@ -567,13 +648,24 @@ function CourseRecommendationCard({
                         className="course-result-detail-btn"
                         type="button"
                         aria-expanded={isExpanded}
+                        aria-busy={isRouteDetailsLoading}
                         onClick={() => {
                             const nextExpanded = !isExpanded;
                             setIsExpanded(nextExpanded);
-                            onFocusOption(option);
+                            onFocusOption?.(option);
+                            if (nextExpanded) {
+                                onRequestRouteDetails?.(
+                                    option,
+                                    activeDay.dayNo,
+                                );
+                            }
                         }}
                     >
-                        {isExpanded ? '일정 접기' : '코스 상세보기'}
+                        {isRouteDetailsLoading
+                            ? '교통편 확인 중'
+                            : isExpanded
+                                ? '일정 접기'
+                                : '코스 상세보기'}
                         {isExpanded
                             ? <ChevronUp size={16} aria-hidden="true" />
                             : <ChevronDown size={16} aria-hidden="true" />}
@@ -583,7 +675,7 @@ function CourseRecommendationCard({
                         className={`course-result-compare-btn${isCompared ? ' selected' : ''}`}
                         type="button"
                         aria-pressed={isCompared}
-                        onClick={() => onToggleCompare(option.optionNo)}
+                        onClick={() => onToggleCompare?.(option.optionNo)}
                     >
                         {isCompared ? <Check size={15} aria-hidden="true" /> : <Plus size={15} aria-hidden="true" />}
                         {isCompared ? (
@@ -600,7 +692,7 @@ function CourseRecommendationCard({
                         type="button"
                         disabled={isSelectionDisabled || isSaving || isSaved}
                         aria-pressed={isSelectedForSave || isSaved}
-                        onClick={() => onToggleSaveSelection(option.optionNo)}
+                        onClick={() => onToggleSaveSelection?.(option.optionNo)}
                     >
                         {isSelectedForSave || isSaved
                             ? <Check size={16} aria-hidden="true" />
@@ -620,12 +712,14 @@ function CourseRecommendationCard({
                                     : '저장 선택'}
                     </button>
                 </div>
-            </div>
+                </div>
+            )}
 
-            {isExpanded && (
+            {!isThemeCourse && isExpanded && (
                 <ExpandedSchedule
                     days={[activeDay]}
                     transportMode={transportMode}
+                    isRouteDetailsLoading={isRouteDetailsLoading}
                 />
             )}
         </article>

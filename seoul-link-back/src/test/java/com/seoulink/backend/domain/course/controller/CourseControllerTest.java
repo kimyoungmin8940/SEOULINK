@@ -1,5 +1,7 @@
 package com.seoulink.backend.domain.course.controller;
 
+import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
+import com.seoulink.backend.domain.course.dto.request.CourseRecommendRequest;
 import com.seoulink.backend.domain.course.dto.response.CourseBatchSaveResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseDetailResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseDayResponse;
@@ -32,6 +34,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -67,13 +70,27 @@ class CourseControllerTest {
         courseService = mock(CourseService.class);
 
         mockMvc = standaloneSetup(new CourseController(
-                        mock(CourseDraftService.class),
-                        optimizationService,
-                        courseRecommendationService,
-                        courseRecommendationHistoryService,
-                        courseSaveService,
-                        courseService
-                ))
+                mock(CourseDraftService.class),
+                optimizationService,
+                courseRecommendationService,
+                courseRecommendationHistoryService,
+                courseSaveService,
+                courseService
+        ))
+                .alwaysDo(print())
+                .alwaysDo(result -> {
+                    Throwable error = result.getResolvedException();
+
+                    while (error != null) {
+                        System.out.println(
+                                "[MOCKMVC CAUSE] "
+                                        + error.getClass().getName()
+                                        + ": "
+                                        + error.getMessage()
+                        );
+                        error = error.getCause();
+                    }
+                })
                 .build();
     }
 
@@ -201,7 +218,9 @@ class CourseControllerTest {
                 courseRecommendationHistoryService,
                 courseSaveService,
                 courseService
-        )).build();
+        ))
+                .alwaysDo(print())
+                .build();
 
         constraintMockMvc.perform(post("/api/courses/route-details")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -446,6 +465,16 @@ class CourseControllerTest {
     }
 
     @Test
+    @DisplayName("저장한 추천 코스 한 건만 저장 해제한다")
+    void removeSavedRecommendedCourse() throws Exception {
+        mockMvc.perform(delete("/api/courses/44/saved")
+                        .param("memberId", "1"))
+                .andExpect(status().isNoContent());
+
+        verify(courseService).removeSavedRecommendedCourse(44L, 1L);
+    }
+
+    @Test
     @DisplayName("최종 후보 풀을 받아 추천 코스 3개를 반환한다")
     void recommendCourse() throws Exception {
         CourseDayResponse day = CourseDayResponse.builder()
@@ -583,7 +612,10 @@ class CourseControllerTest {
                 .andExpect(jsonPath("$.courseOptions[0].days[0].places[0].visitTime")
                         .value("10:00"));
 
-        verify(courseRecommendationHistoryService).record(any(), any());
+        verify(courseRecommendationHistoryService).record(
+                any(CourseRecommendRequest.class),
+                any(CourseRecommendResponse.class)
+        );
     }
 
     private CourseOptionResponse option(

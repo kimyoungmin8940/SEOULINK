@@ -429,13 +429,13 @@
 
   /* hero 이미지 위에 얹히는 현재 메인페이지용 헤더 위치 */
   .simple-header {
-    padding: 0;
+    padding: 0 20px;
   }
 
   /* 오른쪽에서 열리는 사이드 메뉴 패널 */
   .side-menu {
     top: 94px;
-    right: 7.5vw;
+    right: 20px;
   }
 }
 

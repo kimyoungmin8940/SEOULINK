@@ -7,6 +7,8 @@ import SurveyFlowLayout from '../../components/survey/SurveyFlowLayout';
 import { storeCourseRecommendRequest } from '../../utils/courseRecommendationHandoff';
 import { getCurrentMemberId } from '../../utils/courseHistory';
 import PreferenceResultPage from '../PreferenceResultPage';
+import { isLoggedIn, requireLogin } from '../../utils/authGuard';
+import { clearSurveyFlowStorage, restartSurveyFlow } from '../../utils/surveyFlowStorage';
 
 const SURVEY_ID_STORAGE_KEY = 'seoulinkSurveyId';
 
@@ -28,6 +30,9 @@ function getCourseTransportMode(transportType) {
 }
 
 function SurveyResultPage() {
+    const resultSource = new URLSearchParams(window.location.search).get('source');
+    const isMyPageResultView = resultSource === 'mypage';
+    const loggedIn = isLoggedIn();
     const [result, setResult] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [errorMessage, setErrorMessage] = useState('');
@@ -85,6 +90,15 @@ function SurveyResultPage() {
 
     /** 설문 결과 → 날짜별 후보 초안 → 코스 최적화 화면의 입력값으로 연결합니다. */
     const handleRecommend = async () => {
+        if (isMyPageResultView) {
+            return;
+        }
+
+        if (!isLoggedIn()) {
+            requireLogin('맞춤 추천 코스는 로그인 후 이용할 수 있습니다.');
+            return;
+        }
+
         if (isPreparingCourse) {
             return;
         }
@@ -138,6 +152,12 @@ function SurveyResultPage() {
         }
     };
 
+    const handleRestart = () => restartSurveyFlow('/travel-info');
+
+    const handleRestartLink = () => {
+        clearSurveyFlowStorage();
+    };
+
     if (isLoading) {
         return (
             <SurveyFlowLayout currentStep={3}>
@@ -153,7 +173,11 @@ function SurveyResultPage() {
             <SurveyFlowLayout currentStep={3}>
                 <section className="survey-stage-card">
                     <p className="survey-question-error">{errorMessage}</p>
-                    <a className="survey-stage-primary-btn" href="/travel-info">
+                    <a
+                        className="survey-stage-primary-btn"
+                        href="/travel-info"
+                        onClick={handleRestartLink}
+                    >
                         취향 검사 다시 시작하기
                     </a>
                 </section>
@@ -166,9 +190,11 @@ function SurveyResultPage() {
             <PreferenceResultPage
                 result={result}
                 onRecommend={handleRecommend}
-                onRestart={() => window.location.assign('/travel-info')}
+                onRestart={handleRestart}
                 isRecommending={isPreparingCourse}
                 recommendError={courseErrorMessage}
+                showRecommendActions={!isMyPageResultView}
+                recommendRequiresLogin={!loggedIn}
             />
         </SurveyFlowLayout>
     );

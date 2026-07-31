@@ -62,6 +62,10 @@ public class TravelCourse {
     @Column(name = "COURSE_TYPE", nullable = false, length = 20)
     private String courseType = "CUSTOM";
 
+    // 프론트의 원본 테마 코스를 구분하는 키
+    @Column(name = "SOURCE_COURSE_KEY", length = 50)
+    private String sourceCourseKey;
+
     @Column(name = "REGION", length = 100)
     private String region;
 
@@ -113,6 +117,11 @@ public class TravelCourse {
         this.savedStatus = "Y";
     }
 
+    /** 저장 해제 시 추천 이력 행은 남기고 내 코스 포함 여부만 N으로 되돌린다. */
+    public void markUnsaved() {
+        this.savedStatus = "N";
+    }
+
     /**
      * 추천 화면에서 실제 경로 조회가 끝난 값을 같은 추천 이력 행에 반영한다.
      * 저장 여부는 호출 목적에 따라 유지하거나 Y로 전환한다.
@@ -145,5 +154,17 @@ public class TravelCourse {
     /** 내 코스 목록에 포함되는 저장 완료 행인지 반환한다. */
     public boolean isSaved() {
         return "Y".equalsIgnoreCase(savedStatus);
+    }
+
+    public void updateBasicInfo(
+            String title,
+            String description,
+            String region,
+            String publicStatus
+    ) {
+        this.title = title;
+        this.description = description;
+        this.region = region;
+        this.publicStatus = publicStatus;
     }
 }

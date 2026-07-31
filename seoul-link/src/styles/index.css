@@ -31,6 +31,7 @@
 @import './kakao-course-map.css';
 /* 사용자가 지금까지 추천받은 코스를 모아보는 전체 목록 화면 */
 @import './course-list.css';
+@import './theme-course-all.css';
 /* 로그인 회원이 저장한 전체 코스를 보여주는 마이페이지 목록 화면 */
 @import './mypage.css';
 @import './mood.css';
@@ -38,3 +39,13 @@
 @import './review.css';
 @import './cta.css';
 @import './footer.css';
+@import './service-info.css';
+@import './service-info-spacing.css';
+
+
+
+@import './payment-chat.css';
+@import './payment-history.css';
+@import './member-pages.css';
+
+@import './connected-pages.css';

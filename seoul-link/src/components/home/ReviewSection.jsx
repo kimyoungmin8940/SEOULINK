@@ -1,13 +1,69 @@
 // ReviewSection은 실제 여행자 후기 미리보기 영역
 // 현재는 화면 확인용 임시 후기 데이터를 사용하고 있음
 // API 응답 형태와 동일한 mockReviewListResponse.data를 사용하고 있음
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ChevronRight, Heart, MessageSquareText } from 'lucide-react';
 import { requireLogin } from '../../utils/authGuard';
+import { getReviews } from '../../api/reviewApi';
+import reviewAvatarMinmin from '../../assets/images/review-avatars/review-avatar-minmin.png';
+import reviewAvatarJaemin from '../../assets/images/review-avatars/review-avatar-jaemin.png';
+import reviewAvatarJiwoo from '../../assets/images/review-avatars/review-avatar-jiwoo.png';
+import reviewAvatarDoyoon from '../../assets/images/review-avatars/review-avatar-doyoon.png';
+import reviewAvatarSeoyeon from '../../assets/images/review-avatars/review-avatar-seoyeon.png';
+import reviewAvatarHyunwoo from '../../assets/images/review-avatars/review-avatar-hyunwoo.png';
+import reviewAvatarYerin from '../../assets/images/review-avatars/review-avatar-yerin.png';
 
 import { mockReviewListResponse } from '../../mocks/homeMockData';
 
-const reviews = mockReviewListResponse.data;
+const fallbackReviews = mockReviewListResponse.data;
+
+// 메인 후기 카드에는 외부 임시 아바타 대신 서울 여행 커뮤니티 톤의 캐릭터를 사용한다.
+const femaleReviewAvatars = [
+    reviewAvatarMinmin,
+    reviewAvatarJiwoo,
+    reviewAvatarSeoyeon,
+    reviewAvatarYerin,
+];
+const maleReviewAvatars = [
+    reviewAvatarJaemin,
+    reviewAvatarDoyoon,
+    reviewAvatarHyunwoo,
+];
+
+const femaleNames = new Set(['민민', '지우', '소라', '하늘', '서연', '예린', '소연', '민지', '지은', '수연', '유진', '하은', '다은', '채원']);
+const maleNames = new Set(['도윤', '재민', '현우', '민호', '용용', '민준', '서준', '지훈', '승현', '건우', '준혁', '태윤', '도현', '시우']);
+
+const getAvatarGender = (name) => {
+    const normalizedName = String(name || '').trim();
+    if (femaleNames.has(normalizedName)) return 'female';
+    if (maleNames.has(normalizedName)) return 'male';
+
+    // 성별 정보가 없는 후기 API를 위한 보조 규칙. 자주 쓰이는 이름은 위 목록에서 먼저 정확히 처리한다.
+    if (/(준|우|호|훈|혁|석|환|태|건|성|찬|겸)$/.test(normalizedName)) return 'male';
+    return 'female';
+};
+
+const getHomeReviewAvatar = (review) => {
+    const name = review.nickname || review.authorName || '';
+    const avatars = getAvatarGender(name) === 'male' ? maleReviewAvatars : femaleReviewAvatars;
+    const stableKey = String(review.reviewId ?? review.memberId ?? name ?? '0');
+    const numberKey = Number(stableKey);
+    const index = Number.isFinite(numberKey)
+        ? Math.abs(numberKey) % avatars.length
+        : [...stableKey].reduce((sum, character) => sum + character.charCodeAt(0), 0) % avatars.length;
+
+    return avatars[index];
+};
+
+const toHomeReview = (review) => ({
+    ...review,
+    nickname: review.nickname || review.authorName || '서울 여행자',
+    profileImageUrl: getHomeReviewAvatar(review),
+    content: review.content || review.reviewContent || '',
+    imageUrls: Array.isArray(review.imageUrls) ? review.imageUrls : [],
+    rating: Number(review.rating) || 0,
+    liked: Boolean(review.liked || review.likedByMe),
+});
 
 // 별점을 그리기 위한 별 모양 SVG 컴포넌트
 // filled 값이 true면 채워진 별, false면 빈 별처럼 보이도록 CSS 클래스 is-empty를 붙임
@@ -25,9 +81,27 @@ function RoundedStarIcon({ filled }) {
 }
 
 function ReviewSection() {
-    const [likedReviewIds, setLikedReviewIds] = useState(
-        reviews.filter((review) => review.liked).map((review) => review.reviewId),
-    );
+    const [liveReviews, setLiveReviews] = useState([]);
+    const [likedReviewIds, setLikedReviewIds] = useState([]);
+    const reviews = liveReviews.length > 0 ? liveReviews : fallbackReviews.map(toHomeReview);
+
+    // 최신순으로 실제 등록 후기를 세 개만 불러오고, 비어 있을 때만 예시 카드를 유지한다.
+    useEffect(() => {
+        let active = true;
+
+        getReviews({ page: 0, size: 3, sort: 'date' })
+            .then((response) => {
+                if (!active) return;
+                const recentReviews = Array.isArray(response?.content) ? response.content.slice(0, 3) : [];
+                setLiveReviews(recentReviews.map(toHomeReview));
+                setLikedReviewIds(recentReviews.filter((review) => review.liked || review.likedByMe).map((review) => review.reviewId));
+            })
+            .catch(() => {
+                if (active) setLiveReviews([]);
+            });
+
+        return () => { active = false; };
+    }, []);
 
     // 후기 카드 전체를 클릭하면 해당 후기 상세 임시 페이지로 이동
     const moveToReviewDetail = (reviewId) => {

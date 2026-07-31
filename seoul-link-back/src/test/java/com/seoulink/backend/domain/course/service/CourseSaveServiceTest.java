@@ -53,11 +53,12 @@ class CourseSaveServiceTest {
     }
 
     @Test
-    @DisplayName("최적화 코스와 날짜별 장소 순서를 함께 저장한다")
+    @DisplayName("정확한 추천 이력 ID로 최적화 코스와 날짜별 장소 순서를 저장한다")
     void saveOptimizedCourse() {
         LocalDate firstDay = LocalDate.of(2026, 7, 20);
         LocalDate secondDay = LocalDate.of(2026, 7, 21);
         CourseSaveRequest request = CourseSaveRequest.builder()
+                .courseId(10L)
                 .transportMode(TransportMode.WALKING)
                 .memberId(1L)
                 .resultId(5L)
@@ -74,30 +75,30 @@ class CourseSaveServiceTest {
                 .build();
         request.getPlaces().get(0).setVisitTime("10:00");
 
-        when(travelCourseRepository.save(any(TravelCourse.class)))
-                .thenAnswer(invocation -> {
-                    TravelCourse course = invocation.getArgument(0);
-                    return TravelCourse.builder()
-                            .courseId(10L)
-                            .title(course.getTitle())
-                            .build();
-                });
+        TravelCourse historyCourse = TravelCourse.builder()
+                .courseId(10L)
+                .memberId(1L)
+                .resultId(5L)
+                .title("추천 이력 코스")
+                .courseType("SURVEY")
+                .savedStatus("N")
+                .build();
+        when(travelCourseRepository.findByCourseIdAndMemberId(10L, 1L))
+                .thenReturn(Optional.of(historyCourse));
+        when(courseDetailRepository.findByCourseIdOrderByDayNoAscPlaceOrderAsc(10L))
+                .thenReturn(List.of());
 
         CourseSaveResponse response = courseSaveService.saveOptimizedCourse(request);
 
-        ArgumentCaptor<TravelCourse> courseCaptor =
-                ArgumentCaptor.forClass(TravelCourse.class);
-        verify(travelCourseRepository).save(courseCaptor.capture());
-        TravelCourse course = courseCaptor.getValue();
-
-        assertEquals(1L, course.getMemberId());
-        assertEquals("ATLSR", course.getTravelCode());
-        assertEquals("SURVEY", course.getCourseType());
-        assertEquals("Y", course.getSavedStatus());
-        assertEquals(0.267, course.getTotalDistanceKm(), 0.000001);
-        assertEquals(3.56, course.getTotalTravelTimeMinutes(), 0.000001);
-        assertEquals(240, course.getTotalVisitTimeMinutes());
-        assertEquals(243.56, course.getTotalCourseTimeMinutes(), 0.000001);
+        assertEquals(1L, historyCourse.getMemberId());
+        assertEquals("ATLSR", historyCourse.getTravelCode());
+        assertEquals("SURVEY", historyCourse.getCourseType());
+        assertTrue(historyCourse.isSaved());
+        assertEquals(0.267, historyCourse.getTotalDistanceKm(), 0.000001);
+        assertEquals(3.56, historyCourse.getTotalTravelTimeMinutes(), 0.000001);
+        assertEquals(240, historyCourse.getTotalVisitTimeMinutes());
+        assertEquals(243.56, historyCourse.getTotalCourseTimeMinutes(), 0.000001);
+        verify(travelCourseRepository, never()).save(any());
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Iterable<CourseDetail>> detailCaptor =
@@ -129,70 +130,32 @@ class CourseSaveServiceTest {
     }
 
     @Test
-    @DisplayName("같은 설문 추천 코스를 다시 저장하면 기존 코스를 반환한다")
-    void reuseExistingSurveyCourseInsteadOfSavingDuplicate() {
+    @DisplayName("설문 추천 저장 요청에 정확한 courseId가 없으면 다른 코스를 추측하지 않는다")
+    void rejectSurveySaveWithoutCourseId() {
         LocalDate visitDate = LocalDate.of(2026, 7, 20);
         CourseSaveRequest request = CourseSaveRequest.builder()
                 .transportMode(TransportMode.WALKING)
                 .memberId(1L)
                 .resultId(101L)
-                .title("이미 저장한 취향 집중 코스")
+                .title("저장할 취향 집중 코스")
                 .courseType("SURVEY")
                 .places(List.of(
                         place(1L, visitDate, 1, 90, 0.0, 0.0),
                         place(2L, visitDate, 2, 60, 0.3, 4.0)
                 ))
                 .build();
-        TravelCourse existingCourse = TravelCourse.builder()
-                .courseId(77L)
-                .memberId(1L)
-                .resultId(101L)
-                .title("이미 저장한 취향 집중 코스")
-                .courseType("SURVEY")
-                .savedStatus("N")
-                .totalDistanceKm(0.3)
-                .totalTravelTimeMinutes(4.0)
-                .totalVisitTimeMinutes(150)
-                .totalCourseTimeMinutes(154.0)
-                .build();
-        List<CourseDetail> existingDetails = List.of(
-                CourseDetail.builder()
-                        .courseId(77L)
-                        .placeId(2L)
-                        .dayNo(1)
-                        .placeOrder(2)
-                        .visitDate(visitDate)
-                        .build(),
-                CourseDetail.builder()
-                        .courseId(77L)
-                        .placeId(1L)
-                        .dayNo(1)
-                        .placeOrder(1)
-                        .visitDate(visitDate)
-                        .build()
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> courseSaveService.saveOptimizedCourse(request)
         );
 
-        when(travelCourseRepository
-                .findByMemberIdAndResultIdAndCourseTypeOrderByCreatedAtDesc(
-                        1L,
-                        101L,
-                        "SURVEY"
-                ))
-                .thenReturn(List.of(existingCourse));
-        when(courseDetailRepository
-                .findByCourseIdOrderByDayNoAscPlaceOrderAsc(77L))
-                .thenReturn(existingDetails);
-
-        CourseSaveResponse response =
-                courseSaveService.saveOptimizedCourse(request);
-
-        assertEquals(77L, response.getCourseId());
-        assertEquals(2, response.getPlaceCount());
-        assertEquals(1, response.getDayCount());
-        assertTrue(existingCourse.isSaved());
+        assertEquals(
+                "저장할 추천 코스의 정확한 courseId가 필요합니다.",
+                exception.getMessage()
+        );
         verify(travelCourseRepository, never()).save(any());
-        verify(courseDetailRepository).deleteAllInBatch(existingDetails);
-        verify(courseDetailRepository).saveAll(any());
+        verify(courseDetailRepository, never()).saveAll(any());
     }
 
     @Test
@@ -226,6 +189,7 @@ class CourseSaveServiceTest {
                 ArgumentCaptor.forClass(TravelCourse.class);
         verify(travelCourseRepository).save(courseCaptor.capture());
         assertEquals("N", courseCaptor.getValue().getSavedStatus());
+        assertEquals(null, courseCaptor.getValue().getSourceCourseKey());
         verify(courseDetailRepository).saveAll(any());
     }
 
@@ -469,10 +433,11 @@ class CourseSaveServiceTest {
 
 
     @Test
-    @DisplayName("선택한 복수 코스를 하나의 요청으로 모두 저장한다")
+    @DisplayName("선택한 복수 추천 코스를 각각의 정확한 이력 ID로 저장한다")
     void saveOptimizedCourses() {
         LocalDate visitDate = LocalDate.of(2026, 7, 20);
         CourseSaveRequest first = CourseSaveRequest.builder()
+                .courseId(20L)
                 .transportMode(TransportMode.WALKING)
                 .memberId(1L)
                 .resultId(101L)
@@ -481,6 +446,7 @@ class CourseSaveServiceTest {
                 .places(List.of(place(10L, visitDate, 1, 90, 0.0, 0.0)))
                 .build();
         CourseSaveRequest second = CourseSaveRequest.builder()
+                .courseId(21L)
                 .transportMode(TransportMode.WALKING)
                 .memberId(1L)
                 .resultId(101L)
@@ -488,15 +454,31 @@ class CourseSaveServiceTest {
                 .courseType("SURVEY")
                 .places(List.of(place(11L, visitDate, 1, 90, 0.0, 0.0)))
                 .build();
-        AtomicLong sequence = new AtomicLong(20L);
-        when(travelCourseRepository.save(any(TravelCourse.class)))
-                .thenAnswer(invocation -> {
-                    TravelCourse course = invocation.getArgument(0);
-                    return TravelCourse.builder()
-                            .courseId(sequence.getAndIncrement())
-                            .title(course.getTitle())
-                            .build();
-                });
+
+        TravelCourse firstHistory = TravelCourse.builder()
+                .courseId(20L)
+                .memberId(1L)
+                .resultId(101L)
+                .title("취향 집중 코스")
+                .courseType("SURVEY")
+                .savedStatus("N")
+                .build();
+        TravelCourse secondHistory = TravelCourse.builder()
+                .courseId(21L)
+                .memberId(1L)
+                .resultId(101L)
+                .title("이동 최소 코스")
+                .courseType("SURVEY")
+                .savedStatus("N")
+                .build();
+        when(travelCourseRepository.findByCourseIdAndMemberId(20L, 1L))
+                .thenReturn(Optional.of(firstHistory));
+        when(travelCourseRepository.findByCourseIdAndMemberId(21L, 1L))
+                .thenReturn(Optional.of(secondHistory));
+        when(courseDetailRepository.findByCourseIdOrderByDayNoAscPlaceOrderAsc(20L))
+                .thenReturn(List.of());
+        when(courseDetailRepository.findByCourseIdOrderByDayNoAscPlaceOrderAsc(21L))
+                .thenReturn(List.of());
 
         CourseBatchSaveResponse response = courseSaveService.saveOptimizedCourses(
                 CourseBatchSaveRequest.builder()
@@ -508,7 +490,9 @@ class CourseSaveServiceTest {
         assertEquals(List.of(20L, 21L), response.getSavedCourses().stream()
                 .map(CourseSaveResponse::getCourseId)
                 .toList());
-        verify(travelCourseRepository, times(2)).save(any(TravelCourse.class));
+        assertTrue(firstHistory.isSaved());
+        assertTrue(secondHistory.isSaved());
+        verify(travelCourseRepository, never()).save(any());
         verify(courseDetailRepository, times(2)).saveAll(any());
     }
 
@@ -776,6 +760,103 @@ class CourseSaveServiceTest {
     }
 
     @Test
+    @DisplayName("테마 코스는 날짜 없이 dayNo 기준으로 저장한다")
+    void saveThemeCourseWithoutVisitDate() {
+        CourseSavePlaceDto firstDay = themePlace(1L, 1, 1);
+        CourseSavePlaceDto firstHotel = themePlace(100L, 1, 2);
+        firstHotel.setCategory("HOTEL");
+        CourseSavePlaceDto secondDay = themePlace(2L, 2, 1);
+        CourseSavePlaceDto secondHotel = themePlace(100L, 2, 2);
+        secondHotel.setCategory("HOTEL");
+
+        CourseSaveRequest request = CourseSaveRequest.builder()
+                .transportMode(TransportMode.WALKING)
+                .memberId(1L)
+                .title("날짜 없는 테마 코스")
+                .courseType("THEME")
+                .sourceCourseKey("THEME_TEST_01")
+                .places(List.of(
+                        firstDay,
+                        firstHotel,
+                        secondDay,
+                        secondHotel
+                ))
+                .build();
+        when(travelCourseRepository.save(any(TravelCourse.class)))
+                .thenReturn(TravelCourse.builder()
+                        .courseId(50L)
+                        .title("날짜 없는 테마 코스")
+                        .build());
+
+        CourseSaveResponse response =
+                courseSaveService.saveOptimizedCourse(request);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Iterable<CourseDetail>> detailCaptor =
+                ArgumentCaptor.forClass(Iterable.class);
+        verify(courseDetailRepository).saveAll(detailCaptor.capture());
+        List<CourseDetail> details = StreamSupport
+                .stream(detailCaptor.getValue().spliterator(), false)
+                .toList();
+
+        assertEquals(2, response.getDayCount());
+        assertEquals(List.of(1, 1, 2, 2), details.stream()
+                .map(CourseDetail::getDayNo)
+                .toList());
+        assertTrue(details.stream()
+                .allMatch(detail -> detail.getVisitDate() == null));
+    }
+
+    @Test
+    @DisplayName("테마 코스에 dayNo가 없으면 저장하지 않는다")
+    void rejectThemeCourseWithoutDayNo() {
+        CourseSaveRequest request = CourseSaveRequest.builder()
+                .transportMode(TransportMode.WALKING)
+                .memberId(1L)
+                .title("일차 없는 테마 코스")
+                .courseType("THEME")
+                .sourceCourseKey("THEME_TEST_02")
+                .places(List.of(themePlace(1L, null, 1)))
+                .build();
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> courseSaveService.saveOptimizedCourse(request)
+        );
+
+        assertTrue(exception.getMessage().contains("dayNo"));
+        verify(travelCourseRepository, never()).save(any());
+        verify(courseDetailRepository, never()).saveAll(any());
+    }
+
+    @Test
+    @DisplayName("설문 코스는 기존처럼 방문 날짜가 필요하다")
+    void rejectSurveyCourseWithoutVisitDate() {
+        CourseSaveRequest request = CourseSaveRequest.builder()
+                .transportMode(TransportMode.WALKING)
+                .memberId(1L)
+                .resultId(1L)
+                .title("날짜 없는 설문 코스")
+                .courseType("SURVEY")
+                .places(List.of(place(
+                        1L,
+                        null,
+                        1,
+                        90,
+                        0.0,
+                        0.0
+                )))
+                .build();
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> courseSaveService.saveOptimizedCourse(request)
+        );
+        verify(travelCourseRepository, never()).save(any());
+        verify(courseDetailRepository, never()).saveAll(any());
+    }
+
+    @Test
     @DisplayName("상세 장소 저장 중 오류가 발생하면 예외를 전파해 트랜잭션 롤백되게 한다")
     void propagateDetailSaveFailureForRollback() {
         LocalDate visitDate = LocalDate.of(2026, 7, 20);
@@ -836,6 +917,23 @@ class CourseSaveServiceTest {
                 .expectedVisitMinutes(expectedVisitMinutes)
                 .distanceFromPreviousKm(distanceFromPreviousKm)
                 .travelTimeFromPreviousMinutes(travelTimeFromPreviousMinutes)
+                .build();
+    }
+
+    private CourseSavePlaceDto themePlace(
+            Long placeId,
+            Integer dayNo,
+            Integer visitOrder
+    ) {
+        return CourseSavePlaceDto.builder()
+                .placeId(placeId)
+                .dayNo(dayNo)
+                .visitOrder(visitOrder)
+                .expectedVisitMinutes(90)
+                .distanceFromPreviousKm(visitOrder == 1 ? 0.0 : 1.0)
+                .travelTimeFromPreviousMinutes(
+                        visitOrder == 1 ? 0.0 : 10.0
+                )
                 .build();
     }
 }

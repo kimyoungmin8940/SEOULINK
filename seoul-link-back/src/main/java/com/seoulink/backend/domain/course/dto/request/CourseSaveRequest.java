@@ -45,6 +45,9 @@ public class CourseSaveRequest {
     @Builder.Default
     private String courseType = "CUSTOM";
 
+    // THEME 코스를 저장할 때 사용하는 원본 코스 식별값
+    private String sourceCourseKey;
+
     private String region;
 
     // 별도 지정이 없으면 회원의 비공개 코스로 저장한다.

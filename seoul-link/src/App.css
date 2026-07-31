@@ -1,6 +1,1 @@
-/*
-  App.css
-  - App.jsx에서 가장 먼저 불러오는 스타일 진입 파일
-  - 실제 스타일 코드는 src/styles/index.css에서 한 번에 모아 import
-*/
 @import './styles/index.css';

@@ -1,0 +1,142 @@
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: Arial, "Noto Sans KR", sans-serif;
+    background: #f3f6fb;
+    color: #172033;
+}
+
+button,
+input,
+textarea {
+    font: inherit;
+}
+
+.test-page {
+    min-height: 100vh;
+    padding: 40px 20px;
+}
+
+.test-panel {
+    width: min(920px, 100%);
+    margin: 0 auto;
+    padding: 28px;
+    border: 1px solid #d9e2ef;
+    border-radius: 8px;
+    background: white;
+}
+
+h1 {
+    margin: 0 0 10px;
+    font-size: 28px;
+}
+
+.description {
+    margin: 0 0 24px;
+    color: #5d6b82;
+}
+
+.status-box {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto auto;
+    gap: 12px;
+    align-items: end;
+    padding: 16px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #f8fafc;
+}
+
+.status-box span,
+.chat-form label {
+    display: block;
+    margin-bottom: 6px;
+    color: #475569;
+    font-weight: 700;
+}
+
+.status-box input,
+.chat-form input,
+.chat-form textarea {
+    width: 100%;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 10px 12px;
+}
+
+.chat-form {
+    display: grid;
+    gap: 16px;
+    margin-top: 20px;
+}
+
+button {
+    border: 0;
+    border-radius: 6px;
+    padding: 11px 16px;
+    background: #2563eb;
+    color: white;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.result {
+    margin-top: 20px;
+    padding: 16px;
+    border: 1px solid #d9e2ef;
+    border-radius: 8px;
+    background: #ffffff;
+}
+
+.result h2 {
+    margin: 0 0 12px;
+    font-size: 18px;
+}
+
+.result pre {
+    white-space: pre-wrap;
+    line-height: 1.7;
+    margin: 0;
+}
+
+.error {
+    border-color: #fecaca;
+    background: #fff1f2;
+    color: #991b1b;
+}
+
+.history-card {
+    padding: 12px 0;
+    border-top: 1px solid #e2e8f0;
+}
+
+.history-card:first-of-type {
+    border-top: 0;
+}
+
+.history-card p {
+    margin: 6px 0;
+    color: #475569;
+}
+
+.history-card small {
+    color: #64748b;
+}
+
+@media (max-width: 760px) {
+    .status-box {
+        grid-template-columns: 1fr;
+    }
+
+    .test-panel {
+        padding: 20px;
+    }
+}

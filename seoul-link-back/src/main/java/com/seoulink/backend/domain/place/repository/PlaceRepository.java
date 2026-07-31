@@ -36,4 +36,9 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
             String category,
             String isActive
     );
+
+    List<Place> findByNameInAndIsActive(
+            List<String> names,
+            String isActive
+    );
 }

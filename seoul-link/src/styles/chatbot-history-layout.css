@@ -1,0 +1,113 @@
+/* Prevent long recent-chat titles from being clipped by the pass card. */
+.chatbot-history-section {
+  flex: 0 0 auto;
+  min-height: 0;
+  overflow: visible;
+}
+
+.chatbot-history-list {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  overflow: visible;
+  padding: 0;
+}
+
+.chatbot-history-item {
+  display: flex;
+  align-items: center;
+  height: 36px;
+  gap: 0;
+}
+
+.chatbot-history-list .chatbot-history-open {
+  flex: 0 0 36px;
+  flex-grow: 1;
+  height: 36px;
+  min-height: 36px;
+  margin: 0;
+  padding: 0 8px;
+  align-items: center;
+  overflow: hidden;
+}
+
+.chatbot-history-list .chatbot-history-open svg {
+  margin-top: 0;
+}
+
+.chatbot-history-list .chatbot-history-open span {
+  flex: 1;
+  min-width: 0;
+  height: auto;
+  display: block;
+  overflow: hidden;
+  line-height: 1.45;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.chatbot-history-delete {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  color: #8aa0b3;
+  background: transparent;
+}
+
+.chatbot-history-delete:hover:not(:disabled) {
+  color: #df4d4d;
+  background: #fff0f0;
+}
+
+.chatbot-history-delete:disabled { opacity: .5; cursor: wait; }
+.chatbot-history-delete svg { width: 14px; height: 14px; }
+
+.chatbot-pass-card {
+  flex: 0 0 auto;
+  margin-top: auto;
+}
+
+/* AI 일정은 긴 문단 대신 일차별 카드와 핵심 요약으로 읽기 쉽게 보여 준다. */
+.chatbot-planner-answer { display: grid; gap: 14px; padding: 17px; border: 1px solid #dbe8f3; border-radius: 5px 16px 16px; background: rgba(255,255,255,.95); box-shadow: 0 6px 17px rgba(45,93,137,.06); color: #3d5e7d; }
+.chatbot-planner-introduction { margin: 0; color: #466581; font-size: 14px; line-height: 1.65; }
+.chatbot-planner-day, .chatbot-planner-lodging { padding: 13px; border: 1px solid #e1ebf4; border-radius: 12px; background: #f9fcff; }
+.chatbot-planner-day h3, .chatbot-planner-lodging h3, .chatbot-planner-summary h3 { margin: 0 0 10px; color: #1e73d7; font-size: 13px; font-weight: 850; }
+.chatbot-planner-day ol { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.chatbot-planner-day li { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 9px; padding-bottom: 10px; border-bottom: 1px dashed #d9e7f2; }
+.chatbot-planner-day li:last-child { padding-bottom: 0; border-bottom: 0; }
+.chatbot-planner-day time, .chatbot-planner-lodging time { color: #2179e5; font-size: 12px; font-weight: 800; }
+.chatbot-planner-day strong, .chatbot-planner-lodging strong { display: block; color: #254d76; font-size: 14px; }
+.chatbot-planner-day span, .chatbot-planner-lodging span { display: flex; align-items: center; gap: 3px; margin-top: 3px; color: #7289a0; font-size: 11px; }
+.chatbot-planner-day span svg { width: 12px; height: 12px; }
+.chatbot-planner-day p, .chatbot-planner-lodging p { margin: 5px 0 0; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: #526f8b; font-size: 12px; line-height: 1.55; white-space: normal; }
+.chatbot-planner-lodging > div { display: grid; grid-template-columns: 58px minmax(0, 1fr); column-gap: 8px; }
+.chatbot-planner-lodging span, .chatbot-planner-lodging p { grid-column: 2; }
+.chatbot-planner-day-group { display: grid; gap: 10px; }
+.chatbot-planner-lodging { position: relative; overflow: hidden; padding: 14px 15px; border-color: #bcdaf7; background: linear-gradient(135deg,#edf8ff 0%,#f9fcff 55%,#fff 100%); box-shadow: 0 7px 16px rgba(35,112,190,.08); }
+.chatbot-planner-lodging::before { content: ''; position: absolute; top: 0; bottom: 0; left: 0; width: 4px; background: linear-gradient(#5aa8f7,#2d79db); }
+.chatbot-planner-lodging header { display: flex; align-items: center; gap: 9px; margin-bottom: 11px; }
+.chatbot-planner-lodging header > span { width: 30px; height: 30px; display: grid; place-items: center; margin: 0; border-radius: 9px; background: #dbeeff; color: #2879dc; }
+.chatbot-planner-lodging header svg { width: 16px; height: 16px; }
+.chatbot-planner-lodging header small { display: block; color: #5f89b4; font-size: 10px; font-weight: 800; letter-spacing: .02em; }
+.chatbot-planner-lodging header h3 { margin: 2px 0 0; color: #245a95; font-size: 13px; }
+.chatbot-planner-lodging .chatbot-planner-lodging-body { display: grid; grid-template-columns: 58px minmax(0, 1fr); gap: 8px; padding-top: 10px; border-top: 1px dashed #c8dff3; }
+.chatbot-planner-lodging .chatbot-planner-lodging-body > div { display: block; }
+.chatbot-planner-lodging .chatbot-planner-lodging-body span, .chatbot-planner-lodging .chatbot-planner-lodging-body p { display: flex; grid-column: auto; }
+.chatbot-planner-summary { padding: 14px; border: 1px solid #bcdaf7; border-radius: 12px; background: linear-gradient(145deg,#edf7ff,#fff); }
+.chatbot-planner-summary dl { display: grid; gap: 8px; margin: 0; }
+.chatbot-planner-summary dl > div { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 8px; align-items: start; }
+.chatbot-planner-summary dt { display: flex; align-items: center; gap: 4px; color: #2d6fac; font-size: 11px; font-weight: 800; }
+.chatbot-planner-summary dt svg { width: 13px; height: 13px; }
+.chatbot-planner-summary dd { margin: 0; color: #315573; font-size: 12px; line-height: 1.5; word-break: keep-all; }
+.chatbot-planner-summary > p { margin: 10px 0 0; padding-top: 9px; border-top: 1px dashed #cddfec; color: #748aa0; font-size: 10px; line-height: 1.5; }
+.chatbot-plan-download { width: 100%; min-height: 42px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 0; border-radius: 10px; background: #247bf1; color: #fff; font-size: 13px; font-weight: 800; }
+.chatbot-plan-download:hover { background: #126bdc; }
+.chatbot-plan-download svg { width: 16px; height: 16px; }
+@media (max-width: 700px) { .chatbot-planner-answer { padding: 13px; gap: 11px; } .chatbot-planner-day li { grid-template-columns: 1fr; gap: 3px; } .chatbot-planner-introduction { font-size: 13px; } }
