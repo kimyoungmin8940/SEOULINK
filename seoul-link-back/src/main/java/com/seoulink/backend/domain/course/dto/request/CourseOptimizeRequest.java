@@ -42,11 +42,18 @@ public class CourseOptimizeRequest {
 
     /**
      * 이전 프런트 요청과의 JSON 호환을 위해 남겨 둔 필드이다.
-     * 대중교통 40분 상한은 안전 규칙이므로 false가 전달돼도 비활성화하지 않는다.
+     * 대중교통 40분 상한은 안전 규칙이므로 false가 전달돼도 기본 보정은 유지한다.
      */
     @Deprecated
     @Builder.Default
     private Boolean enforcePublicTransitLimit = Boolean.TRUE;
+
+    /**
+     * 기존 40분 제한 보정을 모두 시도한 뒤, 현재 장소와 순서를 보존한 실제 구간만
+     * 조회하는 최종 폴백인지 명시한다. 기본값은 false이므로 (3)의 기존 동작은 바뀌지 않는다.
+     */
+    @Builder.Default
+    private Boolean preserveOriginalPublicTransitRoute = Boolean.FALSE;
 
     /**
      * 대중교통 후보 교체를 모두 시도한 뒤 장소 수 감소까지 허용할지 여부이다.

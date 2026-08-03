@@ -1097,8 +1097,69 @@ async function refreshEstimatedDetailRoutes(course, memberId) {
             refreshedCourse = mergedCourse;
             refreshedAnyDay = true;
         } catch (error) {
-            lastRefreshError = error;
-            console.warn(`DAY ${day.dayNo} 실제 ${transportLabel} 경로 재조회 실패:`, error);
+            let fallbackApplied = false;
+
+            // (3)의 엄격한 대중교통 보정은 위에서 먼저 그대로 실행합니다.
+            // 그 보정이 실패한 경우에만 저장된 장소와 순서를 유지한 실제 구간 조회를 시도합니다.
+            if (transportMode === 'PUBLIC_TRANSIT') {
+                try {
+                    const originalRouteDetails = await resolveCourseRouteDetails({
+                        resultId: course.resultId,
+                        travelCode: course.travelCode,
+                        transportMode,
+                        dailyStartTime:
+                            day.routeOriginPlace?.displayVisitTime
+                            || day.places?.[0]?.displayVisitTime
+                            || '10:00',
+                        enforcePublicTransitLimit: false,
+                        preserveOriginalPublicTransitRoute: true,
+                        allowPublicTransitPlaceReduction: false,
+                        placeCandidates: candidates.map((candidate) => ({
+                            ...candidate,
+                            alternativeCandidates: [],
+                        })),
+                        alternativeCandidates: [],
+                    });
+                    if (
+                        !Array.isArray(originalRouteDetails?.optimizedPlaces)
+                        || originalRouteDetails.optimizedPlaces.length
+                            !== candidates.length
+                    ) {
+                        throw new Error(
+                            `DAY ${day.dayNo} 원래 장소 구성의 실제 경로를 확인할 수 없습니다.`,
+                        );
+                    }
+
+                    const mergedCourse = mergeDetailRouteResponse(
+                        refreshedCourse,
+                        day.dayNo,
+                        originalRouteDetails,
+                    );
+                    if (mergedCourse === refreshedCourse) {
+                        throw new Error(
+                            `DAY ${day.dayNo} 원래 장소 경로 응답에 표시할 장소가 없습니다.`,
+                        );
+                    }
+
+                    refreshedCourse = mergedCourse;
+                    refreshedAnyDay = true;
+                    fallbackApplied = true;
+                    console.warn(
+                        `DAY ${day.dayNo} 대중교통 제한 보정에 실패해 원래 장소 구성의 실제 경로를 적용했습니다.`,
+                    );
+                } catch (fallbackError) {
+                    lastRefreshError = error;
+                    console.warn(
+                        `DAY ${day.dayNo} 원래 장소 구성의 실제 대중교통 경로 재조회 실패:`,
+                        fallbackError,
+                    );
+                }
+            }
+
+            if (!fallbackApplied) {
+                lastRefreshError = error;
+                console.warn(`DAY ${day.dayNo} 실제 ${transportLabel} 경로 재조회 실패:`, error);
+            }
         }
     }
 

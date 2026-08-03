@@ -27,3 +27,7 @@ export function verifyPasswordResetMember(data) {
 export function resetPassword(data) {
     return apiClient.post("/members/password-reset", data);
 }
+
+export function withdrawMember(memberId) {
+    return apiClient.delete(`/members/${memberId}`);
+}

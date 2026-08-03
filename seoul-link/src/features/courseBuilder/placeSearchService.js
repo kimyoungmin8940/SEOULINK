@@ -19,6 +19,8 @@ import {
     searchKakaoPlacesForTheme,
 } from "./kakaoPlaceSearchService";
 
+const KEYWORD_DB_FETCH_LIMIT = 700;
+
 const fetchDbPlacesForTheme = async ({ map, themeValue, regionValue, maxCount, foodSubcategoryValue = DEFAULT_FOOD_SUBCATEGORY }) => {
     const dbFetchLimit = Math.min(300, Math.max(maxCount * 3, 120));
     const dbPlaces = await fetchCourseBuilderDbPlaces({
@@ -54,7 +56,7 @@ const fetchDbPlacesByKeyword = async ({ keyword, maxCount }) => {
     const dbPlaces = await fetchCourseBuilderDbPlaces({
         theme: "ALL",
         region: DEFAULT_REGION,
-        limit: Math.min(300, Math.max(maxCount * 3, 120)),
+        limit: KEYWORD_DB_FETCH_LIMIT,
     });
 
     return dbPlaces

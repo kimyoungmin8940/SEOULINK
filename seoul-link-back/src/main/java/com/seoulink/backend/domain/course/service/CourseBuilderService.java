@@ -49,7 +49,7 @@ public class CourseBuilderService {
     public List<CourseBuilderPlaceResponse> findPlaces(String theme, String region, Integer limit) {
         String normalizedTheme = defaultValue(theme, "ALL").toUpperCase(Locale.ROOT);
         String normalizedRegion = defaultValue(region, "서울");
-        int normalizedLimit = limit == null ? 120 : Math.max(1, Math.min(limit, 300));
+        int normalizedLimit = limit == null ? 120 : Math.max(1, Math.min(limit, 700));
 
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("limit", normalizedLimit);
