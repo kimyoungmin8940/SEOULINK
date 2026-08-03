@@ -408,6 +408,7 @@ public class CourseService {
                 .coverImageUrl(firstImage(coverImageUrls))
                 .coverImageUrls(coverImageUrls)
                 .courseType(course.getCourseType())
+                .sourceCourseKey(course.getSourceCourseKey())
                 .transportMode(transportMode)
                 .regions(regions)
                 .tags(createThemeTags(placesById.values()))

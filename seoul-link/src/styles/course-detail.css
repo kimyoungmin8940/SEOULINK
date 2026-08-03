@@ -767,14 +767,7 @@
 
 .course-detail-schedule-note-copy {
   min-width: 0;
-}
-
-.course-detail-schedule-note-first-line {
   white-space: nowrap;
-}
-
-.course-detail-schedule-note-line {
-  display: block;
 }
 
 .course-detail-schedule-note.is-estimated {
@@ -788,6 +781,23 @@
 
 .course-detail-schedule-note.is-estimated svg {
   color: #b47b11;
+}
+
+.course-detail-schedule-note.is-refreshing {
+  margin-top: 12px;
+  padding: 9px 11px;
+  border: 1px solid #bcdcf5;
+  border-radius: 10px;
+  background: #f2f9ff;
+  color: #3c6f9a;
+}
+
+.course-detail-schedule-note.is-refreshing svg {
+  color: var(--primary-blue);
+}
+
+.course-detail-refresh-icon {
+  animation: course-detail-spin 0.9s linear infinite;
 }
 
 .course-detail-bottom-actions {
@@ -1217,6 +1227,15 @@
   .course-detail-shell {
     width: calc(100% - 32px);
     padding: 96px 0 68px;
+  }
+
+  .course-detail-schedule-note {
+    align-items: flex-start;
+  }
+
+  .course-detail-schedule-note-copy {
+    white-space: normal;
+    word-break: keep-all;
   }
 
   .course-detail-toolbar {

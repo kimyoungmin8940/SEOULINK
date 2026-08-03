@@ -39,15 +39,14 @@ public class CourseOptimizationService {
     // 외부 API의 부동소수점 오차 때문에 사실상 같은 경로 비용을 다르게 보지 않도록 한다.
     private static final double ROUTE_TIE_EPSILON = 0.000000001;
 
-    // 대중교통은 30분 이내 구간을 선호하고 40분을 넘는 구간만 반드시 교체한다.
+    // 대중교통은 30분 이내를 우선하고, 30분 초과는 DAY당 1개만, 40분 초과는 금지한다.
     private static final double PUBLIC_TRANSIT_PREFERRED_MAX_MINUTES = 30.0;
     private static final double PUBLIC_TRANSIT_MAX_MINUTES = 40.0;
     private static final double PUBLIC_TRANSIT_HOTEL_MAX_MINUTES = 40.0;
     private static final int PUBLIC_TRANSIT_MAX_REPAIR_ALTERNATIVES = 8;
     // 실제 경로 보정 중 장소를 계속 삭제해 숙소만 남는 결과를 만들지 않는다.
-    // P형은 일반 장소 4곳, R형은 3곳을 최소로 유지한다.
-    private static final int DENSE_SCHEDULE_MIN_ORDINARY_PLACES = 4;
-    private static final int RELAXED_SCHEDULE_MIN_ORDINARY_PLACES = 3;
+    // 후보 교체로 해결되지 않으면 P/R형 모두 일반 장소 3곳까지 단계적으로 줄인다.
+    private static final int MIN_ACTUAL_ROUTE_ORDINARY_PLACES = 3;
 
     private final DistanceService distanceService;
     private final VisitDurationService visitDurationService;
@@ -404,8 +403,9 @@ public class CourseOptimizationService {
      *
      * <p>추천 카드에 한 DAY를 표시할 때 사용한다. 후보 재선정·최근접 경로
      * 계산을 다시 하지 않으므로 ODsay 호출 수는 정확히 {@code 장소 수 - 1} 이하이다.
-     * {@code enforcePublicTransitLimit=false}인 최종 폴백 요청은 장소를 교체하거나 삭제하지 않고
-     * 현재 순서의 실제 인접 구간만 조회한다.</p>
+     * 기본 요청은 기존처럼 대중교통 40분 상한을 적용한다. 다만 모든 보정이 실패한 뒤
+     * {@code preserveOriginalPublicTransitRoute=true}로 명시한 최종 폴백 요청은 장소를
+     * 교체하거나 삭제하지 않고 현재 순서의 실제 인접 구간만 조회한다.</p>
      */
     public CourseOptimizeResponse resolveFixedRouteDetails(
             CourseOptimizeRequest request
@@ -490,12 +490,16 @@ public class CourseOptimizationService {
             RouteMatrix routeMatrix;
             if (resolveActualRouteLegs
                     && transportMode == TransportMode.PUBLIC_TRANSIT
-                    && !Boolean.FALSE.equals(request.getEnforcePublicTransitLimit())) {
+                    && !Boolean.TRUE.equals(
+                            request.getPreserveOriginalPublicTransitRoute()
+                    )) {
                 PublicTransitRouteRepair repair =
                         repairActualPublicTransitRoute(
                                 dailyCandidates,
                                 routeAlternatives,
-                                request.getTravelCode()
+                                !Boolean.FALSE.equals(
+                                        request.getAllowPublicTransitPlaceReduction()
+                                )
                         );
                 resolvedDailyCandidates = repair.candidates();
                 routeMatrix = repair.routeMatrix();
@@ -577,14 +581,13 @@ public class CourseOptimizationService {
     private PublicTransitRouteRepair repairActualPublicTransitRoute(
             List<PlaceCandidateDto> dailyCandidates,
             List<PlaceCandidateDto> routeAlternatives,
-            String travelCode
+            boolean allowPlaceReduction
     ) {
         List<PlaceCandidateDto> repairedCandidates = new ArrayList<>(
                 dailyCandidates
         );
         int minimumOrdinaryPlaceCount =
                 resolveMinimumActualRouteOrdinaryPlaceCount(
-                        travelCode,
                         dailyCandidates
                 );
         Set<Long> attemptedAlternativeIds = new HashSet<>();
@@ -630,6 +633,14 @@ public class CourseOptimizationService {
                 continue;
             }
 
+            // 먼저 더 넓은 후보 풀로 재시도할 수 있도록 장소 감소를 보류한다.
+            // 프런트의 마지막 단계에서만 true가 되어 아래 감소 로직을 수행한다.
+            if (!allowPlaceReduction) {
+                throw new PublicTransitMinimumPlaceException(
+                        minimumOrdinaryPlaceCount
+                );
+            }
+
             // 40분 상한은 유지하되 장소를 계속 지워 숙소만 남기는 결과는 만들지 않는다.
             // 최소 개수를 깨야 한다면 프런트가 중복 제한을 단계적으로 완화한 후보 풀로
             // 같은 DAY를 다시 요청할 수 있도록 실패를 명확히 반환한다.
@@ -651,17 +662,13 @@ public class CourseOptimizationService {
 
 
     private int resolveMinimumActualRouteOrdinaryPlaceCount(
-            String travelCode,
             List<PlaceCandidateDto> candidates
     ) {
         int availableOrdinaryPlaceCount = countOrdinaryPlaces(candidates);
-        String normalizedTravelCode = travelCode == null
-                ? ""
-                : travelCode.trim().toUpperCase(Locale.ROOT);
-        int configuredMinimum = normalizedTravelCode.endsWith("P")
-                ? DENSE_SCHEDULE_MIN_ORDINARY_PLACES
-                : RELAXED_SCHEDULE_MIN_ORDINARY_PLACES;
-        return Math.min(availableOrdinaryPlaceCount, configuredMinimum);
+        return Math.min(
+                availableOrdinaryPlaceCount,
+                MIN_ACTUAL_ROUTE_ORDINARY_PLACES
+        );
     }
 
     private int countOrdinaryPlaces(List<PlaceCandidateDto> candidates) {
@@ -909,7 +916,7 @@ public class CourseOptimizationService {
     /**
      * 실제 대중교통 경로에서 교체하거나 제거할 장소 인덱스를 찾는다.
      * 일반 장소와 숙소 도착 모두 40분을 절대 상한으로 유지한다.
-     * 30분 초과 구간은 후보 정렬에서만 불리하게 평가하고 교체·삭제 사유로 삼지 않는다.
+     * 실제 30분 초과 구간은 한 DAY에 최대 한 곳만 남긴다.
      */
     private int findRemovablePublicTransitViolation(
             List<PlaceCandidateDto> candidates,
@@ -941,6 +948,39 @@ public class CourseOptimizationService {
             if (travelMinutes > PUBLIC_TRANSIT_MAX_MINUTES) {
                 return index;
             }
+        }
+
+        // 40분 이내이더라도 실제 30분 초과 구간이 두 곳 이상이면 두 번째부터
+        // 같은 카테고리 후보 교체 또는 장소 감소 대상으로 보낸다.
+        int longLegCount = 0;
+        for (int index = 1; index < candidates.size(); index++) {
+            if (routeMatrix.isEstimated(index - 1, index)) {
+                continue;
+            }
+            double travelMinutes = routeMatrix.getTravelTimeMinutes(
+                    index - 1,
+                    index
+            );
+            if (travelMinutes <= PUBLIC_TRANSIT_PREFERRED_MAX_MINUTES) {
+                continue;
+            }
+            longLegCount++;
+            if (longLegCount <= 1) {
+                continue;
+            }
+
+            PlaceCandidateDto destination = candidates.get(index);
+            if (isHotelCategory(destination.getCategory())) {
+                int removableIndex = previousOrdinaryPlaceIndex(
+                        candidates,
+                        index
+                );
+                if (removableIndex >= 0) {
+                    return removableIndex;
+                }
+                continue;
+            }
+            return index;
         }
 
         return -1;
@@ -1388,13 +1428,18 @@ public class CourseOptimizationService {
 
     /**
      * 이동시간을 주 기준으로 먼 구간을 판단하고 거리는 보조 기준으로만 사용한다.
-     * 거리만 긴데 실제 이동시간은 충분히 짧은 자동차 구간이 강제 교체되지 않도록 한다.
+     * 자동차는 별도 시간·거리 제한을 두지 않아 이 교체 대상에서 제외한다.
      */
     private boolean isDistantLeg(
             double distanceKm,
             double travelTimeMinutes,
             TransportMode transportMode
     ) {
+        // 자동차는 별도의 시간·거리 상한으로 장소를 교체하지 않는다.
+        if (transportMode == TransportMode.DRIVING) {
+            return false;
+        }
+
         double maxTravelMinutes = maxTravelMinutes(transportMode);
         if (travelTimeMinutes > maxTravelMinutes) {
             return true;
@@ -1416,7 +1461,7 @@ public class CourseOptimizationService {
         return switch (transportMode) {
             case WALKING -> 2.0;
             case PUBLIC_TRANSIT -> 10.0;
-            case DRIVING -> 15.0;
+            case DRIVING -> Double.POSITIVE_INFINITY;
         };
     }
 
@@ -1425,7 +1470,7 @@ public class CourseOptimizationService {
         return switch (transportMode) {
             case WALKING -> 30.0;
             case PUBLIC_TRANSIT -> PUBLIC_TRANSIT_MAX_MINUTES;
-            case DRIVING -> 40.0;
+            case DRIVING -> Double.POSITIVE_INFINITY;
         };
     }
 

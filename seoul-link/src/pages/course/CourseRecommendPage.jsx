@@ -80,16 +80,33 @@ const PUBLIC_TRANSIT_ROUTE_OVERLAP_TIERS = Object.freeze([
         key: 'STRICT',
         sameDayOverlapLimit: 1,
         crossDayOverlapLimit: 0,
+        alternativeLimit: 8,
+        dayCandidateLimit: 24,
+        allowPlaceReduction: false,
+    }),
+    Object.freeze({
+        key: 'EXPAND_STRICT',
+        sameDayOverlapLimit: 1,
+        crossDayOverlapLimit: 0,
+        alternativeLimit: 16,
+        dayCandidateLimit: 48,
+        allowPlaceReduction: false,
     }),
     Object.freeze({
         key: 'RELAX_SAME_DAY',
         sameDayOverlapLimit: 2,
         crossDayOverlapLimit: 0,
+        alternativeLimit: 24,
+        dayCandidateLimit: 64,
+        allowPlaceReduction: false,
     }),
     Object.freeze({
         key: 'RELAX_CROSS_DAY',
         sameDayOverlapLimit: 2,
         crossDayOverlapLimit: 1,
+        alternativeLimit: 32,
+        dayCandidateLimit: 96,
+        allowPlaceReduction: true,
     }),
 ]);
 
@@ -556,6 +573,29 @@ function hasEstimatedRouteDetailsResponse(routeDetails) {
         ));
 }
 
+/** 실제 대중교통 응답도 30분 우선·40분 절대 상한을 지키는지 마지막으로 검증합니다. */
+function hasPublicTransitRouteLimitViolation(routeDetails) {
+    const resolvedPlaces = Array.isArray(routeDetails?.optimizedPlaces)
+        ? routeDetails.optimizedPlaces
+        : [];
+    let longLegCount = 0;
+
+    for (let index = 1; index < resolvedPlaces.length; index += 1) {
+        const place = resolvedPlaces[index];
+        if (Boolean(place?.routeEstimated)) continue;
+
+        const travelMinutes = Number(place?.travelTimeFromPreviousMinutes);
+        if (!Number.isFinite(travelMinutes)) continue;
+        if (travelMinutes > 40) return true;
+        if (travelMinutes > 30) {
+            longLegCount += 1;
+            if (longLegCount > 1) return true;
+        }
+    }
+
+    return false;
+}
+
 /** 동일 코스·DAY 상세 요청과 완료 결과를 공유하고 이동수단별 제한 시간까지 기다립니다. */
 function requestRouteDetailsOnce(cacheKey, request) {
     if (routeDetailsResultCache.has(cacheKey)) {
@@ -940,19 +980,13 @@ function uniqueRouteCandidates(candidates) {
     return [...unique.values()];
 }
 
-/** P형은 4곳, R형은 3곳을 실제 경로 보정 뒤에도 최소로 유지합니다. */
-function getMinimumResolvedOrdinaryPlaceCount(travelCode, originalPlaces) {
+/** 후보 교체가 불가능하면 P/R형 모두 일반 장소 3곳까지 단계적으로 줄입니다. */
+function getMinimumResolvedOrdinaryPlaceCount(originalPlaces) {
     const originalOrdinaryPlaceCount = (Array.isArray(originalPlaces)
         ? originalPlaces
         : []
     ).filter((place) => !isHotelCategory(place?.category)).length;
-    const densityCode = String(travelCode || '')
-        .trim()
-        .toUpperCase()
-        .slice(-1);
-    const configuredMinimum = densityCode === 'P' ? 4 : 3;
-
-    return Math.min(originalOrdinaryPlaceCount, configuredMinimum);
+    return Math.min(originalOrdinaryPlaceCount, 3);
 }
 
 function getRouteOverlapTiers(transportMode) {
@@ -1132,7 +1166,7 @@ function buildRouteAlternatives(
             })
         ))
         .sort(byRecommendationScore)
-        .slice(0, 8);
+        .slice(0, overlapTier?.alternativeLimit ?? 8);
 }
 
 /** 추천 응답의 장소 한 건을 고정 순서 경로 조회 입력으로 변환합니다. */
@@ -1216,13 +1250,15 @@ function buildRouteDetailsRequest(
         ));
     const eligibleDayCandidates = [...remainingDayCandidates]
         .sort(byRecommendationScore)
-        .slice(0, 24);
+        .slice(0, overlapTier?.dayCandidateLimit ?? 24);
 
     return {
         resultId: response?.resultId ?? null,
         travelCode: response?.travelCode ?? null,
         transportMode,
         enforcePublicTransitLimit: true,
+        allowPublicTransitPlaceReduction:
+            Boolean(overlapTier?.allowPlaceReduction),
         dailyStartTime: response?.dailyStartTime
             ?? recommendRequest?.dailyStartTime
             ?? null,
@@ -1259,9 +1295,9 @@ function buildRouteDetailsRequest(
 }
 
 /**
- * 중복 완화 후보를 모두 검토해도 40분 상한을 만족하는 교체안을 만들지 못했을 때,
- * 현재 화면의 장소와 순서는 그대로 두고 원래 인접 구간만 ODsay로 조회합니다.
- * 중복 제한은 장소 교체 후보 선택에만 적용하며 실제 경로 조회 자체를 막지 않습니다.
+ * 모든 교체 후보를 검토해도 대중교통 제한을 만족하지 못했을 때,
+ * 현재 화면의 장소와 순서를 그대로 유지하고 원래 인접 구간만 실제 경로로 조회합니다.
+ * 기존의 엄격한 40분 제한 보정 시도를 모두 수행한 뒤에만 호출됩니다.
  */
 function buildOriginalPublicTransitRouteRequest(
     option,
@@ -1283,6 +1319,8 @@ function buildOriginalPublicTransitRouteRequest(
     return {
         ...request,
         enforcePublicTransitLimit: false,
+        preserveOriginalPublicTransitRoute: true,
+        allowPublicTransitPlaceReduction: false,
         placeCandidates: (request.placeCandidates || []).map((candidate) => ({
             ...candidate,
             alternativeCandidates: [],
@@ -1290,7 +1328,6 @@ function buildOriginalPublicTransitRouteRequest(
         alternativeCandidates: [],
     };
 }
-
 
 /** 완화 단계만 달라졌지만 실제 후보 구성이 같으면 ODsay를 다시 호출하지 않습니다. */
 function getRouteDetailsRequestSignature(request) {
@@ -1303,6 +1340,12 @@ function getRouteDetailsRequestSignature(request) {
     }));
 
     return JSON.stringify({
+        enforcePublicTransitLimit:
+            request?.enforcePublicTransitLimit !== false,
+        preserveOriginalPublicTransitRoute:
+            Boolean(request?.preserveOriginalPublicTransitRoute),
+        allowPlaceReduction:
+            Boolean(request?.allowPublicTransitPlaceReduction),
         places: summarizeCandidates(request?.placeCandidates),
         alternatives: summarizeCandidates(request?.alternativeCandidates),
     });
@@ -1788,7 +1831,6 @@ async function prepareVisibleRoutesBeforeDisplay(
             + (routeOriginPlace ? 1 : 0);
         const minimumOrdinaryPlaceCount =
             getMinimumResolvedOrdinaryPlaceCount(
-                preparedResponse?.travelCode,
                 day.places,
             );
         const overlapTiers = getRouteOverlapTiers(transportMode);
@@ -1841,6 +1883,14 @@ async function prepareVisibleRoutesBeforeDisplay(
                     || routeDetails.optimizedPlaces.length > expectedPlaceCount
                 ) {
                     throw new Error('교통편 응답의 장소 구성을 확인할 수 없습니다.');
+                }
+                if (
+                    normalizeTransportMode(transportMode) === 'PUBLIC_TRANSIT'
+                    && hasPublicTransitRouteLimitViolation(routeDetails)
+                ) {
+                    constraintFallback = true;
+                    lastRouteError = '대중교통 실제 경로가 30분 우선·40분 제한을 벗어났습니다.';
+                    continue;
                 }
 
                 const { visibleResolvedPlaces } = getVisibleResolvedRoutePlaces(
@@ -2595,6 +2645,21 @@ function CourseRecommendPage() {
             }
 
             const preparedResponse = preparedResult.response;
+            // 화면이 열린 뒤 선조회한 DAY 2+ 실제 경로도 같은 courseId의
+            // 추천 이력에 다시 저장해 상세 화면이 예상값을 읽지 않게 합니다.
+            await syncRecommendationSnapshot(
+                preparedResponse,
+                profile.memberId,
+            );
+
+            if (
+                !pageMountedRef.current
+                || dayRouteRequestRef.current?.token !== requestToken
+                || responseRef.current !== responseAtRequestStart
+            ) {
+                return;
+            }
+
             const queuedDayNo = Number(queuedDayActivationRef.current);
             const shouldActivatePreparedDay = Number.isFinite(queuedDayNo)
                 && queuedDayNo === Number(availableDayNo);
@@ -2686,6 +2751,7 @@ function CourseRecommendPage() {
         activeRecommendationKey,
         nextRecommendation,
         previousRecommendation,
+        profile.memberId,
         recommendRequest,
         response,
         showingNextRecommendation,

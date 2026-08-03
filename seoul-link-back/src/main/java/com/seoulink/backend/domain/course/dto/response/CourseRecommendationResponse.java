@@ -35,6 +35,7 @@ public class CourseRecommendationResponse {
     @Builder.Default
     private List<String> coverImageUrls = new ArrayList<>();
     private String courseType;
+    private String sourceCourseKey;
     private String region;
     private String publicStatus;
     private TransportMode transportMode;
