@@ -1297,6 +1297,7 @@ function buildRouteDetailsRequest(
 /**
  * 모든 교체 후보를 검토해도 대중교통 제한을 만족하지 못했을 때,
  * 현재 화면의 장소와 순서를 그대로 유지하고 원래 인접 구간만 실제 경로로 조회합니다.
+ * 기존의 엄격한 40분 제한 보정 시도를 모두 수행한 뒤에만 호출됩니다.
  */
 function buildOriginalPublicTransitRouteRequest(
     option,
@@ -1318,6 +1319,7 @@ function buildOriginalPublicTransitRouteRequest(
     return {
         ...request,
         enforcePublicTransitLimit: false,
+        preserveOriginalPublicTransitRoute: true,
         allowPublicTransitPlaceReduction: false,
         placeCandidates: (request.placeCandidates || []).map((candidate) => ({
             ...candidate,
@@ -1340,6 +1342,8 @@ function getRouteDetailsRequestSignature(request) {
     return JSON.stringify({
         enforcePublicTransitLimit:
             request?.enforcePublicTransitLimit !== false,
+        preserveOriginalPublicTransitRoute:
+            Boolean(request?.preserveOriginalPublicTransitRoute),
         allowPlaceReduction:
             Boolean(request?.allowPublicTransitPlaceReduction),
         places: summarizeCandidates(request?.placeCandidates),
