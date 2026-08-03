@@ -56,6 +56,7 @@ const themeCourseBadgesByKey = new Map(
 function getSavedCourseBadge(course) {
     if (String(course?.courseType || "").toUpperCase() !== "THEME") {
         return "BEST";
+
     }
 
     return themeCourseBadgesByKey.get(course?.sourceCourseKey) || null;
@@ -400,18 +401,22 @@ export default function MyPage() {
         dashboardLoading,
     ]);
 
+    const loginType = String(
+        member.loginType || "LOCAL"
+    ).toUpperCase();
+
     const userName =
-        member.nickname?.trim() ||
-        member.name?.trim() ||
-        "민영환";
+        loginType === "LOCAL"
+            ? member.name?.trim() ||
+            member.nickname?.trim() ||
+            "사용자"
+            : member.nickname?.trim() ||
+            member.name?.trim() ||
+            "사용자";
 
     const email =
         member.email ||
         "user@seoulink.com";
-
-    const loginType =
-        member.loginType ||
-        "LOCAL";
 
     const travelCode =
         travelType?.travelCode?.trim().toUpperCase() ||

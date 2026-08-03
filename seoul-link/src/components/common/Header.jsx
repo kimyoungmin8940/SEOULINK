@@ -33,12 +33,26 @@ const sideMenuItems = [
 ];
 
 function getStoredUserName() {
-    const member = authStore.getMember();
+    const user = authStore.getMember();
+    const loginType = String(
+        user?.loginType || "LOCAL"
+    ).toUpperCase();
+
+    if (loginType === "LOCAL") {
+        return (
+            user?.name?.trim() ||
+            user?.nickname?.trim() ||
+            user?.email ||
+            user?.memberId ||
+            "사용자"
+        );
+    }
 
     return (
-        member?.nickname ||
-        member?.name ||
-        member?.email ||
+        user?.nickname?.trim() ||
+        user?.name?.trim() ||
+        user?.email ||
+        user?.memberId ||
         "사용자"
     );
 }

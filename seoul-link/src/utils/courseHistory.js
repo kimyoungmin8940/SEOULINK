@@ -1,38 +1,11 @@
 import { getCourseCoverImageUrls } from './courseImage';
+import { authStore } from '../store/authStore';
 
 /** 로그인 저장값의 손상된 JSON을 무시하고 null로 처리합니다. */
-function safelyParse(value) {
-    if (!value || typeof value !== 'string') return null;
 
-    try {
-        return JSON.parse(value);
-    } catch {
-        return null;
-    }
-}
 
 /** 로그인 모듈 통합 전 memberId 탐색에 필요한 JWT payload만 읽습니다. */
-function decodeTokenPayload(token) {
-    try {
-        const encodedPayload = token?.split('.')[1];
-        if (!encodedPayload) return null;
 
-        const normalized = encodedPayload
-            .replace(/-/g, '+')
-            .replace(/_/g, '/')
-            .padEnd(Math.ceil(encodedPayload.length / 4) * 4, '=');
-        const decoded = decodeURIComponent(
-            atob(normalized)
-                .split('')
-                .map((character) => `%${character.charCodeAt(0).toString(16).padStart(2, '0')}`)
-                .join(''),
-        );
-
-        return JSON.parse(decoded);
-    } catch {
-        return null;
-    }
-}
 
 /** 서로 다른 목록 응답에서 사용한 코스 ID 필드명을 하나로 통일합니다. */
 export function getCourseId(course) {
@@ -47,22 +20,14 @@ export function getCourseId(course) {
 }
 
 /** 로그인 통합 전 백엔드가 요구하는 memberId를 기존 로그인 저장값에서 찾습니다. */
+/** 현재 로그인 세션에서 회원 ID를 가져옵니다. */
 export function getCurrentMemberId() {
-    const storedUser = ['user', 'member', 'loginUser']
-        .map((key) => safelyParse(localStorage.getItem(key)))
-        .find((value) => value && typeof value === 'object') || {};
-    const tokenPayload = decodeTokenPayload(localStorage.getItem('accessToken')) || {};
-    const memberId = Number(
-        storedUser.memberId
-        ?? storedUser.userId
-        ?? storedUser.id
-        ?? tokenPayload.memberId
-        ?? tokenPayload.userId
-        ?? tokenPayload.id
-        ?? localStorage.getItem('memberId'),
-    );
+    const member = authStore.getMember();
+    const memberId = Number(member?.memberId);
 
-    return Number.isInteger(memberId) && memberId > 0 ? memberId : null;
+    return Number.isInteger(memberId) && memberId > 0
+        ? memberId
+        : null;
 }
 
 function formatMinutes(value) {
