@@ -6,6 +6,24 @@ import {
     saveThemeCourse,
 } from '../api/themeCourseApi';
 
+function fetchBookmarkStatuses(memberId, courses, enabled, signal) {
+    const sourceCourseKeys = [
+        ...new Set(courses.map((course) => course.sourceCourseKey).filter(Boolean)),
+    ];
+
+    if (!enabled || !memberId || sourceCourseKeys.length === 0) {
+        return null;
+    }
+
+    return Promise.all(sourceCourseKeys.map(
+        (sourceCourseKey) => getThemeCourseBookmarkStatus(
+            memberId,
+            sourceCourseKey,
+            signal ? { signal } : {},
+        ),
+    ));
+}
+
 /**
  * 테마 목록과 상세 화면이 같은 서버 저장 상태를 사용하도록 묶은 공통 훅입니다.
  * localStorage는 사용하지 않고 TRAVEL_COURSES 저장 결과를 화면의 기준으로 삼습니다.
@@ -22,23 +40,17 @@ export default function useThemeCourseBookmarks(
     const [error, setError] = useState(null);
 
     useEffect(() => {
-        const sourceCourseKeys = [
-            ...new Set(courses.map((course) => course.sourceCourseKey).filter(Boolean)),
-        ];
-
-        if (!enabled || !memberId || sourceCourseKeys.length === 0) {
-            return undefined;
-        }
-
         const controller = new AbortController();
+        const request = fetchBookmarkStatuses(
+            memberId,
+            courses,
+            enabled,
+            controller.signal,
+        );
 
-        Promise.all(sourceCourseKeys.map(
-            (sourceCourseKey) => getThemeCourseBookmarkStatus(
-                memberId,
-                sourceCourseKey,
-                { signal: controller.signal },
-            ),
-        ))
+        if (!request) return undefined;
+
+        request
             .then((responses) => {
                 setSavedCourses(responses
                     .filter((response) => response?.saved)
@@ -46,6 +58,7 @@ export default function useThemeCourseBookmarks(
                         ...response,
                         savedCourseId: response.courseId,
                     })));
+                setError(null);
                 setStatus('success');
             })
             .catch((requestError) => {
@@ -56,6 +69,50 @@ export default function useThemeCourseBookmarks(
             });
 
         return () => controller.abort();
+    }, [courses, enabled, memberId]);
+
+    useEffect(() => {
+        let controller = null;
+
+        const handlePageShow = (event) => {
+            if (!event.persisted) return;
+
+            controller?.abort();
+            controller = new AbortController();
+            const request = fetchBookmarkStatuses(
+                memberId,
+                courses,
+                enabled,
+                controller.signal,
+            );
+
+            if (!request) return;
+
+            request
+                .then((responses) => {
+                    setSavedCourses(responses
+                        .filter((response) => response?.saved)
+                        .map((response) => ({
+                            ...response,
+                            savedCourseId: response.courseId,
+                        })));
+                    setError(null);
+                    setStatus('success');
+                })
+                .catch((requestError) => {
+                    if (requestError?.name === 'AbortError') return;
+
+                    setError(requestError);
+                    setStatus('error');
+                });
+        };
+
+        window.addEventListener('pageshow', handlePageShow);
+
+        return () => {
+            window.removeEventListener('pageshow', handlePageShow);
+            controller?.abort();
+        };
     }, [courses, enabled, memberId]);
 
     const savedByKey = useMemo(

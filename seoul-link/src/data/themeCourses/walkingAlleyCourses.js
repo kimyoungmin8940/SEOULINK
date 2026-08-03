@@ -7,7 +7,7 @@ export const walkingAlleyCourseRecipes = [
     {
         courseId: 1601,
         themeSlug: 'walking-alley',
-        title: '안국–삼청–익선동 골목',
+        title: '익선동 한옥길 사이로 이어지는 카페 산책',
         description:
             '안국의 공예 전시와 삼청동·안국의 카페를 즐긴 뒤 익선동 한옥거리를 걷는 코스예요',
         optionName: '안국 익선동 골목',
@@ -21,10 +21,10 @@ export const walkingAlleyCourseRecipes = [
                 startTime: '12:00',
                 center: [37.577, 126.986],
                 places: [
-                    ['서울공예박물관', 'TOUR'],
-                    ['블루보틀 삼청', 'CAFE'],
-                    ['카페 어니언 안국', 'CAFE'],
+                    ['찬양집', 'RESTAURANT'],
                     ['익선동 한옥거리', 'TOUR'],
+                    ['익선동 식물', 'CAFE'],
+                    ['누디트 익선', 'CAFE'],
                 ],
             },
         ],
@@ -32,7 +32,7 @@ export const walkingAlleyCourseRecipes = [
     {
         courseId: 1602,
         themeSlug: 'walking-alley',
-        title: '인사동–을지로 시간여행 골목',
+        title: '쌈지길에서 옛찻집까지 걷는 인사동 골목',
         description:
             '전통 상권에서 오래된 도심 골목으로 이동하며 혼밥과 카페를 자연스럽게 즐기는 시간여행 코스예요',
         optionName: '인사동 을지로 골목',
@@ -46,10 +46,11 @@ export const walkingAlleyCourseRecipes = [
                 startTime: '12:00',
                 center: [37.57, 126.99],
                 places: [
+                    ['유진식당', 'RESTAURANT'],
                     ['쌈지길', 'TOUR'],
-                    ['이문설농탕', 'RESTAURANT'],
-                    ['커피한약방', 'CAFE'],
-                    ['챔프커피 제3작업실', 'CAFE'],
+                    ['아라리오뮤지엄 인 스페이스', 'TOUR'],
+                    ['인사동문화의거리', 'TOUR'],
+                    ['신옛찻집', 'CAFE'],
                 ],
             },
         ],

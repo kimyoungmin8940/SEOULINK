@@ -32,6 +32,7 @@ import {
     removeSavedRecommendedCourse,
 } from "../../api/courseApi";
 import { getMemberReviews } from "../../api/reviewApi";
+import { themeCourses } from "../../data/themeCourseData";
 import { getCodeTraits } from "../../data/travelPreferenceData";
 import { authStore } from "../../store/authStore";
 
@@ -45,6 +46,18 @@ import {
 } from "../../utils/courseRecommendationHandoff";
 import "../../styles/mypage.css";
 import "../../styles/mypage-travel-code-colors.css";
+
+const themeCourseBadgesByKey = new Map(
+    themeCourses.map((course) => [course.sourceCourseKey, course.badge])
+);
+
+function getSavedCourseBadge(course) {
+    if (String(course?.courseType || "").toUpperCase() !== "THEME") {
+        return "BEST";
+    }
+
+    return themeCourseBadgesByKey.get(course?.sourceCourseKey) || null;
+}
 
 const menuItems = [
     {
@@ -900,9 +913,11 @@ export default function MyPage() {
                                                 }}
                                             />
 
-                                            <span className="course-best">
-                                                BEST
-                                            </span>
+                                            {getSavedCourseBadge(course) && (
+                                                <span className="course-best">
+                                                    {getSavedCourseBadge(course)}
+                                                </span>
+                                            )}
 
                                             <button
                                                 className="course-bookmark-icon"
