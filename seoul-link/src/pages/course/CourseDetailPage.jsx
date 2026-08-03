@@ -891,11 +891,17 @@ function recalculateDetailCourse(course, nextDays) {
         (sum, day) => sum + toFiniteNumber(day.dailyVisitTimeMinutes),
         0,
     );
+    const placeCount = days.reduce(
+        (count, day) => count + (day.places || []).length,
+        0,
+    );
     const estimatedTravelTimes = days.some(hasEstimatedTravelLeg);
 
     return normalizeCourseDetail({
         ...course,
         days,
+        placeCount,
+        dayCount: days.length,
         totalDistanceKm,
         totalTravelTimeMinutes,
         totalVisitTimeMinutes,
@@ -911,16 +917,28 @@ function mergeDetailRouteResponse(course, dayNo, routeDetails) {
     const resolvedPlaces = Array.isArray(routeDetails?.optimizedPlaces)
         ? routeDetails.optimizedPlaces
         : [];
-    const routeOriginOffset = day?.routeOriginPlace ? 1 : 0;
+    const routeOriginPlaceId = Number(day?.routeOriginPlace?.placeId);
+    const responseIncludesRouteOrigin = Number.isInteger(routeOriginPlaceId)
+        && Number(resolvedPlaces[0]?.placeId) === routeOriginPlaceId;
+    const visibleResolvedPlaces = responseIncludesRouteOrigin
+        ? resolvedPlaces.slice(1)
+        : resolvedPlaces;
 
-    if (resolvedPlaces.length !== originalPlaces.length + routeOriginOffset) {
+    if (visibleResolvedPlaces.length === 0) {
         return course;
     }
 
-    const places = originalPlaces.map((place, index) => {
-        const resolved = resolvedPlaces[index + routeOriginOffset];
+    const originalByPlaceId = new Map(
+        originalPlaces.map((place) => [Number(place?.placeId), place]),
+    );
+    const places = visibleResolvedPlaces.map((resolved, index) => {
+        const original = originalByPlaceId.get(Number(resolved?.placeId))
+            || originalPlaces[index]
+            || {};
+
         return {
-            ...place,
+            ...original,
+            ...resolved,
             distanceFromPreviousKm:
                 Number(resolved?.distanceFromPreviousKm) || 0,
             travelTimeFromPreviousMinutes:
@@ -1012,6 +1030,8 @@ async function refreshEstimatedDetailRoutes(course, memberId) {
     const transportMode = normalizeTransportMode(course?.transportMode);
     const transportLabel = getTransportMeta(transportMode)?.label || '이동';
     let refreshedAnyDay = false;
+    let refreshTargetCount = 0;
+    let lastRefreshError = null;
 
     for (const day of course.days || []) {
         const needsRefresh = hasEstimatedTravelLeg(day)
@@ -1020,6 +1040,7 @@ async function refreshEstimatedDetailRoutes(course, memberId) {
                 && hasPublicTransitDayLimitViolation(day)
             );
         if (!needsRefresh) continue;
+        refreshTargetCount += 1;
 
         const routePlaces = day.routeOriginPlace
             ? [day.routeOriginPlace, ...(day.places || [])]
@@ -1031,7 +1052,15 @@ async function refreshEstimatedDetailRoutes(course, memberId) {
             !Number.isFinite(candidate.latitude)
             || !Number.isFinite(candidate.longitude)
         ));
-        if (hasInvalidCoordinates || candidates.length < 2) continue;
+        if (hasInvalidCoordinates || candidates.length < 2) {
+            lastRefreshError = new Error(
+                hasInvalidCoordinates
+                    ? `DAY ${day.dayNo} 장소 좌표를 확인할 수 없습니다.`
+                    : `DAY ${day.dayNo} 경로를 계산할 장소가 부족합니다.`,
+            );
+            console.warn(lastRefreshError.message);
+            continue;
+        }
 
         try {
             const routeDetails = await resolveCourseRouteDetails({
@@ -1055,15 +1084,26 @@ async function refreshEstimatedDetailRoutes(course, memberId) {
                     '대중교통 실제 경로가 30분 우선·40분 제한을 벗어났습니다.',
                 );
             }
-            refreshedCourse = mergeDetailRouteResponse(
+            const mergedCourse = mergeDetailRouteResponse(
                 refreshedCourse,
                 day.dayNo,
                 routeDetails,
             );
+            if (mergedCourse === refreshedCourse) {
+                throw new Error(
+                    `DAY ${day.dayNo} 실제 경로 응답에 표시할 장소가 없습니다.`,
+                );
+            }
+            refreshedCourse = mergedCourse;
             refreshedAnyDay = true;
         } catch (error) {
+            lastRefreshError = error;
             console.warn(`DAY ${day.dayNo} 실제 ${transportLabel} 경로 재조회 실패:`, error);
         }
+    }
+
+    if (refreshTargetCount > 0 && !refreshedAnyDay) {
+        throw lastRefreshError || new Error('실제 경로를 적용하지 못했습니다.');
     }
 
     if (refreshedAnyDay) {
@@ -1117,6 +1157,7 @@ function CourseDetailPage() {
     const [isSavingCourse, setIsSavingCourse] = useState(false);
     const [savedCourseId, setSavedCourseId] = useState(null);
     const [toast, setToast] = useState(null);
+    const [routeRefreshStatus, setRouteRefreshStatus] = useState('idle');
     const heroMetaRef = useRef(null);
     const routeRefreshStartedRef = useRef(new Set());
     const [isHeroMetaWrapped, setIsHeroMetaWrapped] = useState(false);
@@ -1292,7 +1333,23 @@ function CourseDetailPage() {
                     return;
                 }
 
+                const normalizedCourseId = Number(
+                    normalizedCourse?.courseId || courseId,
+                );
+                const normalizedResultId = Number(normalizedCourse?.resultId);
+                const canRefreshRoutes = (
+                    String(normalizedCourse?.courseType || '').toUpperCase() === 'SURVEY'
+                    && Number.isInteger(normalizedCourseId)
+                    && normalizedCourseId > 0
+                    && Number.isInteger(normalizedResultId)
+                    && normalizedResultId > 0
+                    && Number.isInteger(memberId)
+                    && memberId > 0
+                    && needsCourseRouteRefresh(normalizedCourse)
+                );
+
                 setCourse(normalizedCourse);
+                setRouteRefreshStatus(canRefreshRoutes ? 'loading' : 'idle');
                 setActiveDayNo(normalizedCourse.days[0]?.dayNo ?? 1);
                 setIsSavingCourse(false);
                 setSavedCourseId(
@@ -1346,11 +1403,12 @@ function CourseDetailPage() {
         }
 
         routeRefreshStartedRef.current.add(refreshKey);
+        setRouteRefreshStatus('loading');
         setToast({
             tone: 'info',
             message: isPublicTransitLimitRepair
-                ? '대중교통 실제 경로와 이동 제한을 다시 확인하고 있어요.'
-                : `예상 구간의 실제 ${refreshTransport?.label || '이동'} 경로를 확인하고 있어요.`,
+                ? '실제 대중교통 경로를 가져오는 중이에요. 완료되면 거리와 시간이 자동으로 업데이트됩니다.'
+                : `실제 ${refreshTransport?.label || '이동'} 경로를 가져오는 중이에요. 완료되면 거리와 시간이 자동으로 업데이트됩니다.`,
         });
         let refreshPromise = detailRouteRefreshPromises.get(refreshKey);
 
@@ -1363,20 +1421,27 @@ function CourseDetailPage() {
         refreshPromise
             .then((refreshedCourse) => {
                 setCourse(refreshedCourse);
+                const refreshCompleted = !needsCourseRouteRefresh(refreshedCourse);
+                setRouteRefreshStatus(refreshCompleted ? 'complete' : 'partial');
                 setToast(
-                    !needsCourseRouteRefresh(refreshedCourse)
+                    refreshCompleted
                         ? {
                             tone: 'success',
                             message: `${refreshTransport?.label || '이동'} 실제 경로로 다시 확인했어요.`,
                         }
                         : {
                             tone: 'info',
-                            message: '일부 구간은 실제 경로나 이동 제한을 다시 확인하지 못했어요.',
+                            message: '실제 경로 확인이 끝났지만 일부 구간은 예상값으로 유지돼요.',
                         },
                 );
             })
             .catch((error) => {
                 console.warn('상세 실제 경로 보정 실패:', error);
+                setRouteRefreshStatus('failed');
+                setToast({
+                    tone: 'error',
+                    message: '실제 경로를 가져오지 못해 예상값으로 유지돼요.',
+                });
             });
     }, [course, courseId, memberId, source, status]);
 
@@ -1386,6 +1451,32 @@ function CourseDetailPage() {
     const activeDayIndex = course?.days.findIndex(
         (day) => day.dayNo === activeDay?.dayNo,
     ) ?? -1;
+    const activeDayMetrics = useMemo(() => {
+        const places = activeDay?.places || [];
+        const totalDistanceKm = places.reduce(
+            (sum, place) => sum + toFiniteNumber(place.distanceFromPreviousKm),
+            0,
+        );
+        const totalTravelTimeMinutes = places.reduce(
+            (sum, place) => sum + toFiniteNumber(
+                place.travelTimeFromPreviousMinutes,
+            ),
+            0,
+        );
+        const totalVisitTimeMinutes = places.reduce(
+            (sum, place) => sum + toFiniteNumber(place.expectedVisitMinutes),
+            0,
+        );
+
+        return {
+            totalDistanceKm,
+            totalTravelTimeMinutes,
+            totalVisitTimeMinutes,
+            totalCourseTimeMinutes:
+                totalTravelTimeMinutes + totalVisitTimeMinutes,
+            placeCount: places.length,
+        };
+    }, [activeDay]);
     const themeTags = course ? getThemeTags(course) : [];
     const dateRange = course
         ? course.courseType === 'THEME'
@@ -1403,15 +1494,24 @@ function CourseDetailPage() {
         : [];
     const transport = getTransportMeta(course?.transportMode);
     const activeDayHasEstimatedTravelTimes = hasEstimatedTravelLeg(activeDay);
+    const activeDayRouteIsRefreshing = routeRefreshStatus === 'loading'
+        && activeDayHasEstimatedTravelTimes;
     const themeCourseSaved = isThemeCoursePath
         && themeBookmarks.isSaved(themeCourse?.sourceCourseKey);
     const themeCourseBookmarkBusy = isThemeCoursePath
         && themeBookmarks.isBusy(themeCourse?.sourceCourseKey);
-    const scheduleNotice = activeDayHasEstimatedTravelTimes
-        ? estimatedScheduleNotices[transport?.transportMode]
-            || '경로를 불러오지 못한 일부 이동 구간은 예상값입니다. 실제 이동 상황에 따라 달라질 수 있습니다.'
-        : compactScheduleNotices[transport?.transportMode]
-            || '이동 거리와 시간을 기준으로 구성한 추천 동선입니다. 실제 상황에 따라 달라질 수 있습니다.';
+    const scheduleNotice = activeDayRouteIsRefreshing
+        ? `실제 ${transport?.label || '이동'} 경로를 가져오는 중이에요. 완료되면 거리와 시간이 자동으로 업데이트됩니다.`
+        : activeDayHasEstimatedTravelTimes
+            ? estimatedScheduleNotices[transport?.transportMode]
+                || '실제 경로 확인이 끝난 일부 이동 구간은 예상값으로 표시합니다.'
+            : compactScheduleNotices[transport?.transportMode]
+                || '이동 거리와 시간을 기준으로 구성한 추천 동선입니다. 실제 상황에 따라 달라질 수 있습니다.';
+    const scheduleNoticeClassName = activeDayRouteIsRefreshing
+        ? ' is-refreshing'
+        : activeDayHasEstimatedTravelTimes
+            ? ' is-estimated'
+            : '';
 
     const moveActiveDay = (offset) => {
         const targetDay = course?.days[activeDayIndex + offset];
@@ -1752,14 +1852,17 @@ function CourseDetailPage() {
                             </div>
                                 </section>
 
-                                <section className="course-detail-metrics" aria-label="코스 요약">
+                                <section
+                                    className="course-detail-metrics"
+                                    aria-label={`DAY ${activeDay?.dayNo || 1} 코스 요약`}
+                                >
                             <article>
                                 <span><MapPinned size={21} aria-hidden="true" /></span>
-                                <div><small>이동 거리</small><strong>약 {course.totalDistanceKm.toFixed(1)}km</strong></div>
+                                <div><small>이동 거리</small><strong>약 {activeDayMetrics.totalDistanceKm.toFixed(1)}km</strong></div>
                             </article>
                             <article>
                                 <span><Clock3 size={21} aria-hidden="true" /></span>
-                                <div><small>전체 소요 시간</small><strong>약 {formatMinutes(course.totalCourseTimeMinutes)}</strong></div>
+                                <div><small>전체 소요 시간</small><strong>약 {formatMinutes(activeDayMetrics.totalCourseTimeMinutes)}</strong></div>
                             </article>
                             <article>
                                 <span>
@@ -1771,16 +1874,16 @@ function CourseDetailPage() {
                                 </span>
                                 <div>
                                     <small>{transport ? `${transport.label} 이동 시간` : '총 이동 시간'}</small>
-                                    <strong>약 {formatMinutes(course.totalTravelTimeMinutes)}</strong>
+                                    <strong>약 {formatMinutes(activeDayMetrics.totalTravelTimeMinutes)}</strong>
                                 </div>
                             </article>
                             <article>
                                 <span><Timer size={21} aria-hidden="true" /></span>
-                                <div><small>장소 체류 시간</small><strong>약 {formatMinutes(course.totalVisitTimeMinutes)}</strong></div>
+                                <div><small>장소 체류 시간</small><strong>약 {formatMinutes(activeDayMetrics.totalVisitTimeMinutes)}</strong></div>
                             </article>
                             <article>
                                 <span><MapPin size={21} aria-hidden="true" /></span>
-                                <div><small>방문 장소</small><strong>{course.placeCount}곳</strong></div>
+                                <div><small>방문 장소</small><strong>{activeDayMetrics.placeCount}곳</strong></div>
                             </article>
                                 </section>
 
@@ -1843,8 +1946,10 @@ function CourseDetailPage() {
                                     transportMode={course.transportMode}
                                 />
 
-                                <p className={`course-detail-schedule-note${activeDayHasEstimatedTravelTimes ? ' is-estimated' : ''}`}>
-                                    <Info size={14} aria-hidden="true" />
+                                <p className={`course-detail-schedule-note${scheduleNoticeClassName}`}>
+                                    {activeDayRouteIsRefreshing
+                                        ? <RefreshCw className="course-detail-refresh-icon" size={14} aria-hidden="true" />
+                                        : <Info size={14} aria-hidden="true" />}
                                     <span className="course-detail-schedule-note-copy">
                                         {scheduleNotice}
                                     </span>
