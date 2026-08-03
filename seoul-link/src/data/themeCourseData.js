@@ -317,13 +317,23 @@ export function hydrateThemeCoursesWithPlaces(courses, places) {
                 };
             }),
         }));
-        const databaseCoverImage = days
-            .flatMap((day) => day.places)
-            .find((place) => place.imageUrl)?.imageUrl;
+        // 메인 카드도 상세와 동일하게 코스의 모든 실제 장소 사진을
+        // 방문 순서대로 시도하고, 전부 실패했을 때만 예시 사진을 사용한다.
+        const databaseCoverImageUrls = [
+            ...new Set(
+                days
+                    .flatMap((day) => day.places)
+                    .map((place) => place.imageUrl)
+                    .filter(Boolean),
+            ),
+        ];
 
         return {
             ...course,
-            coverImageUrl: databaseCoverImage || course.coverImageUrl,
+            coverImageUrl: databaseCoverImageUrls[0] || null,
+            coverImageUrls: databaseCoverImageUrls,
+            coverFallbackImageUrl:
+                course.coverFallbackImageUrl || course.coverImageUrl,
             days,
         };
     });
