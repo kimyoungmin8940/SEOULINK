@@ -128,6 +128,28 @@ public class MemberService {
         return memberRepository.save(socialMember);
     }
 
+    @Transactional
+    public void withdrawMember(Long memberId) {
+        if (memberId == null || memberId < 1) {
+            throw new IllegalArgumentException(
+                    "올바른 회원 번호가 필요합니다."
+            );
+        }
+
+        Member member = memberRepository.findById(memberId)
+                .orElseThrow(() ->
+                        new IllegalArgumentException(
+                                "회원 정보를 찾을 수 없습니다."
+                        )
+                );
+
+        if ("WITHDRAWN".equals(member.getStatus())) {
+            return;
+        }
+
+        member.withdraw();
+    }
+
     private void grantDemoPass(Member member) {
         Payment payment = new Payment();
         payment.setMemberId(member.getMemberId());

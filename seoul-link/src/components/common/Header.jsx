@@ -1,6 +1,7 @@
 // Header 컴포넌트는 페이지 상단 영역을 담당
 // 구성: 로고, 주요 메뉴 4개, 로그인/회원가입 또는 마이페이지 버튼, 햄버거 메뉴 버튼, 오른쪽 사이드 메뉴
 import { useState } from 'react';
+import { authStore } from "../../store/authStore";
 import {
     Heart,
     MapPin,
@@ -32,38 +33,14 @@ const sideMenuItems = [
 ];
 
 function getStoredUserName() {
-    const directName =
-        localStorage.getItem('nickname') ||
-        localStorage.getItem('userName') ||
-        localStorage.getItem('memberName') ||
-        localStorage.getItem('name');
+    const member = authStore.getMember();
 
-    if (directName) {
-        return directName;
-    }
-
-    const userStorageKeys = ['user', 'member', 'loginUser'];
-
-    for (const key of userStorageKeys) {
-        const value = localStorage.getItem(key);
-
-        if (!value) {
-            continue;
-        }
-
-        try {
-            const user = JSON.parse(value);
-            const userName = user.nickname || user.userName || user.memberName || user.name || user.email || user.memberId;
-
-            if (userName) {
-                return userName;
-            }
-        } catch {
-            return value;
-        }
-    }
-
-    return '사용자';
+    return (
+        member?.nickname ||
+        member?.name ||
+        member?.email ||
+        "사용자"
+    );
 }
 
 
@@ -223,12 +200,16 @@ function Header({ variant = 'simple' }) {
                                         className="side-logout-btn"
                                         type="button"
                                         onClick={() => {
-                                            removeLoginStorage();
+                                            authStore.clearMember();
                                             setIsOpen(false);
-                                            window.location.href = '/';
+                                            window.location.replace("/");
                                         }}
                                     >
-                                        <LogOut className="side-icon" size={16} strokeWidth={1.9} />
+                                        <LogOut
+                                            className="side-icon"
+                                            size={16}
+                                            strokeWidth={1.9}
+                                        />
                                         <span>로그아웃</span>
                                     </button>
                                 </>
