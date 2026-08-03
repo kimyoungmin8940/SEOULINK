@@ -41,12 +41,19 @@ public class CourseOptimizeRequest {
     private LocalTime dailyStartTime;
 
     /**
-     * 대중교통 실제 경로 조회 시 40분 상한을 맞추기 위한 장소 교체·삭제를 수행할지 여부이다.
-     * 기본값은 true이며, 프런트가 현재 장소 구성을 그대로 유지한 채 실제 구간만 조회하는
-     * 최종 폴백 요청에서만 false로 전달한다.
+     * 이전 프런트 요청과의 JSON 호환을 위해 남겨 둔 필드이다.
+     * 대중교통 40분 상한은 안전 규칙이므로 false가 전달돼도 비활성화하지 않는다.
      */
+    @Deprecated
     @Builder.Default
     private Boolean enforcePublicTransitLimit = Boolean.TRUE;
+
+    /**
+     * 대중교통 후보 교체를 모두 시도한 뒤 장소 수 감소까지 허용할지 여부이다.
+     * 프런트는 후보 풀을 단계적으로 넓히는 동안 false, 마지막 단계에서 true를 보낸다.
+     */
+    @Builder.Default
+    private Boolean allowPublicTransitPlaceReduction = Boolean.TRUE;
 
     // 실제 코스에 배치할 장소 목록이며, 각 장소 내부에 전용 대체 후보를 포함한다.
     @Builder.Default

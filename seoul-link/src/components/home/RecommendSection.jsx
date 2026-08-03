@@ -114,6 +114,7 @@ function RecommendSection() {
 
     const popularThemeCourses = useMemo(
         () => catalogCourses
+            .filter((course) => course.badge === 'BEST')
             .map((course) => ({
                 ...normalizeThemeCourseCard(course),
                 saveCount: themeSaveCounts[course.sourceCourseKey] ?? 0,
@@ -228,7 +229,6 @@ function RecommendSection() {
                                 detailPath={detailPath}
                                 requiresLogin={hasMyRecommendedCourses}
                                 variant="home"
-                                showHeart={!hasMyRecommendedCourses}
                                 maxTags={3}
                             />
                         );

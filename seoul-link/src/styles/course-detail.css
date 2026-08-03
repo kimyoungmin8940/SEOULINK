@@ -767,14 +767,7 @@
 
 .course-detail-schedule-note-copy {
   min-width: 0;
-}
-
-.course-detail-schedule-note-first-line {
   white-space: nowrap;
-}
-
-.course-detail-schedule-note-line {
-  display: block;
 }
 
 .course-detail-schedule-note.is-estimated {
@@ -1217,6 +1210,15 @@
   .course-detail-shell {
     width: calc(100% - 32px);
     padding: 96px 0 68px;
+  }
+
+  .course-detail-schedule-note {
+    align-items: flex-start;
+  }
+
+  .course-detail-schedule-note-copy {
+    white-space: normal;
+    word-break: keep-all;
   }
 
   .course-detail-toolbar {
