@@ -776,33 +776,12 @@ function hasPublicTransitDayLimitViolation(day) {
     });
 }
 
-function hasResolvedPublicTransitRouteViolation(routeDetails) {
-    const places = Array.isArray(routeDetails?.optimizedPlaces)
-        ? routeDetails.optimizedPlaces
-        : [];
-    let longLegCount = 0;
-
-    return places.some((place, index) => {
-        if (index === 0 || Boolean(place?.routeEstimated)) return false;
-
-        const travelMinutes = Number(place?.travelTimeFromPreviousMinutes);
-        if (!Number.isFinite(travelMinutes)) return false;
-        if (travelMinutes > 40) return true;
-        if (travelMinutes > 30) {
-            longLegCount += 1;
-            return longLegCount > 1;
-        }
-        return false;
-    });
-}
-
 function needsCourseRouteRefresh(course) {
     const transportMode = normalizeTransportMode(course?.transportMode);
 
     if (!['PUBLIC_TRANSIT', 'DRIVING'].includes(transportMode)) return false;
-    if ((course?.days || []).some(hasEstimatedTravelLeg)) return true;
-    return transportMode === 'PUBLIC_TRANSIT'
-        && (course?.days || []).some(hasPublicTransitDayLimitViolation);
+    // 상세 화면에서는 저장된 장소 구성을 바꾸지 않고 예상 구간만 실제 경로로 보완합니다.
+    return (course?.days || []).some(hasEstimatedTravelLeg);
 }
 
 function toDetailRouteCandidate(place, visitDate) {
@@ -1071,19 +1050,11 @@ async function refreshEstimatedDetailRoutes(course, memberId) {
                     day.routeOriginPlace?.displayVisitTime
                     || day.places?.[0]?.displayVisitTime
                     || '10:00',
-                enforcePublicTransitLimit: true,
-                allowPublicTransitPlaceReduction: true,
+                enforcePublicTransitLimit: false,
+                allowPublicTransitPlaceReduction: false,
                 placeCandidates: candidates,
                 alternativeCandidates: [],
             });
-            if (
-                transportMode === 'PUBLIC_TRANSIT'
-                && hasResolvedPublicTransitRouteViolation(routeDetails)
-            ) {
-                throw new Error(
-                    '대중교통 실제 경로가 30분 우선·40분 제한을 벗어났습니다.',
-                );
-            }
             const mergedCourse = mergeDetailRouteResponse(
                 refreshedCourse,
                 day.dayNo,

@@ -1294,6 +1294,39 @@ function buildRouteDetailsRequest(
     };
 }
 
+/**
+ * 모든 교체 후보를 검토해도 대중교통 제한을 만족하지 못했을 때,
+ * 현재 화면의 장소와 순서를 그대로 유지하고 원래 인접 구간만 실제 경로로 조회합니다.
+ */
+function buildOriginalPublicTransitRouteRequest(
+    option,
+    day,
+    response,
+    recommendRequest,
+    transportMode,
+) {
+    const strictTier = PUBLIC_TRANSIT_ROUTE_OVERLAP_TIERS[0];
+    const request = buildRouteDetailsRequest(
+        option,
+        day,
+        response,
+        recommendRequest,
+        transportMode,
+        strictTier,
+    );
+
+    return {
+        ...request,
+        enforcePublicTransitLimit: false,
+        allowPublicTransitPlaceReduction: false,
+        placeCandidates: (request.placeCandidates || []).map((candidate) => ({
+            ...candidate,
+            alternativeCandidates: [],
+        })),
+        alternativeCandidates: [],
+    };
+}
+
 /** 완화 단계만 달라졌지만 실제 후보 구성이 같으면 ODsay를 다시 호출하지 않습니다. */
 function getRouteDetailsRequestSignature(request) {
     const summarizeCandidates = (candidates) => (
@@ -1305,6 +1338,8 @@ function getRouteDetailsRequestSignature(request) {
     }));
 
     return JSON.stringify({
+        enforcePublicTransitLimit:
+            request?.enforcePublicTransitLimit !== false,
         allowPlaceReduction:
             Boolean(request?.allowPublicTransitPlaceReduction),
         places: summarizeCandidates(request?.placeCandidates),
@@ -1919,11 +1954,70 @@ async function prepareVisibleRoutesBeforeDisplay(
             }
         }
 
+        if (
+            !routeApplied
+            && normalizeTransportMode(transportMode) === 'PUBLIC_TRANSIT'
+            && constraintFallback
+        ) {
+            try {
+                const originalRouteRequest =
+                    buildOriginalPublicTransitRouteRequest(
+                        option,
+                        day,
+                        preparedResponse,
+                        recommendRequest,
+                        transportMode,
+                    );
+                const originalRouteCacheKey = getRouteDetailsKey(
+                    preparedResponse,
+                    option,
+                    day,
+                    transportMode,
+                    'ORIGINAL_ACTUAL_ROUTE',
+                );
+                const originalRouteDetails = await requestRouteDetailsOnce(
+                    originalRouteCacheKey,
+                    originalRouteRequest,
+                );
+
+                if (
+                    !Array.isArray(originalRouteDetails?.optimizedPlaces)
+                    || originalRouteDetails.optimizedPlaces.length
+                        !== expectedPlaceCount
+                ) {
+                    throw new Error(
+                        '현재 장소 구성의 실제 대중교통 경로를 확인할 수 없습니다.',
+                    );
+                }
+
+                const fallbackMessage = hasEstimatedRouteDetailsResponse(
+                    originalRouteDetails,
+                )
+                    ? '대중교통 40분 이내로 교체할 장소를 찾지 못해 현재 장소 구성을 유지했습니다. 실제 경로를 찾지 못한 일부 구간만 예상값으로 표시합니다.'
+                    : '대중교통 40분 이내로 교체할 장소를 찾지 못해 현재 장소 구성을 유지했습니다. 아래 이동시간은 현재 장소 사이의 실제 대중교통 경로 기준입니다.';
+
+                preparedResponse = mergeRouteDetails(
+                    preparedResponse,
+                    option.optionNo,
+                    day.dayNo,
+                    originalRouteDetails,
+                    preparedResponse?.dailyStartTime
+                        ?? recommendRequest?.dailyStartTime,
+                    routeOriginPlace,
+                    fallbackMessage,
+                );
+                routeApplied = true;
+            } catch (error) {
+                lastRouteError = error?.message
+                    || '현재 장소 구성의 실제 대중교통 경로를 확인할 수 없습니다.';
+            }
+        }
+
         if (!routeApplied) {
             const publicTransitFallbackMessage =
                 normalizeTransportMode(transportMode) === 'PUBLIC_TRANSIT'
                     && constraintFallback
-                    ? '후보를 넓히고 장소 수를 줄여도 대중교통 40분 제한을 만족하지 못해, 확인되지 않은 구간은 예상값으로 남겼습니다.'
+                    ? '대중교통 40분 이내로 교체할 장소를 찾지 못해 현재 장소 구성을 유지했습니다. 실제 경로 조회에 실패한 구간은 예상값으로 표시합니다.'
                     : lastRouteError
                         || '교통편을 일시적으로 확인할 수 없습니다.';
 

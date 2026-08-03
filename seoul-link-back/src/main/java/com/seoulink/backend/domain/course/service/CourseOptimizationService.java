@@ -403,7 +403,8 @@ public class CourseOptimizationService {
      *
      * <p>추천 카드에 한 DAY를 표시할 때 사용한다. 후보 재선정·최근접 경로
      * 계산을 다시 하지 않으므로 ODsay 호출 수는 정확히 {@code 장소 수 - 1} 이하이다.
-     * 대중교통은 요청 값과 관계없이 40분 절대 상한을 항상 적용한다.</p>
+     * {@code enforcePublicTransitLimit=false}인 최종 폴백 요청은 장소를 교체하거나 삭제하지 않고
+     * 현재 순서의 실제 인접 구간만 조회한다.</p>
      */
     public CourseOptimizeResponse resolveFixedRouteDetails(
             CourseOptimizeRequest request
@@ -487,7 +488,8 @@ public class CourseOptimizationService {
             List<PlaceCandidateDto> resolvedDailyCandidates = dailyCandidates;
             RouteMatrix routeMatrix;
             if (resolveActualRouteLegs
-                    && transportMode == TransportMode.PUBLIC_TRANSIT) {
+                    && transportMode == TransportMode.PUBLIC_TRANSIT
+                    && !Boolean.FALSE.equals(request.getEnforcePublicTransitLimit())) {
                 PublicTransitRouteRepair repair =
                         repairActualPublicTransitRoute(
                                 dailyCandidates,

@@ -41,10 +41,10 @@ public class CourseOptimizeRequest {
     private LocalTime dailyStartTime;
 
     /**
-     * 이전 프런트 요청과의 JSON 호환을 위해 남겨 둔 필드이다.
-     * 대중교통 40분 상한은 안전 규칙이므로 false가 전달돼도 비활성화하지 않는다.
+     * 대중교통 실제 경로 조회 시 40분 상한을 맞추기 위한 장소 교체·삭제를 수행할지 여부이다.
+     * 기본값은 true이며, 모든 교체 후보를 검토한 뒤 현재 장소와 순서를 유지하면서
+     * 실제 인접 구간만 조회하는 최종 폴백 요청에서만 false로 전달한다.
      */
-    @Deprecated
     @Builder.Default
     private Boolean enforcePublicTransitLimit = Boolean.TRUE;
 
