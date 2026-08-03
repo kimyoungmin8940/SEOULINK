@@ -60,4 +60,9 @@ public class Member {
         this.status = "ACTIVE";
         this.loginType = "LOCAL";
     }
+
+    public void withdraw() {
+        this.status = "WITHDRAWN";
+        this.updatedAt = LocalDateTime.now();
+    }
 }

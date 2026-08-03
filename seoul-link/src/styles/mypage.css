@@ -410,27 +410,31 @@
 
 .mypage-analysis {
     padding: 22px 24px 20px;
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
 }
 
 .mypage-analysis h2 {
     margin: 0;
     color: #172d46;
-    font-size: 16px;
+    font-size: 18px;
     letter-spacing: 0;
 }
 
+/* 남은 세로 공간을 5개 항목이 모두 사용 */
 .mypage-analysis-list {
-    margin-top: 10px;
+    min-height: 0;
+    margin-top: 14px;
+    display: grid;
+    grid-template-rows: repeat(5, minmax(0, 1fr));
 }
 
 .mypage-analysis-list > div {
-    min-height: 51px;
+    min-height: 0;
     display: grid;
     align-items: center;
-    grid-template-columns: 38px minmax(0, 1fr) 32px;
-    gap: 10px;
+    grid-template-columns: 50px minmax(0, 1fr) 46px;
+    gap: 13px;
     border-bottom: 1px solid #e5edf5;
 }
 
@@ -445,58 +449,41 @@
     border-radius: 50%;
 }
 
+/* 왼쪽 아이콘 원 */
 .analysis-icon {
-    width: 34px;
-    height: 34px;
+    width: 43px;
+    height: 43px;
 }
 
-.analysis-code {
-    width: 29px;
-    height: 29px;
-    font-size: 14px;
-    font-style: normal;
-    font-weight: 900;
+.analysis-icon svg {
+    width: 23px;
+    height: 23px;
 }
 
+/* 가운데 설명 글 */
 .mypage-analysis-list strong {
     min-width: 0;
     overflow: hidden;
     color: #42586d;
-    font-size: 11px;
+    font-size: 14px;
+    line-height: 1.45;
     font-weight: 800;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    word-break: keep-all;
+    white-space: normal;
+
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
 }
 
-.mypage-analysis-actions {
-    margin-top: auto;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
+/* 오른쪽 H, M, B, D, R 원 */
+.analysis-code {
+    width: 41px;
+    height: 41px;
+    font-size: 19px;
+    font-style: normal;
+    font-weight: 900;
 }
-
-.mypage-analysis-actions a {
-    min-height: 42px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid #1378d8;
-    border-radius: 7px;
-    background: #fff;
-    color: #1378d8;
-    font-size: 12px;
-    font-weight: 850;
-}
-
-.mypage-analysis-actions a.primary {
-    color: #fff;
-    background: #1378d8;
-}
-
-.mypage-analysis-actions a.full {
-    grid-column: 1 / -1;
-}
-
 .mypage-travel-state {
     width: min(360px, 100%);
     min-height: 180px;
@@ -1136,4 +1123,7 @@
     .summary-card {
         min-height: 84px;
     }
+
+
+
 }
