@@ -129,7 +129,8 @@ export default function PaymentHistoryPage() {
 
         getMyPayments(member.memberId)
             .then((data) => {
-                const next = Array.isArray(data) ? data : [];
+                const next = (Array.isArray(data) ? data : [])
+                    .filter((payment) => payment.paymentStatus !== 'READY');
                 setPayments(next);
                 setOpenId(null);
             })
