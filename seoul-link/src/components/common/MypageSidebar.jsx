@@ -16,8 +16,31 @@ export default function MypageSidebar({ activePath, bottomAction = 'map-course' 
     const member = authStore.getMember() || {};
     const isRetestAction = bottomAction === 'retest';
 
+    const loginType = String(
+        member.loginType || "LOCAL"
+    ).toUpperCase();
+
+    const handleProfileEdit = () => {
+        if (loginType !== "LOCAL") {
+            window.alert(
+                `${loginType} 계정으로 가입한 회원입니다.\n` +
+                "계정 정보는 해당 소셜 서비스에서 관리해주세요."
+            );
+            return;
+        }
+
+        window.location.assign("/find-password");
+    };
+
     return <aside className="mypage-v3-sidebar">
-        <section className="mypage-v3-profile"><div className="mypage-v3-avatar"><UserRound size={54} strokeWidth={1.5} /></div><strong>{member.nickname || member.name || '여행자'}님</strong><span>{member.email || 'user@seoulink.com'}</span><a className="mypage-profile-edit" href="/mypage/profile-edit"><Pencil size={16} />회원 정보 수정</a></section>
+        <section className="mypage-v3-profile"><div className="mypage-v3-avatar"><UserRound size={54} strokeWidth={1.5} /></div><strong>{member.nickname || member.name || '여행자'}님</strong><span>{member.email || 'user@seoulink.com'}</span><button
+            className="mypage-profile-edit"
+            type="button"
+            onClick={handleProfileEdit}
+        >
+            <Pencil size={16} />
+            회원 정보 수정
+        </button></section>
         <nav className="mypage-v3-menu" aria-label="마이페이지 메뉴">{items.map(([label, path, Icon]) => <a className={path === activePath ? 'active' : ''} href={path} key={path}><Icon size={20} strokeWidth={1.8} /><span>{label}</span></a>)}</nav>
         <a
             className="mypage-retest"
