@@ -1,3 +1,4 @@
+import fallback from '../../assets/images/hero-seoul-main.png';
 import { useEffect, useMemo, useState } from 'react';
 import { Heart, MessageCircle, PenLine, Search, Star } from 'lucide-react';
 import Header from '../../components/common/Header';
@@ -21,7 +22,7 @@ const companionCategories = [
   { id: 'family', label: '가족', values: ['가족', '가족과 함께', '부모님과 함께', '아이와 함께'] },
 ];
 
-const fallback = 'https://images.unsplash.com/photo-1538485399081-7c897b8c333d?auto=format&fit=crop&w=900&q=80';
+
 
 function ReviewListPage() {
   // 서버 목록과 동행·태그·검색 조건을 분리해 복합 필터링을 지원한다.
@@ -89,7 +90,15 @@ function ReviewListPage() {
 
           {error ? <p className="review-message">{error}</p> : <div className="travel-review-grid">
             {reviews.map((review) => <article className="travel-review-card" key={review.reviewId}>
-              <button className="review-cover" onClick={() => { window.location.href = `/reviews/${review.reviewId}`; }}><img src={review.imageUrls?.[0] || review.placeImageUrl || fallback} alt="" /><span>{review.companion || review.tags?.[0] || '서울 여행'}</span></button>
+              <button className="review-cover" onClick={() => { window.location.href = `/reviews/${review.reviewId}`; }}>
+                <img
+                  src={review.imageUrls?.[0] || review.placeImageUrl || fallback}
+                  alt=""
+                  onError={(event) => {
+                    event.currentTarget.src = fallback;
+                  }}
+              />
+                <span>{review.companion || review.tags?.[0] || '서울 여행'}</span></button>
               <div className="travel-review-content">
                 <button className="review-title-link" onClick={() => { window.location.href = `/reviews/${review.reviewId}`; }}>{review.reviewTitle}</button>
                 <div className="review-author-line"><span>{review.authorName}</span><span><Star size={15} fill="currentColor" /> {review.rating?.toFixed(1)}</span></div>

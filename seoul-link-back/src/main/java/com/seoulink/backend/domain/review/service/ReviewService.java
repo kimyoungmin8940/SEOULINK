@@ -179,7 +179,9 @@ public class ReviewService {
     // 수정 시 기존 이미지·태그를 교체해 리뷰와 연결된 부가 정보를 동기화한다.
     private void replaceImagesAndTags(Long reviewId, List<String> imageUrls, List<String> reviewTags) {
         images.deleteByReviewId(reviewId);
+        images.flush(); // 기존 이미지 DELETE를 DB에 즉시 반영
         tags.deleteByReviewId(reviewId);
+        tags.flush();
         int displayOrder = 1;
         for(String url: safe(imageUrls)) if(url != null && !url.isBlank()) images.save(new ReviewImage(reviewId, url.trim(), displayOrder++));
         for(String tag: safe(reviewTags)) if(tag != null && !tag.isBlank()) tags.save(new ReviewTag(reviewId,tag.trim().replace("#","")));
