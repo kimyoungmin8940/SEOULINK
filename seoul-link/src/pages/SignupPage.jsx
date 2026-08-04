@@ -5,6 +5,35 @@ import { apiPost } from "../api/client";
 import signupIllustration from "../assets/images/seoul-line-art-transparent.png";
 import "../styles/SignupPage.css";
 
+function getSignupErrorMessage(requestError) {
+    const rawMessage =
+        typeof requestError?.message === "string"
+            ? requestError.message.trim()
+            : "";
+    let apiMessage = rawMessage;
+
+    if (rawMessage) {
+        try {
+            const parsedError = JSON.parse(rawMessage);
+            if (typeof parsedError?.message === "string") {
+                apiMessage = parsedError.message.trim();
+            }
+        } catch {
+            // JSON이 아닌 일반 오류 문구는 그대로 사용합니다.
+        }
+    }
+
+    if (
+        /this email is already registered/i.test(apiMessage)
+        || /email.*already.*registered/i.test(apiMessage)
+        || /이미.*사용.*이메일/.test(apiMessage)
+    ) {
+        return "이미 사용 중인 이메일입니다.";
+    }
+
+    return apiMessage || "회원가입 중 오류가 발생했습니다.";
+}
+
 export default function SignupPage() {
     const [form, setForm] = useState({
         email: "",
@@ -80,10 +109,7 @@ export default function SignupPage() {
                 window.location.assign("/login");
             }, 1000);
         } catch (requestError) {
-            setError(
-                requestError.message ||
-                    "회원가입 중 오류가 발생했습니다."
-            );
+            setError(getSignupErrorMessage(requestError));
         } finally {
             setIsSubmitting(false);
         }

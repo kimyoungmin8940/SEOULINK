@@ -14,6 +14,7 @@ import com.seoulink.backend.domain.course.dto.response.CourseOptimizeResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseRecommendResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseRecommendationResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseSaveResponse;
+import com.seoulink.backend.domain.course.exception.CourseRecommendationUnavailableException;
 import com.seoulink.backend.domain.course.exception.PublicTransitMinimumPlaceException;
 import com.seoulink.backend.domain.course.dto.response.ThemeCourseBookmarkResponse;
 import com.seoulink.backend.domain.course.dto.response.ThemeCoursePopularityResponse;
@@ -329,6 +330,27 @@ public class CourseController {
         return new CourseErrorResponse(
                 "PUBLIC_TRANSIT_MINIMUM_PLACES_REQUIRED",
                 exception.getMessage()
+        );
+    }
+
+    /**
+     * 요청은 정상이지만 현재 후보와 제한으로 서로 다른 추천 코스 3개를
+     * 만들 수 없는 경우, 프런트가 일반 서버 오류와 구분하도록 422로 반환한다.
+     */
+    @ExceptionHandler(CourseRecommendationUnavailableException.class)
+    @ResponseStatus(HttpStatus.UNPROCESSABLE_ENTITY)
+    public CourseErrorResponse handleCourseRecommendationUnavailable(
+            CourseRecommendationUnavailableException exception
+    ) {
+        log.warn(
+                "현재 조건으로 추천 코스 3개를 생성하지 못했습니다: {}",
+                exception.getMessage()
+        );
+        return new CourseErrorResponse(
+                "THREE_COURSES_UNAVAILABLE",
+                "현재 조건에서는 서로 다른 추천 코스 3개를 만들 수 없습니다. "
+                        + "여행 기간을 줄이거나 다른 이동수단을 선택해 "
+                        + "다시 시도해 주세요."
         );
     }
 

@@ -23,12 +23,19 @@ export default function OAuthSuccessPage() {
             loginType,
         });
 
-        sessionStorage.setItem(
-            "showSocialLoginLoading",
-            "true"
-        );
+        const returnUrl = sessionStorage.getItem("loginReturnUrl") || "/";
+        sessionStorage.removeItem("loginReturnUrl");
 
-        window.location.replace("/mypage");
+        if (returnUrl.startsWith("/mypage")) {
+            sessionStorage.setItem(
+                "showSocialLoginLoading",
+                "true"
+            );
+        } else {
+            sessionStorage.removeItem("showSocialLoginLoading");
+        }
+
+        window.location.replace(returnUrl);
     }, []);
 
     return null;

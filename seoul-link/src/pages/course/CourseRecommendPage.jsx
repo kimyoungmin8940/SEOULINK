@@ -72,6 +72,27 @@ const recommendationPromiseCache = new Map();
 const routeDetailsPromiseCache = new Map();
 // 이전·다음 결과 전환이나 카드 재마운트에서도 같은 DAY 상세를 다시 요청하지 않습니다.
 const routeDetailsResultCache = new Map();
+const THREE_COURSES_UNAVAILABLE_CODE = 'THREE_COURSES_UNAVAILABLE';
+const THREE_COURSES_UNAVAILABLE_MESSAGE =
+    '현재 조건에서는 서로 다른 추천 코스 3개를 만들 수 없습니다. '
+    + '여행 기간을 줄이거나 다른 이동수단을 선택해 다시 시도해 주세요.';
+
+/** 추천 생성 실패를 화면 표시용 코드와 문구로 정규화합니다. */
+function normalizeRecommendationError(
+    error,
+    fallbackMessage = '추천 코스를 불러오지 못했습니다.',
+) {
+    const code = typeof error?.code === 'string' ? error.code : '';
+    const isThreeCoursesUnavailable =
+        code === THREE_COURSES_UNAVAILABLE_CODE;
+
+    return {
+        code,
+        message: isThreeCoursesUnavailable
+            ? error?.message || THREE_COURSES_UNAVAILABLE_MESSAGE
+            : error?.message || fallbackMessage,
+    };
+}
 
 // 대중교통 실제 경로가 40분 제한으로 장소를 줄이려 할 때만 중복 제한을
 // 단계적으로 넓힌다. 같은 코스의 다른 DAY 중복과 완전히 같은 구성은 끝까지 금지한다.
@@ -1294,41 +1315,6 @@ function buildRouteDetailsRequest(
     };
 }
 
-/**
- * 모든 교체 후보를 검토해도 대중교통 제한을 만족하지 못했을 때,
- * 현재 화면의 장소와 순서를 그대로 유지하고 원래 인접 구간만 실제 경로로 조회합니다.
- * 기존의 엄격한 40분 제한 보정 시도를 모두 수행한 뒤에만 호출됩니다.
- */
-function buildOriginalPublicTransitRouteRequest(
-    option,
-    day,
-    response,
-    recommendRequest,
-    transportMode,
-) {
-    const strictTier = PUBLIC_TRANSIT_ROUTE_OVERLAP_TIERS[0];
-    const request = buildRouteDetailsRequest(
-        option,
-        day,
-        response,
-        recommendRequest,
-        transportMode,
-        strictTier,
-    );
-
-    return {
-        ...request,
-        enforcePublicTransitLimit: false,
-        preserveOriginalPublicTransitRoute: true,
-        allowPublicTransitPlaceReduction: false,
-        placeCandidates: (request.placeCandidates || []).map((candidate) => ({
-            ...candidate,
-            alternativeCandidates: [],
-        })),
-        alternativeCandidates: [],
-    };
-}
-
 /** 완화 단계만 달라졌지만 실제 후보 구성이 같으면 ODsay를 다시 호출하지 않습니다. */
 function getRouteDetailsRequestSignature(request) {
     const summarizeCandidates = (candidates) => (
@@ -1340,10 +1326,6 @@ function getRouteDetailsRequestSignature(request) {
     }));
 
     return JSON.stringify({
-        enforcePublicTransitLimit:
-            request?.enforcePublicTransitLimit !== false,
-        preserveOriginalPublicTransitRoute:
-            Boolean(request?.preserveOriginalPublicTransitRoute),
         allowPlaceReduction:
             Boolean(request?.allowPublicTransitPlaceReduction),
         places: summarizeCandidates(request?.placeCandidates),
@@ -1958,70 +1940,11 @@ async function prepareVisibleRoutesBeforeDisplay(
             }
         }
 
-        if (
-            !routeApplied
-            && normalizeTransportMode(transportMode) === 'PUBLIC_TRANSIT'
-            && constraintFallback
-        ) {
-            try {
-                const originalRouteRequest =
-                    buildOriginalPublicTransitRouteRequest(
-                        option,
-                        day,
-                        preparedResponse,
-                        recommendRequest,
-                        transportMode,
-                    );
-                const originalRouteCacheKey = getRouteDetailsKey(
-                    preparedResponse,
-                    option,
-                    day,
-                    transportMode,
-                    'ORIGINAL_ACTUAL_ROUTE',
-                );
-                const originalRouteDetails = await requestRouteDetailsOnce(
-                    originalRouteCacheKey,
-                    originalRouteRequest,
-                );
-
-                if (
-                    !Array.isArray(originalRouteDetails?.optimizedPlaces)
-                    || originalRouteDetails.optimizedPlaces.length
-                        !== expectedPlaceCount
-                ) {
-                    throw new Error(
-                        '현재 장소 구성의 실제 대중교통 경로를 확인할 수 없습니다.',
-                    );
-                }
-
-                const fallbackMessage = hasEstimatedRouteDetailsResponse(
-                    originalRouteDetails,
-                )
-                    ? '대중교통 40분 이내로 교체할 장소를 찾지 못해 현재 장소 구성을 유지했습니다. 실제 경로를 찾지 못한 일부 구간만 예상값으로 표시합니다.'
-                    : '대중교통 40분 이내로 교체할 장소를 찾지 못해 현재 장소 구성을 유지했습니다. 아래 이동시간은 현재 장소 사이의 실제 대중교통 경로 기준입니다.';
-
-                preparedResponse = mergeRouteDetails(
-                    preparedResponse,
-                    option.optionNo,
-                    day.dayNo,
-                    originalRouteDetails,
-                    preparedResponse?.dailyStartTime
-                        ?? recommendRequest?.dailyStartTime,
-                    routeOriginPlace,
-                    fallbackMessage,
-                );
-                routeApplied = true;
-            } catch (error) {
-                lastRouteError = error?.message
-                    || '현재 장소 구성의 실제 대중교통 경로를 확인할 수 없습니다.';
-            }
-        }
-
         if (!routeApplied) {
             const publicTransitFallbackMessage =
                 normalizeTransportMode(transportMode) === 'PUBLIC_TRANSIT'
                     && constraintFallback
-                    ? '대중교통 40분 이내로 교체할 장소를 찾지 못해 현재 장소 구성을 유지했습니다. 실제 경로 조회에 실패한 구간은 예상값으로 표시합니다.'
+                    ? '후보를 넓히고 장소 수를 줄여도 대중교통 40분 제한을 만족하지 못해, 확인되지 않은 구간은 예상값으로 남겼습니다.'
                     : lastRouteError
                         || '교통편을 일시적으로 확인할 수 없습니다.';
 
@@ -2223,7 +2146,7 @@ function CourseRecommendPage() {
     const responseRef = useRef(initialState.response);
     const [status, setStatus] = useState(initialState.status);
     const [source, setSource] = useState(initialState.source);
-    const [requestError, setRequestError] = useState('');
+    const [requestError, setRequestError] = useState(null);
     const [comparedCourseKeys, setComparedCourseKeys] = useState([]);
     const [selectedSaveCourseKeys, setSelectedSaveCourseKeys] = useState([]);
     const [focusedOptionNo, setFocusedOptionNo] = useState(null);
@@ -2348,13 +2271,13 @@ function CourseRecommendPage() {
             updateResponse(recommendationPreview);
             setSource('preview');
             setStatus('success');
-            setRequestError('');
+            setRequestError(null);
             setIsPreparingVisibleRoutes(false);
             return;
         }
 
         setStatus('loading');
-        setRequestError('');
+        setRequestError(null);
         setIsPreparingVisibleRoutes(true);
 
         try {
@@ -2436,7 +2359,7 @@ function CourseRecommendPage() {
             }
         } catch (error) {
             setStatus('error');
-            setRequestError(error?.message || '추천 코스를 불러오지 못했습니다.');
+            setRequestError(normalizeRecommendationError(error));
             setIsPreparingVisibleRoutes(false);
         }
     }, [profile.memberId, recommendRequest, updateResponse]);
@@ -2978,7 +2901,7 @@ function CourseRecommendPage() {
             updateResponse(preparedData);
             setSource('api');
             setStatus('success');
-            setRequestError('');
+            setRequestError(null);
             setFocusedOptionNo(preparedData.courseOptions[0]?.optionNo ?? null);
             setActiveDayNo(nextActiveDayNo);
             setLastSavedCourseIds([]);
@@ -2996,7 +2919,10 @@ function CourseRecommendPage() {
             setIsPreparingVisibleRoutes(false);
             setNotice({
                 tone: 'error',
-                message: error?.message || '다른 추천 코스를 만들지 못했습니다. 잠시 후 다시 시도해주세요.',
+                message: normalizeRecommendationError(
+                    error,
+                    '다른 추천 코스를 만들지 못했습니다. 잠시 후 다시 시도해주세요.',
+                ).message,
             });
         } finally {
             foregroundRoutePriorityRef.current = false;
@@ -3030,7 +2956,7 @@ function CourseRecommendPage() {
         setSource(entry.source || 'api');
         setShowingNextRecommendation(showNext);
         setStatus(hasRecommendationPlaces(entry.response) ? 'success' : 'empty');
-        setRequestError('');
+        setRequestError(null);
         setFocusedOptionNo(entry.response.courseOptions?.[0]?.optionNo ?? null);
         setActiveDayNo((currentDayNo) => (
             getAvailableDayNo(entry.response, currentDayNo)
@@ -3404,24 +3330,43 @@ function CourseRecommendPage() {
 
                 {status === 'error' && (
                     <section className="course-result-state-card" role="alert">
-                        <span className="error"><Info size={24} aria-hidden="true" /></span>
-                        <h2>추천 코스를 불러오지 못했어요</h2>
-                        <p>{requestError}</p>
+                        <span className={
+                            requestError?.code === THREE_COURSES_UNAVAILABLE_CODE
+                                ? undefined
+                                : 'error'
+                        }>
+                            <Info size={24} aria-hidden="true" />
+                        </span>
+                        <h2>
+                            {requestError?.code === THREE_COURSES_UNAVAILABLE_CODE
+                                ? '추천 코스 3개를 만들지 못했어요'
+                                : '추천 코스를 불러오지 못했어요'}
+                        </h2>
+                        <p>
+                            {requestError?.message
+                                || '추천 코스를 불러오지 못했습니다.'}
+                        </p>
                         <div>
-                            <button type="button" onClick={requestRecommendation}>
-                                <RefreshCw size={16} aria-hidden="true" />다시 불러오기
-                            </button>
-                            <button
-                                className="secondary"
-                                type="button"
-                                onClick={() => {
-                                    updateResponse(recommendationPreview);
-                                    setSource('preview');
-                                    setStatus('success');
-                                }}
-                            >
-                                화면 미리보기
-                            </button>
+                            {requestError?.code === THREE_COURSES_UNAVAILABLE_CODE ? (
+                                <a href="/travel-info">여행 정보 다시 입력하기</a>
+                            ) : (
+                                <>
+                                    <button type="button" onClick={requestRecommendation}>
+                                        <RefreshCw size={16} aria-hidden="true" />다시 불러오기
+                                    </button>
+                                    <button
+                                        className="secondary"
+                                        type="button"
+                                        onClick={() => {
+                                            updateResponse(recommendationPreview);
+                                            setSource('preview');
+                                            setStatus('success');
+                                        }}
+                                    >
+                                        화면 미리보기
+                                    </button>
+                                </>
+                            )}
                         </div>
                     </section>
                 )}
