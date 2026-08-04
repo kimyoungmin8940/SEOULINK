@@ -234,6 +234,8 @@ class CourseRecommendationHistoryServiceTest {
                 requestsCaptor.getValue().get(0).getPlaces();
         var secondDayFirstPlace = savedPlaces.get(2);
 
+        assertEquals(false,
+                requestsCaptor.getValue().get(0).getRouteDetailsResolved());
         assertEquals(secondDate, secondDayFirstPlace.getVisitDate());
         assertEquals(1, secondDayFirstPlace.getVisitOrder());
         assertEquals(7.6,

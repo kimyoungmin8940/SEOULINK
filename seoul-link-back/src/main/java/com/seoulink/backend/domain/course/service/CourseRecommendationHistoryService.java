@@ -206,12 +206,20 @@ public class CourseRecommendationHistoryService {
                 ? response.getTravelCode()
                 : request == null ? null : request.getTravelCode();
         boolean routeDetailsResolved = option.getDays() != null
-                && option.getDays().stream().anyMatch(day ->
-                day != null
-                        && Boolean.TRUE.equals(
-                        day.getRouteDetailsAttempted()
-                )
-        );
+                && !option.getDays().isEmpty()
+                && option.getDays().stream().allMatch(day ->
+                        day != null
+                                && Boolean.TRUE.equals(
+                                day.getRouteDetailsAttempted()
+                        )
+                                && day.getPlaces() != null
+                                && day.getPlaces().stream().allMatch(place ->
+                                place != null
+                                        && !Boolean.TRUE.equals(
+                                        place.getRouteEstimated()
+                                )
+                        )
+                );
 
         return CourseSaveRequest.builder()
                 .courseId(option.getCourseId())

@@ -42,6 +42,7 @@ import {
     COURSE_RECOMMEND_REQUEST_KEY,
     COURSE_RECOMMEND_RESPONSE_KEY,
     deriveRecommendationKey,
+    persistResolvedCourseRouteSnapshots,
 } from '../../utils/courseRecommendationHandoff';
 import {
     getRouteCorrectionOverlapLimit,
@@ -76,6 +77,45 @@ const THREE_COURSES_UNAVAILABLE_CODE = 'THREE_COURSES_UNAVAILABLE';
 const THREE_COURSES_UNAVAILABLE_MESSAGE =
     '현재 조건에서는 서로 다른 추천 코스 3개를 만들 수 없습니다. '
     + '여행 기간을 줄이거나 다른 이동수단을 선택해 다시 시도해 주세요.';
+const ACTUAL_ROUTE_UNAVAILABLE_CODE = 'ACTUAL_ROUTE_UNAVAILABLE';
+const ACTUAL_ROUTE_CONSTRAINT_UNAVAILABLE_CODE =
+    'ACTUAL_ROUTE_CONSTRAINT_UNAVAILABLE';
+
+/** 예상값을 화면에 남기지 않고 실제 경로 재시도로 연결할 오류를 만듭니다. */
+function createActualRouteUnavailableError(transportMode) {
+    const normalizedMode = normalizeTransportMode(transportMode);
+    const transportLabel = normalizedMode === 'PUBLIC_TRANSIT'
+        ? '대중교통'
+        : normalizedMode === 'WALKING'
+            ? '도보'
+            : normalizedMode === 'DRIVING'
+                ? '자동차'
+                : '이동';
+    const error = new Error(
+        `일부 ${transportLabel} 구간의 실제 경로를 확인하지 못했습니다. `
+        + '예상값은 표시하지 않으니 잠시 후 다시 시도해 주세요.',
+    );
+    error.code = ACTUAL_ROUTE_UNAVAILABLE_CODE;
+    return error;
+}
+
+/** 실제값은 받았지만 이동시간·중복 제한 때문에 대체 동선을 적용하지 못한 오류입니다. */
+function createActualRouteConstraintUnavailableError(transportMode) {
+    const normalizedMode = normalizeTransportMode(transportMode);
+    const transportLabel = normalizedMode === 'PUBLIC_TRANSIT'
+        ? '대중교통'
+        : normalizedMode === 'WALKING'
+            ? '도보'
+            : normalizedMode === 'DRIVING'
+                ? '자동차'
+                : '이동';
+    const error = new Error(
+        `실제 ${transportLabel} 경로는 확인했지만 이동시간·중복 제한을 모두 만족하는 대체 동선을 만들지 못했습니다. `
+        + '확인된 거리와 시간은 예상값이 아닌 실제 조회값입니다.',
+    );
+    error.code = ACTUAL_ROUTE_CONSTRAINT_UNAVAILABLE_CODE;
+    return error;
+}
 
 /** 추천 생성 실패를 화면 표시용 코드와 문구로 정규화합니다. */
 function normalizeRecommendationError(
@@ -202,14 +242,26 @@ function withCurrentMemberId(request, memberId) {
 
 /** 실제 경로가 합쳐진 추천 응답을 서버 이력에 다시 동기화합니다. */
 async function syncRecommendationSnapshot(response, memberId) {
-    if (!response || !memberId) return;
+    if (!response) return false;
 
-    try {
-        await recordRecommendedCourses(response, { memberId });
-    } catch (error) {
-        // 추천 화면 자체는 정상적으로 보여주되, 전체 목록 진입 시 한 번 더 복구합니다.
-        console.error('추천 코스 이력 동기화 실패:', error);
+    // 상세 화면은 서버 재조회보다 추천 화면에서 이미 받은 실제 API값을 먼저 쓴다.
+    persistResolvedCourseRouteSnapshots(response);
+    if (!memberId) return true;
+
+    let lastError = null;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+            await recordRecommendedCourses(response, { memberId });
+            return true;
+        } catch (error) {
+            lastError = error;
+        }
     }
+
+    // 세션의 실제 경로 스냅샷은 유지해 현재 상세 진입에서 예상값이 먼저
+    // 보이지 않게 하고, 서버 이력은 목록 화면의 복구 흐름에서 다시 동기화한다.
+    console.error('추천 코스 이력 동기화 실패:', lastError);
+    return false;
 }
 
 /** 기존 배치 저장 API의 한 번당 최대 3개 제한을 지키면서 최대 6개까지 순서대로 저장합니다. */
@@ -594,7 +646,7 @@ function hasEstimatedRouteDetailsResponse(routeDetails) {
         ));
 }
 
-/** 실제 대중교통 응답도 30분 우선·40분 절대 상한을 지키는지 마지막으로 검증합니다. */
+/** 실제 대중교통 응답이 30분 초과 DAY당 1개·40분 절대 상한을 지키는지 검증합니다. */
 function hasPublicTransitRouteLimitViolation(routeDetails) {
     const resolvedPlaces = Array.isArray(routeDetails?.optimizedPlaces)
         ? routeDetails.optimizedPlaces
@@ -603,7 +655,7 @@ function hasPublicTransitRouteLimitViolation(routeDetails) {
 
     for (let index = 1; index < resolvedPlaces.length; index += 1) {
         const place = resolvedPlaces[index];
-        if (Boolean(place?.routeEstimated)) continue;
+        if (place?.routeEstimated) continue;
 
         const travelMinutes = Number(place?.travelTimeFromPreviousMinutes);
         if (!Number.isFinite(travelMinutes)) continue;
@@ -903,7 +955,11 @@ function hasUnresolvedRoutesForDay(responseData, requestedDayNo) {
  * 현재 DAY 다음 일차부터 아직 실제 경로를 받지 않은 DAY를 찾습니다.
  * 마지막 DAY까지 준비됐으면 앞쪽의 미완료 DAY로 돌아가 한 번에 하나씩 처리합니다.
  */
-function getNextUnresolvedDayNo(responseData, activeDayNo) {
+function getNextUnresolvedDayNo(
+    responseData,
+    activeDayNo,
+    excludedDayNos = new Set(),
+) {
     const orderedDayNos = [
         ...new Set(
             (responseData?.courseOptions || []).flatMap((option) => (
@@ -929,7 +985,10 @@ function getNextUnresolvedDayNo(responseData, activeDayNo) {
         : orderedDayNos;
 
     return prioritizedDayNos.find(
-        (dayNo) => hasUnresolvedRoutesForDay(responseData, dayNo),
+        (dayNo) => (
+            !excludedDayNos.has(Number(dayNo))
+            && hasUnresolvedRoutesForDay(responseData, dayNo)
+        ),
     ) ?? null;
 }
 
@@ -950,22 +1009,6 @@ function getPreviousDayHotelOrigin(option, day) {
     return [...previousPlaces].reverse().find(
         (place) => isHotelCategory(place?.category),
     ) || null;
-}
-
-/** 현재 카드들에 실제로 표시 중인 DAY의 추정 경로 개수만 셉니다. */
-function countEstimatedLegs(courseOptions, activeDayNo) {
-    return (Array.isArray(courseOptions) ? courseOptions : []).reduce(
-        (total, option) => {
-            const day = getOptionDay(option, activeDayNo);
-            return total + (day?.places || []).filter(
-                (place, index) => (
-                    (index > 0 || Boolean(day?.routeOriginPlace))
-                    && Boolean(place.routeEstimated)
-                ),
-            ).length;
-        },
-        0,
-    );
 }
 
 /** 경로 상세 후보를 비교할 때 사용하는 카테고리 키입니다. */
@@ -1315,6 +1358,41 @@ function buildRouteDetailsRequest(
     };
 }
 
+/**
+ * 후보 교체·장소 감소를 모두 시도한 뒤에도 적용할 동선을 찾지 못하면
+ * 원래 장소와 순서를 그대로 두고 모든 인접 구간을 실제 API로 다시 확인합니다.
+ * 이 응답도 전 구간 실제값이고 40분 이내일 때만 화면에 적용합니다.
+ */
+function buildOriginalPublicTransitRouteRequest(
+    option,
+    day,
+    response,
+    recommendRequest,
+    transportMode,
+) {
+    const strictTier = PUBLIC_TRANSIT_ROUTE_OVERLAP_TIERS[0];
+    const request = buildRouteDetailsRequest(
+        option,
+        day,
+        response,
+        recommendRequest,
+        transportMode,
+        strictTier,
+    );
+
+    return {
+        ...request,
+        enforcePublicTransitLimit: false,
+        preserveOriginalPublicTransitRoute: true,
+        allowPublicTransitPlaceReduction: false,
+        placeCandidates: (request.placeCandidates || []).map((candidate) => ({
+            ...candidate,
+            alternativeCandidates: [],
+        })),
+        alternativeCandidates: [],
+    };
+}
+
 /** 완화 단계만 달라졌지만 실제 후보 구성이 같으면 ODsay를 다시 호출하지 않습니다. */
 function getRouteDetailsRequestSignature(request) {
     const summarizeCandidates = (candidates) => (
@@ -1326,6 +1404,10 @@ function getRouteDetailsRequestSignature(request) {
     }));
 
     return JSON.stringify({
+        enforcePublicTransitLimit:
+            request?.enforcePublicTransitLimit !== false,
+        preserveOriginalPublicTransitRoute:
+            Boolean(request?.preserveOriginalPublicTransitRoute),
         allowPlaceReduction:
             Boolean(request?.allowPublicTransitPlaceReduction),
         places: summarizeCandidates(request?.placeCandidates),
@@ -1492,115 +1574,6 @@ function getRouteDetailOverlapViolation(
     return '';
 }
 
-function routeLegKey(fromPlace, toPlace) {
-    const fromPlaceId = Number(fromPlace?.placeId);
-    const toPlaceId = Number(toPlace?.placeId);
-
-    return Number.isInteger(fromPlaceId) && Number.isInteger(toPlaceId)
-        ? `${fromPlaceId}>${toPlaceId}`
-        : null;
-}
-
-/**
- * 중복을 만든 장소 교체 결과는 적용하지 않되, 원래 코스와 출발지·도착지가
- * 정확히 같은 구간에서 이미 받은 실제 ODsay 값은 보존합니다.
- * 장소가 다른 구간의 시간은 원래 장소에 잘못 붙이지 않고 기존 예상값을 유지합니다.
- */
-function preserveActualLegsForOriginalPlaces(
-    routeDetails,
-    originalPlaces,
-    routeOriginPlace = null,
-) {
-    const resolvedPlaces = Array.isArray(routeDetails?.optimizedPlaces)
-        ? routeDetails.optimizedPlaces
-        : [];
-    const actualLegByKey = new Map();
-
-    for (let index = 1; index < resolvedPlaces.length; index += 1) {
-        const resolvedDestination = resolvedPlaces[index];
-        const key = routeLegKey(
-            resolvedPlaces[index - 1],
-            resolvedDestination,
-        );
-
-        if (
-            key
-            && !Boolean(resolvedDestination?.routeEstimated)
-            && !actualLegByKey.has(key)
-        ) {
-            actualLegByKey.set(key, resolvedDestination);
-        }
-    }
-
-    const originalRoutePlaces = routeOriginPlace
-        ? [
-            {
-                ...routeOriginPlace,
-                routeOrigin: true,
-                expectedVisitMinutes: 0,
-                distanceFromPreviousKm: 0,
-                travelTimeFromPreviousMinutes: 0,
-                transitPathType: null,
-                routeEstimated: false,
-            },
-            ...(Array.isArray(originalPlaces) ? originalPlaces : []),
-        ]
-        : (Array.isArray(originalPlaces) ? originalPlaces : []);
-    let preservedActualLegCount = 0;
-    const optimizedPlaces = originalRoutePlaces.map((place, index) => {
-        if (index === 0) {
-            return {
-                ...place,
-                visitOrder: 1,
-                distanceFromPreviousKm: 0,
-                travelTimeFromPreviousMinutes: 0,
-                transitPathType: null,
-                routeEstimated: false,
-            };
-        }
-
-        const actualLeg = actualLegByKey.get(
-            routeLegKey(originalRoutePlaces[index - 1], place),
-        );
-        if (!actualLeg) {
-            return {
-                ...place,
-                visitOrder: index + 1,
-                routeEstimated: place?.routeEstimated == null
-                    ? true
-                    : Boolean(place.routeEstimated),
-            };
-        }
-
-        preservedActualLegCount += 1;
-        return {
-            ...place,
-            visitOrder: index + 1,
-            distanceFromPreviousKm:
-                Number(actualLeg.distanceFromPreviousKm) || 0,
-            travelTimeFromPreviousMinutes:
-                Number(actualLeg.travelTimeFromPreviousMinutes) || 0,
-            transitPathType: normalizeTransitPathType(
-                actualLeg.transitPathType,
-            ),
-            routeEstimated: false,
-        };
-    });
-    const estimatedTravelTimes = optimizedPlaces.some(
-        (place, index) => index > 0 && Boolean(place?.routeEstimated),
-    );
-
-    return {
-        routeDetails: {
-            ...routeDetails,
-            optimizedPlaces,
-            estimatedTravelTimes,
-        },
-        preservedActualLegCount,
-        estimatedTravelTimes,
-    };
-}
-
 /** 실제 경로 응답을 해당 옵션·DAY에만 합치고 시각·합계·예상 여부를 다시 계산합니다. */
 function mergeRouteDetails(
     currentResponse,
@@ -1761,6 +1734,30 @@ function getRouteDetailsKey(
     ].join(':');
 }
 
+/** 실패한 DAY를 사용자가 다시 열 때 완료 캐시를 버리고 경로 API를 실제로 재호출합니다. */
+function clearRouteDetailsCacheForDay(
+    responseData,
+    requestedDayNo,
+    transportMode,
+) {
+    const resultKey = String(responseData?.resultId ?? 'result');
+    const transportKey = String(transportMode || 'transport');
+    const dayNo = Number(requestedDayNo);
+
+    [routeDetailsPromiseCache, routeDetailsResultCache].forEach((cache) => {
+        [...cache.keys()].forEach((cacheKey) => {
+            const keyParts = String(cacheKey).split(':');
+            if (
+                keyParts[0] === resultKey
+                && keyParts[1] === transportKey
+                && Number(keyParts[4]) === dayNo
+            ) {
+                cache.delete(cacheKey);
+            }
+        });
+    });
+}
+
 
 /**
  * 요청한 DAY의 세 옵션 경로를 순차 조회해 응답에 합칩니다.
@@ -1784,6 +1781,7 @@ async function prepareVisibleRoutesBeforeDisplay(
 
     let preparedResponse = responseData;
     let firstBuildError = '';
+    let firstActualRouteError = null;
     let interrupted = false;
     const optionNos = (responseData.courseOptions || [])
         .map((option) => option?.optionNo)
@@ -1818,8 +1816,8 @@ async function prepareVisibleRoutesBeforeDisplay(
         const overlapTiers = getRouteOverlapTiers(transportMode);
         let routeApplied = false;
         let lastRouteError = '';
-        let lastRejectedRouteDetails = null;
         let constraintFallback = false;
+        let receivedActualRoute = false;
         const attemptedRequestSignatures = new Set();
 
         for (const overlapTier of overlapTiers) {
@@ -1866,12 +1864,22 @@ async function prepareVisibleRoutesBeforeDisplay(
                 ) {
                     throw new Error('교통편 응답의 장소 구성을 확인할 수 없습니다.');
                 }
+                if (hasEstimatedRouteDetailsResponse(routeDetails)) {
+                    constraintFallback = true;
+                    lastRouteError = createActualRouteUnavailableError(
+                        transportMode,
+                    ).message;
+                    // 예상값 응답은 캐시하지 않는다. 다음 완화 단계의 후보로
+                    // 모든 인접 구간을 다시 조회하고 실제값만 최종 적용한다.
+                    continue;
+                }
+                receivedActualRoute = true;
                 if (
                     normalizeTransportMode(transportMode) === 'PUBLIC_TRANSIT'
                     && hasPublicTransitRouteLimitViolation(routeDetails)
                 ) {
                     constraintFallback = true;
-                    lastRouteError = '대중교통 실제 경로가 30분 우선·40분 제한을 벗어났습니다.';
+                    lastRouteError = '대중교통 실제 경로가 30분 초과 DAY당 1개·40분 절대 상한을 벗어났습니다.';
                     continue;
                 }
 
@@ -1886,7 +1894,6 @@ async function prepareVisibleRoutesBeforeDisplay(
                     normalizeTransportMode(transportMode) === 'PUBLIC_TRANSIT'
                     && resolvedOrdinaryPlaceCount < minimumOrdinaryPlaceCount
                 ) {
-                    lastRejectedRouteDetails = routeDetails;
                     constraintFallback = true;
                     lastRouteError = `대중교통 40분 제한을 지키는 과정에서 일반 장소가 ${resolvedOrdinaryPlaceCount}곳으로 줄어 최소 ${minimumOrdinaryPlaceCount}곳을 충족하지 못했습니다.`;
                     continue;
@@ -1902,7 +1909,6 @@ async function prepareVisibleRoutesBeforeDisplay(
                     day.places,
                 );
                 if (overlapViolation) {
-                    lastRejectedRouteDetails = routeDetails;
                     constraintFallback = true;
                     lastRouteError = overlapViolation;
                     continue;
@@ -1940,43 +1946,110 @@ async function prepareVisibleRoutesBeforeDisplay(
             }
         }
 
-        if (!routeApplied) {
-            const publicTransitFallbackMessage =
-                normalizeTransportMode(transportMode) === 'PUBLIC_TRANSIT'
-                    && constraintFallback
-                    ? '후보를 넓히고 장소 수를 줄여도 대중교통 40분 제한을 만족하지 못해, 확인되지 않은 구간은 예상값으로 남겼습니다.'
-                    : lastRouteError
-                        || '교통편을 일시적으로 확인할 수 없습니다.';
+        if (
+            !routeApplied
+            && !interrupted
+            && normalizeTransportMode(transportMode) === 'PUBLIC_TRANSIT'
+        ) {
+            try {
+                const originalRouteRequest =
+                    buildOriginalPublicTransitRouteRequest(
+                        option,
+                        day,
+                        preparedResponse,
+                        recommendRequest,
+                        transportMode,
+                    );
+                const originalRouteCacheKey = getRouteDetailsKey(
+                    preparedResponse,
+                    option,
+                    day,
+                    transportMode,
+                    'ORIGINAL_ACTUAL_ROUTE',
+                );
+                const originalRouteDetails = await requestRouteDetailsOnce(
+                    originalRouteCacheKey,
+                    originalRouteRequest,
+                );
 
-            if (lastRejectedRouteDetails) {
-                const preserved = preserveActualLegsForOriginalPlaces(
-                    lastRejectedRouteDetails,
-                    day.places,
-                    routeOriginPlace,
-                );
-                preparedResponse = mergeRouteDetails(
-                    preparedResponse,
-                    option.optionNo,
-                    day.dayNo,
-                    preserved.routeDetails,
-                    preparedResponse?.dailyStartTime
-                        ?? recommendRequest?.dailyStartTime,
-                    routeOriginPlace,
-                    publicTransitFallbackMessage,
-                );
-            } else {
-                preparedResponse = mergeRouteDetails(
-                    preparedResponse,
-                    option.optionNo,
-                    day.dayNo,
-                    null,
-                    preparedResponse?.dailyStartTime
-                        ?? recommendRequest?.dailyStartTime,
-                    routeOriginPlace,
-                    publicTransitFallbackMessage || lastRouteError,
-                );
+                if (
+                    !Array.isArray(originalRouteDetails?.optimizedPlaces)
+                    || originalRouteDetails.optimizedPlaces.length
+                        !== expectedPlaceCount
+                ) {
+                    throw new Error(
+                        '현재 장소 구성의 실제 대중교통 경로를 확인할 수 없습니다.',
+                    );
+                }
+
+                if (hasEstimatedRouteDetailsResponse(originalRouteDetails)) {
+                    lastRouteError = createActualRouteUnavailableError(
+                        transportMode,
+                    ).message;
+                } else {
+                    receivedActualRoute = true;
+                    const { visibleResolvedPlaces } =
+                        getVisibleResolvedRoutePlaces(
+                            originalRouteDetails,
+                            routeOriginPlace,
+                        );
+                    const overlapViolation = getRouteDetailOverlapViolation(
+                        preparedResponse,
+                        option,
+                        day,
+                        visibleResolvedPlaces,
+                        transportMode,
+                        PUBLIC_TRANSIT_ROUTE_OVERLAP_TIERS[0],
+                        day.places,
+                    );
+
+                    if (hasPublicTransitRouteLimitViolation(
+                        originalRouteDetails,
+                    )) {
+                        constraintFallback = true;
+                        lastRouteError =
+                            '현재 장소 구성이 30분 초과 DAY당 1개·40분 절대 상한을 벗어났습니다.';
+                    } else if (overlapViolation) {
+                        constraintFallback = true;
+                        lastRouteError = overlapViolation;
+                    } else {
+                        preparedResponse = mergeRouteDetails(
+                            preparedResponse,
+                            option.optionNo,
+                            day.dayNo,
+                            originalRouteDetails,
+                            preparedResponse?.dailyStartTime
+                                ?? recommendRequest?.dailyStartTime,
+                            routeOriginPlace,
+                            '',
+                        );
+                        routeApplied = true;
+                    }
+                }
+            } catch (error) {
+                lastRouteError = error?.message
+                    || '현재 장소 구성의 실제 대중교통 경로를 확인할 수 없습니다.';
             }
         }
+
+        if (!routeApplied && !interrupted) {
+            const error = receivedActualRoute
+                ? createActualRouteConstraintUnavailableError(transportMode)
+                : createActualRouteUnavailableError(transportMode);
+            if (lastRouteError) {
+                error.cause = new Error(lastRouteError);
+            }
+            if (constraintFallback) {
+                error.constraintFallback = true;
+            }
+            // 한 옵션이 실패해도 나머지 옵션의 모든 인접 구간 조회는 계속한다.
+            // 화면 반영만 보류하고 세 옵션 조회가 끝난 뒤 한 번에 실패시킨다.
+            firstActualRouteError ||= error;
+        }
+    }
+
+    if (firstActualRouteError && !interrupted) {
+        throw firstActualRouteError;
     }
 
     return {
@@ -2038,14 +2111,19 @@ function buildSaveRequest(option, response, profile, travelCode, transportMode) 
     ));
 
     const historyCourseId = Number(option?.courseId);
+    const routeDetailsResolved = (option.days || []).length > 0
+        && (option.days || []).every((day) => (
+            Boolean(day?.routeDetailsAttempted)
+            && (day?.places || []).every(
+                (place) => !place?.routeEstimated,
+            )
+        ));
 
     return {
         ...(Number.isInteger(historyCourseId) && historyCourseId > 0
             ? { courseId: historyCourseId }
             : {}),
-        routeDetailsResolved: (option.days || []).some(
-            (day) => Boolean(day?.routeDetailsAttempted),
-        ),
+        routeDetailsResolved,
         ...(profile.memberId ? { memberId: profile.memberId } : {}),
         ...(response?.resultId ? { resultId: response.resultId } : {}),
         title: option.title || option.optionName || '서울 맞춤 추천 코스',
@@ -2166,16 +2244,19 @@ function CourseRecommendPage() {
         }
 
         const initialDayNo = getFirstDayNo(initialState.response);
-        return (initialState.response?.courseOptions || []).some((option) => {
-            const day = getOptionDay(option, initialDayNo);
-            return Boolean(day && !day.routeDetailsAttempted);
-        });
+        return hasUnresolvedRoutesForDay(
+            initialState.response,
+            initialDayNo,
+        );
     });
     const [pendingDayNo, setPendingDayNo] = useState(null);
     const dayRouteRequestRef = useRef(null);
     const queuedDayActivationRef = useRef(null);
     const foregroundRoutePriorityRef = useRef(false);
     const pageMountedRef = useRef(true);
+    // 자동 선조회 실패 DAY는 같은 응답에서 즉시 반복 호출하지 않는다.
+    // 사용자가 직접 DAY를 누르면 이 표시를 지우고 다시 실제 경로를 조회한다.
+    const failedRoutePrefetchDaysRef = useRef(new WeakMap());
     const [routePreparationRevision, setRoutePreparationRevision] = useState(0);
     const [activeDayNo, setActiveDayNo] = useState(() => getFirstDayNo(initialState.response));
     const [previousRecommendation, setPreviousRecommendation] = useState(() => (
@@ -2251,8 +2332,6 @@ function CourseRecommendPage() {
     );
     const transport = getTransportMeta(transportMode);
     const isWalkingRerecommendDisabled = transportMode === 'WALKING';
-    const estimatedLegCount = countEstimatedLegs(options, activeDayNo);
-    const hasEstimatedTravelTimes = estimatedLegCount > 0;
     const focusedOption = options.find((option) => option.optionNo === focusedOptionNo) || options[0];
 
     /** 비동기 경로 조회가 화면 전환 뒤의 응답을 덮어쓰지 않도록 최신 응답도 함께 기록합니다. */
@@ -2520,6 +2599,18 @@ function CourseRecommendPage() {
 
         const requestToken = Symbol(`day-${availableDayNo}`);
         const responseAtRequestStart = response;
+        const failedPrefetchDays =
+            failedRoutePrefetchDaysRef.current.get(responseAtRequestStart);
+        if (!backgroundPrefetch) {
+            if (failedPrefetchDays?.has(Number(availableDayNo))) {
+                clearRouteDetailsCacheForDay(
+                    responseAtRequestStart,
+                    availableDayNo,
+                    transportMode,
+                );
+            }
+            failedPrefetchDays?.delete(Number(availableDayNo));
+        }
         let resolveCompletion;
         const completion = new Promise((resolve) => {
             resolveCompletion = resolve;
@@ -2568,6 +2659,7 @@ function CourseRecommendPage() {
             }
 
             const preparedResponse = preparedResult.response;
+            failedPrefetchDays?.delete(Number(availableDayNo));
             // 화면이 열린 뒤 선조회한 DAY 2+ 실제 경로도 같은 courseId의
             // 추천 이력에 다시 저장해 상세 화면이 예상값을 읽지 않게 합니다.
             await syncRecommendationSnapshot(
@@ -2635,6 +2727,18 @@ function CourseRecommendPage() {
                 });
             }
         } catch (error) {
+            let failedDays = failedRoutePrefetchDaysRef.current.get(
+                responseAtRequestStart,
+            );
+            if (!failedDays) {
+                failedDays = new Set();
+                failedRoutePrefetchDaysRef.current.set(
+                    responseAtRequestStart,
+                    failedDays,
+                );
+            }
+            failedDays.add(Number(availableDayNo));
+
             if (
                 pageMountedRef.current
                 && dayRouteRequestRef.current?.token === requestToken
@@ -2642,23 +2746,43 @@ function CourseRecommendPage() {
                 const queuedDayNo = Number(queuedDayActivationRef.current);
                 const failedRequestedDay = Number.isFinite(queuedDayNo)
                     && queuedDayNo === Number(availableDayNo);
+                const shouldRetryAsForeground =
+                    backgroundPrefetch && failedRequestedDay;
 
-                if (failedRequestedDay) {
-                    queuedDayActivationRef.current = null;
-                }
-                if (
-                    failedRequestedDay
-                    || (!backgroundPrefetch && queuedDayActivationRef.current == null)
-                ) {
-                    setPendingDayNo(null);
-                    setIsPreparingVisibleRoutes(false);
-                }
-                if (!backgroundPrefetch || failedRequestedDay) {
-                    setNotice({
-                        tone: 'error',
-                        message: error?.message
-                            || `DAY ${availableDayNo}의 교통편을 확인하지 못했습니다.`,
-                    });
+                if (shouldRetryAsForeground) {
+                    // 선조회 중인 DAY를 사용자가 직접 눌렀다면 첫 실패로
+                    // 로딩을 종료하지 않는다. finally에서 진행 중 요청을
+                    // 정리한 뒤 effect가 queued DAY를 전면 요청으로 한 번
+                    // 더 조회한다. 실패 표시는 유지해 캐시까지 비운 실제
+                    // API 재호출이 되게 하고, 재시도 실패 때만 종료한다.
+                    setPendingDayNo(availableDayNo);
+                    setIsPreparingVisibleRoutes(true);
+                } else {
+                    if (failedRequestedDay) {
+                        queuedDayActivationRef.current = null;
+                    }
+                    if (
+                        failedRequestedDay
+                        || (!backgroundPrefetch && queuedDayActivationRef.current == null)
+                    ) {
+                        setPendingDayNo(null);
+                        setIsPreparingVisibleRoutes(false);
+                    }
+                    if (!backgroundPrefetch || failedRequestedDay) {
+                        setNotice({
+                            tone: 'error',
+                            message: error?.message
+                                || `DAY ${availableDayNo}의 교통편을 확인하지 못했습니다.`,
+                        });
+                    }
+                    if (
+                        !backgroundPrefetch
+                        && !failedRequestedDay
+                        && !activateAfterLoad
+                    ) {
+                        setStatus('error');
+                        setRequestError(normalizeRecommendationError(error));
+                    }
                 }
             }
         } finally {
@@ -2745,7 +2869,13 @@ function CourseRecommendPage() {
             return undefined;
         }
 
-        const nextDayNo = getNextUnresolvedDayNo(response, activeDayNo);
+        const failedPrefetchDays =
+            failedRoutePrefetchDaysRef.current.get(response) || new Set();
+        const nextDayNo = getNextUnresolvedDayNo(
+            response,
+            activeDayNo,
+            failedPrefetchDays,
+        );
         if (nextDayNo == null) {
             return undefined;
         }
@@ -3026,6 +3156,22 @@ function CourseRecommendPage() {
             return;
         }
 
+        const hasUnresolvedActualRoute = selectedCourses.some(
+            ({ option }) => (option.days || []).some((day) => (
+                !day?.routeDetailsAttempted
+                || (day?.places || []).some(
+                    (place) => Boolean(place?.routeEstimated),
+                )
+            )),
+        );
+        if (hasUnresolvedActualRoute) {
+            setNotice({
+                tone: 'error',
+                message: '저장 전에 모든 DAY의 실제 이동 경로 확인이 끝나야 해요. 잠시 기다리거나 해당 DAY를 눌러 다시 확인해 주세요.',
+            });
+            return;
+        }
+
         // 현재 CourseSaveService는 인증 토큰과 별개로 memberId를 필수 검증합니다.
         if (!profile.memberId) {
             setNotice({
@@ -3268,22 +3414,6 @@ function CourseRecommendPage() {
                     </div>
                 </div>
 
-                {status === 'success' && hasEstimatedTravelTimes && (
-                        <section className="course-result-estimated-notice" role="status">
-                            <span><Info size={18} aria-hidden="true" /></span>
-                            <div>
-                                <strong>
-                                    표시 중인 DAY에서 {estimatedLegCount}개 구간만 예상값이에요
-                                </strong>
-                                <p>
-                                    {transportMode === 'PUBLIC_TRANSIT'
-                                        ? 'ODsay에서 실제 경로를 받지 못한 구간만 예상 거리와 시간으로 보완했습니다.'
-                                        : 'OpenRouteService에서 실제 경로를 받지 못한 구간입니다. 백엔드의 OPENROUTESERVICE_API_KEY 설정과 실행 로그를 확인해 주세요.'}
-                                </p>
-                            </div>
-                        </section>
-                )}
-
                 {status === 'success' && options.length > 0 && (
                     <section
                         className={`course-result-save-selection${selectedSaveCourseKeys.length > 0 ? ' has-selection' : ''}`}
@@ -3340,7 +3470,12 @@ function CourseRecommendPage() {
                         <h2>
                             {requestError?.code === THREE_COURSES_UNAVAILABLE_CODE
                                 ? '추천 코스 3개를 만들지 못했어요'
-                                : '추천 코스를 불러오지 못했어요'}
+                                : requestError?.code === ACTUAL_ROUTE_UNAVAILABLE_CODE
+                                    ? '실제 이동 경로를 확인하지 못했어요'
+                                    : requestError?.code
+                                        === ACTUAL_ROUTE_CONSTRAINT_UNAVAILABLE_CODE
+                                        ? '이동 제한에 맞는 대체 동선을 찾지 못했어요'
+                                    : '추천 코스를 불러오지 못했어요'}
                         </h2>
                         <p>
                             {requestError?.message
@@ -3349,6 +3484,13 @@ function CourseRecommendPage() {
                         <div>
                             {requestError?.code === THREE_COURSES_UNAVAILABLE_CODE ? (
                                 <a href="/travel-info">여행 정보 다시 입력하기</a>
+                            ) : [
+                                ACTUAL_ROUTE_UNAVAILABLE_CODE,
+                                ACTUAL_ROUTE_CONSTRAINT_UNAVAILABLE_CODE,
+                            ].includes(requestError?.code) ? (
+                                <button type="button" onClick={requestRecommendation}>
+                                    <RefreshCw size={16} aria-hidden="true" />실제 경로 다시 불러오기
+                                </button>
                             ) : (
                                 <>
                                     <button type="button" onClick={requestRecommendation}>
@@ -3394,14 +3536,7 @@ function CourseRecommendPage() {
                                         option={option}
                                         transportMode={transportMode}
                                         activeDayNo={activeDayNo}
-                                        isEstimatedTravelTime={Boolean(
-                                            getOptionDay(option, activeDayNo)
-                                                ?.places
-                                                ?.some((place, placeIndex) => (
-                                                    placeIndex > 0
-                                                    && place.routeEstimated
-                                                )),
-                                        )}
+                                        isEstimatedTravelTime={false}
                                         isCompared={comparedCourseKeys.includes(
                                             getSaveSelectionKey(activeRecommendationKey, option.optionNo),
                                         )}
