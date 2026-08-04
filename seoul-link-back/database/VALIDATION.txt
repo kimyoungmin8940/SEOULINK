@@ -28,3 +28,18 @@
 - 카테고리별 수: TOUR 229 / RESTAURANT 170 / CAFE 150 / HOTEL 139
 - 전체 (API_PROVIDER, API_PLACE_ID) 중복 없음
 
+2026-08-04 추가 장소·이미지 재통합 검증:
+- 기준본: seoulink-database-fixed(13).zip
+- 기준본 장소 688개가 모두 보존됨
+- 신규 장소 12개 추가, 삭제 장소 0개
+- 기존 장소 76개는 이미지 관련 6개 컬럼만 변경됨
+- 이미지 외 공통 장소 데이터는 기준본과 동일
+- 최종 장소 수 700개
+- 카테고리별 수: TOUR 230 / RESTAURANT 180 / CAFE 150 / HOTEL 140
+- 전체 (API_PROVIDER, API_PLACE_ID) 중복 없음
+- 동일 카테고리 내 장소명 중복 없음
+- 모든 장소 SELECT는 48개 컬럼을 동일 순서로 유지
+- 기준본의 MERGE/UPDATE/INSERT 처리 로직 유지
+- apply_place_data.sql include 대상 존재 확인
+- ZIP 무결성 검사 통과
+

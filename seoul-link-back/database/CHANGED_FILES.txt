@@ -51,3 +51,13 @@
 - TOUR 20 / RESTAURANT 23 / CAFE 28 / HOTEL 2
 - 이미지 외 모든 장소 데이터와 기준본 파일 구조 보존
 
+2026-08-04 추가 장소·이미지 재통합:
+- 기준본: seoulink-database-fixed(13).zip
+- 반영 파일: 01_tour.sql, 02_restaurant.sql, 03_cafe.sql, 04_hotel.sql
+- seed/places/01_tour.sql: 신규 1개 + 기존 이미지 정보 21개 갱신, 최종 230개
+- seed/places/02_restaurant.sql: 신규 10개 + 기존 이미지 정보 23개 갱신, 최종 180개
+- seed/places/03_cafe.sql: 신규 0개 + 기존 이미지 정보 30개 갱신, 최종 150개
+- seed/places/04_hotel.sql: 신규 1개 + 기존 이미지 정보 2개 갱신, 최종 140개
+- 기존 장소의 이미지 외 데이터 및 DB 구조는 기준본 그대로 보존
+- 최종 장소 수 700개
+
