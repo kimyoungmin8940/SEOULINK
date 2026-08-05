@@ -10,6 +10,7 @@ import com.seoulink.backend.domain.course.dto.response.CourseOptionResponse;
 import com.seoulink.backend.domain.course.dto.response.CoursePlaceResponse;
 import com.seoulink.backend.domain.course.dto.response.CourseRecommendResponse;
 import com.seoulink.backend.domain.course.dto.response.OptimizedPlaceDto;
+import com.seoulink.backend.domain.course.exception.CourseRecommendationUnavailableException;
 import com.seoulink.backend.domain.course.model.TransportMode;
 import com.seoulink.backend.domain.course.model.TransitPathType;
 import com.seoulink.backend.domain.course.service.DistanceService.RouteMatrix;
@@ -422,7 +423,7 @@ public class CourseRecommendationService {
 
             if (duplicateRecommendation || optimized == null
                     || recommendationKey == null) {
-                throw new IllegalStateException(
+                throw new CourseRecommendationUnavailableException(
                         "세 가지 추천 코스를 모두 생성하지 못했습니다. "
                                 + "strategy=" + strategy
                                 + ", generatedOptions=" + courseOptions.size()
@@ -465,7 +466,7 @@ public class CourseRecommendationService {
         }
 
         if (courseOptions.size() != OPTION_GENERATION_ORDER.size()) {
-            throw new IllegalStateException(
+            throw new CourseRecommendationUnavailableException(
                     "추천 코스는 항상 3개여야 합니다. actual="
                             + courseOptions.size()
             );
@@ -533,7 +534,7 @@ public class CourseRecommendationService {
     ) {
         String targetSignature = walkingTargetSignature(routeContexts);
         if (!attemptedTargetSignatures.add(targetSignature)) {
-            throw new IllegalStateException(
+            throw new CourseRecommendationUnavailableException(
                     "같은 도보 장소 수 조합을 반복해 재시도할 수 없습니다. "
                             + "resultId=" + request.getResultId()
                             + ", targets=" + targetSignature
@@ -616,7 +617,7 @@ public class CourseRecommendationService {
             );
         }
         if (combinationSelection.combinations().isEmpty()) {
-            throw new IllegalStateException(
+            throw new CourseRecommendationUnavailableException(
                     "도보 시간 제한을 유지한 세 코스 후보를 만들 수 없습니다. "
                             + "resultId=" + request.getResultId()
                             + ", candidateCounts="
@@ -802,7 +803,7 @@ public class CourseRecommendationService {
             return reducedResponse;
         }
 
-        throw new IllegalStateException(
+        throw new CourseRecommendationUnavailableException(
                 "후보 풀 확장과 세 코스 전체 재선택 후에도 실제 도보 제한을 "
                         + "만족하는 조합을 만들 수 없습니다. resultId="
                         + request.getResultId()
@@ -1146,7 +1147,7 @@ public class CourseRecommendationService {
                             estimated
                     );
             if (diversified == null) {
-                throw new IllegalStateException(
+                throw new CourseRecommendationUnavailableException(
                         "이전 추천과 완전히 같은 도보 코스이며, 최소 3곳을 "
                                 + "유지한 새 DAY 조합도 만들 수 없습니다. "
                                 + "recommendationKey=" + recommendationKey

@@ -23,6 +23,8 @@ import {
 
 import Header from "../../components/common/Header";
 import Footer from "../../components/common/Footer";
+import SocialLoginLoadingOverlay
+    from "../../components/common/SocialLoginLoadingOverlay";
 import { getMyTravelType } from "../../api/mypageApi";
 import { claimGuestSurvey } from "../../api/surveyApi";
 import {
@@ -54,6 +56,7 @@ const themeCourseBadgesByKey = new Map(
 function getSavedCourseBadge(course) {
     if (String(course?.courseType || "").toUpperCase() !== "THEME") {
         return "BEST";
+
     }
 
     return themeCourseBadgesByKey.get(course?.sourceCourseKey) || null;
@@ -239,6 +242,12 @@ export default function MyPage() {
     );
     const [dashboardError, setDashboardError] = useState("");
     const [removingCourseIds, setRemovingCourseIds] = useState(() => new Set());
+    const [showSocialLoginLoading, setShowSocialLoginLoading] = useState(
+        () =>
+            sessionStorage.getItem(
+                "showSocialLoginLoading"
+            ) === "true"
+    );
 
     useEffect(() => {
         if (!member.memberId) {
@@ -374,18 +383,40 @@ export default function MyPage() {
         };
     }, [member.memberId]);
 
+    useEffect(() => {
+        if (!showSocialLoginLoading) return;
+        if (travelTypeLoading || dashboardLoading) return;
+
+        const timerId = window.setTimeout(() => {
+            sessionStorage.removeItem(
+                "showSocialLoginLoading"
+            );
+            setShowSocialLoginLoading(false);
+        }, 650);
+
+        return () => window.clearTimeout(timerId);
+    }, [
+        showSocialLoginLoading,
+        travelTypeLoading,
+        dashboardLoading,
+    ]);
+
+    const loginType = String(
+        member.loginType || "LOCAL"
+    ).toUpperCase();
+
     const userName =
-        member.nickname?.trim() ||
-        member.name?.trim() ||
-        "민영환";
+        loginType === "LOCAL"
+            ? member.name?.trim() ||
+            member.nickname?.trim() ||
+            "사용자"
+            : member.nickname?.trim() ||
+            member.name?.trim() ||
+            "사용자";
 
     const email =
         member.email ||
         "user@seoulink.com";
-
-    const loginType =
-        member.loginType ||
-        "LOCAL";
 
     const travelCode =
         travelType?.travelCode?.trim().toUpperCase() ||
@@ -775,30 +806,7 @@ export default function MyPage() {
                                     </div>
                                 )}
 
-                                <div className="mypage-analysis-actions">
-                                    {tasteTraits.length === 5 ? (
-                                        <>
-                                            <a href="/mypage/travel-type">
-                                                상세 결과 보기
-                                            </a>
 
-                                            <a
-                                                className="primary"
-                                                href="/courses"
-                                                onClick={handleRecommendCourse}
-                                            >
-                                                맞춤 코스 추천
-                                            </a>
-                                        </>
-                                    ) : (
-                                        <a
-                                            className="primary full"
-                                            href="/survey"
-                                        >
-                                            취향 검사 시작하기
-                                        </a>
-                                    )}
-                                </div>
                             </section>
                         </div>
 
@@ -873,78 +881,78 @@ export default function MyPage() {
                                 )}
 
                                 {!dashboardLoading &&
-                                !dashboardError &&
-                                recentCourses.length === 0 && (
-                                    <p className="recent-course-state">
-                                        아직 저장한 추천 코스가 없습니다.
-                                    </p>
-                                )}
+                                    !dashboardError &&
+                                    recentCourses.length === 0 && (
+                                        <p className="recent-course-state">
+                                            아직 저장한 추천 코스가 없습니다.
+                                        </p>
+                                    )}
 
                                 {!dashboardLoading &&
-                                !dashboardError &&
-                                recentCourses.map((course, index) => (
-                                    <article
-                                        className="recent-course-card"
-                                        key={course.courseId}
-                                        role="link"
-                                        tabIndex={0}
-                                        aria-label={`${course.title} 상세 일정 보기`}
-                                        onClick={() => openSavedCourseDetail(course)}
-                                        onKeyDown={(event) =>
-                                            handleSavedCourseKeyDown(event, course)
-                                        }
-                                    >
-                                        <div className="course-image-wrap">
-                                            <img
-                                                src={
-                                                    course.thumbnailUrl ||
-                                                    course.coverImageUrl ||
-                                                    COURSE_FALLBACK_IMAGES[
+                                    !dashboardError &&
+                                    recentCourses.map((course, index) => (
+                                        <article
+                                            className="recent-course-card"
+                                            key={course.courseId}
+                                            role="link"
+                                            tabIndex={0}
+                                            aria-label={`${course.title} 상세 일정 보기`}
+                                            onClick={() => openSavedCourseDetail(course)}
+                                            onKeyDown={(event) =>
+                                                handleSavedCourseKeyDown(event, course)
+                                            }
+                                        >
+                                            <div className="course-image-wrap">
+                                                <img
+                                                    src={
+                                                        course.thumbnailUrl ||
+                                                        course.coverImageUrl ||
+                                                        COURSE_FALLBACK_IMAGES[
                                                         index %
                                                         COURSE_FALLBACK_IMAGES.length
-                                                    ]
-                                                }
-                                                alt={course.title}
-                                                onError={(event) => {
-                                                    event.currentTarget.onerror = null;
-                                                    event.currentTarget.src = COURSE_FALLBACK_IMAGES[
+                                                            ]
+                                                    }
+                                                    alt={course.title}
+                                                    onError={(event) => {
+                                                        event.currentTarget.onerror = null;
+                                                        event.currentTarget.src = COURSE_FALLBACK_IMAGES[
                                                         index % COURSE_FALLBACK_IMAGES.length
-                                                    ];
-                                                }}
-                                            />
-
-                                            {getSavedCourseBadge(course) && (
-                                                <span className="course-best">
-                                                    {getSavedCourseBadge(course)}
-                                                </span>
-                                            )}
-
-                                            <button
-                                                className="course-bookmark-icon"
-                                                type="button"
-                                                aria-label={
-                                                    `${course.title} 저장 해제`
-                                                }
-                                                disabled={removingCourseIds.has(
-                                                    course.courseId
-                                                )}
-                                                onClick={(event) => {
-                                                    event.stopPropagation();
-                                                    handleRemoveSavedCourse(course);
-                                                }}
-                                            >
-                                                <Bookmark
-                                                    size={22}
-                                                    strokeWidth={2.2}
-                                                    fill="currentColor"
+                                                            ];
+                                                    }}
                                                 />
-                                            </button>
-                                        </div>
 
-                                        <div className="course-card-content">
-                                            <h3>{course.title}</h3>
+                                                {getSavedCourseBadge(course) && (
+                                                    <span className="course-best">
+        {getSavedCourseBadge(course)}
+    </span>
+                                                )}
 
-                                            <div className="course-meta">
+                                                <button
+                                                    className="course-bookmark-icon"
+                                                    type="button"
+                                                    aria-label={
+                                                        `${course.title} 저장 해제`
+                                                    }
+                                                    disabled={removingCourseIds.has(
+                                                        course.courseId
+                                                    )}
+                                                    onClick={(event) => {
+                                                        event.stopPropagation();
+                                                        handleRemoveSavedCourse(course);
+                                                    }}
+                                                >
+                                                    <Bookmark
+                                                        size={22}
+                                                        strokeWidth={2.2}
+                                                        fill="currentColor"
+                                                    />
+                                                </button>
+                                            </div>
+
+                                            <div className="course-card-content">
+                                                <h3>{course.title}</h3>
+
+                                                <div className="course-meta">
                                                 <span>
                                                     <MapPin size={14} />
                                                     {course.representativePlaceName ||
@@ -953,16 +961,16 @@ export default function MyPage() {
                                                         "서울"}
                                                 </span>
 
-                                                <span>
+                                                    <span>
                                                     <Clock3 size={14} />
-                                                    {formatCourseDuration(
-                                                        course.totalCourseMinutes ?? course.totalCourseTimeMinutes,
-                                                        course.placeCount
-                                                    )}
+                                                        {formatCourseDuration(
+                                                            course.totalCourseMinutes ?? course.totalCourseTimeMinutes,
+                                                            course.placeCount
+                                                        )}
                                                 </span>
-                                            </div>
+                                                </div>
 
-                                            <div className="course-footer">
+                                                <div className="course-footer">
                                                 <span>
                                                     <CalendarDays
                                                         size={14}
@@ -972,13 +980,13 @@ export default function MyPage() {
                                                     )} 저장
                                                 </span>
 
-                                                <em>
-                                                    {course.travelCode || "추천 코스"}
-                                                </em>
+                                                    <em>
+                                                        {course.travelCode || "추천 코스"}
+                                                    </em>
+                                                </div>
                                             </div>
-                                        </div>
-                                    </article>
-                                ))}
+                                        </article>
+                                    ))}
                             </div>
                         </section>
                     </section>
@@ -986,6 +994,10 @@ export default function MyPage() {
             </main>
 
             <Footer />
+
+            {showSocialLoginLoading && (
+                <SocialLoginLoadingOverlay />
+            )}
         </div>
     );
 

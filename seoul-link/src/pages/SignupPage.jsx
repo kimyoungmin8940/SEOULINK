@@ -5,6 +5,35 @@ import { apiPost } from "../api/client";
 import signupIllustration from "../assets/images/seoul-line-art-transparent.png";
 import "../styles/SignupPage.css";
 
+function getSignupErrorMessage(requestError) {
+    const rawMessage =
+        typeof requestError?.message === "string"
+            ? requestError.message.trim()
+            : "";
+    let apiMessage = rawMessage;
+
+    if (rawMessage) {
+        try {
+            const parsedError = JSON.parse(rawMessage);
+            if (typeof parsedError?.message === "string") {
+                apiMessage = parsedError.message.trim();
+            }
+        } catch {
+            // JSON이 아닌 일반 오류 문구는 그대로 사용합니다.
+        }
+    }
+
+    if (
+        /this email is already registered/i.test(apiMessage)
+        || /email.*already.*registered/i.test(apiMessage)
+        || /이미.*사용.*이메일/.test(apiMessage)
+    ) {
+        return "이미 사용 중인 이메일입니다.";
+    }
+
+    return apiMessage || "회원가입 중 오류가 발생했습니다.";
+}
+
 export default function SignupPage() {
     const [form, setForm] = useState({
         email: "",
@@ -39,6 +68,25 @@ export default function SignupPage() {
             return;
         }
 
+        // 휴대폰 번호 검사
+        if (!/^\d{11}$/.test(form.phone)) {
+            setError("휴대폰 번호는 숫자 11자리로 입력해주세요.");
+            return;
+        }
+
+        const passwordPattern =
+            /^(?=.*[A-Za-z])(?=.*\d)\S{8,30}$/;
+
+        if (!passwordPattern.test(form.password)) {
+            setError(
+                "비밀번호는 영문과 숫자를 포함하여 8~30자로 입력해주세요."
+            );
+            return;
+        }
+
+// 기존 비밀번호 일치 검사
+
+
         if (form.password !== form.passwordCheck) {
             setError("비밀번호가 일치하지 않습니다.");
             return;
@@ -61,10 +109,7 @@ export default function SignupPage() {
                 window.location.assign("/login");
             }, 1000);
         } catch (requestError) {
-            setError(
-                requestError.message ||
-                    "회원가입 중 오류가 발생했습니다."
-            );
+            setError(getSignupErrorMessage(requestError));
         } finally {
             setIsSubmitting(false);
         }
@@ -275,13 +320,24 @@ export default function SignupPage() {
                                         휴대폰 번호
                                     </label>
                                     <input
-                                        id="phone"
                                         type="tel"
-                                        inputMode="tel"
-                                        autoComplete="tel"
+                                        name="phone"
                                         value={form.phone}
-                                        onChange={handleChange}
-                                        placeholder="숫자만 입력해주세요"
+                                        onChange={(e) => {
+                                            const onlyNumbers = e.target.value
+                                                .replace(/\D/g, "")
+                                                .slice(0, 11);
+
+                                            setForm((prev) => ({
+                                                ...prev,
+                                                phone: onlyNumbers,
+                                            }));
+                                        }}
+                                        inputMode="numeric"
+                                        maxLength={11}
+                                        placeholder="숫자 11자리를 입력해주세요"
+                                        autoComplete="tel"
+                                        required
                                     />
                                 </div>
 

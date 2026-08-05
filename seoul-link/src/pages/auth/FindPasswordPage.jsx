@@ -10,7 +10,9 @@ import Header from "../../components/common/Header";
 import {
     resetPassword,
     verifyPasswordResetMember,
+    withdrawMember,
 } from "../../api/authApi";
+import { authStore } from "../../store/authStore";
 import passwordResetIllustration from "../../assets/images/seoul-line-art-transparent.png";
 import "../../styles/FindPasswordPage.css";
 
@@ -22,6 +24,10 @@ const INITIAL_FORM = {
 };
 
 export default function FindPasswordPage() {
+    const member = authStore.getMember() || {};
+    const memberId = Number(member.memberId);
+    const canWithdraw = Number.isInteger(memberId) && memberId > 0;
+
     const [form, setForm] = useState(INITIAL_FORM);
     const [isVerified, setIsVerified] = useState(false);
     const [isVerifying, setIsVerifying] = useState(false);
@@ -29,6 +35,7 @@ export default function FindPasswordPage() {
     const [showPassword, setShowPassword] = useState(false);
     const [showPasswordConfirm, setShowPasswordConfirm] =
         useState(false);
+    const [withdrawLoading, setWithdrawLoading] = useState(false);
     const [error, setError] = useState("");
 
     const handleChange = (event) => {
@@ -66,7 +73,7 @@ export default function FindPasswordPage() {
             setIsVerified(false);
             setError(
                 requestError.message ||
-                    "일치하는 회원 정보를 찾을 수 없습니다."
+                "일치하는 회원 정보를 찾을 수 없습니다."
             );
         } finally {
             setIsVerifying(false);
@@ -108,10 +115,86 @@ export default function FindPasswordPage() {
         } catch (requestError) {
             setError(
                 requestError.message ||
-                    "비밀번호 변경 중 오류가 발생했습니다."
+                "비밀번호 변경 중 오류가 발생했습니다."
             );
         } finally {
             setIsSubmitting(false);
+        }
+    };
+
+    const handleWithdraw = async () => {
+        if (withdrawLoading) {
+            return;
+        }
+
+        if (!canWithdraw) {
+            window.alert(
+                "로그인한 회원 정보를 확인할 수 없습니다."
+            );
+            return;
+        }
+
+        const confirmed = window.confirm(
+            "정말 SEOULINK를 탈퇴하시겠습니까?\n\n" +
+            "탈퇴 후에는 현재 계정으로 다시 로그인할 수 없습니다."
+        );
+
+        if (!confirmed) {
+            return;
+        }
+
+        /*const confirmText = window.prompt(
+            '회원 탈퇴를 계속하려면 "탈퇴"를 입력해주세요.'
+        );
+
+        if (confirmText?.trim() !== "탈퇴") {
+            window.alert(
+                "입력 내용이 일치하지 않아 탈퇴가 취소되었습니다."
+            );
+            return;
+        }*/
+
+        try {
+            setWithdrawLoading(true);
+
+            await withdrawMember(memberId);
+
+            authStore.clearMember();
+
+            [
+                "accessToken",
+                "refreshToken",
+                "token",
+                "nickname",
+                "userName",
+                "memberName",
+                "name",
+                "user",
+                "loginUser",
+                "recommendedCourses",
+                "myRecommendedCourses",
+                "recommendationCourses",
+            ].forEach((key) => {
+                localStorage.removeItem(key);
+            });
+
+            sessionStorage.removeItem("loginReturnUrl");
+            sessionStorage.removeItem(
+                "showSocialLoginLoading"
+            );
+
+            window.alert("회원 탈퇴가 완료되었습니다.");
+            window.location.replace("/");
+        } catch (requestError) {
+            console.error("회원 탈퇴 실패:", requestError);
+
+            window.alert(
+                requestError?.response?.data?.message ||
+                requestError?.message ||
+                "회원 탈퇴 처리 중 오류가 발생했습니다."
+            );
+        } finally {
+            setWithdrawLoading(false);
         }
     };
 
@@ -216,8 +299,8 @@ export default function FindPasswordPage() {
                                             {isVerified
                                                 ? "확인 완료"
                                                 : isVerifying
-                                                  ? "확인 중..."
-                                                  : "확인"}
+                                                    ? "확인 중..."
+                                                    : "확인"}
                                         </button>
                                     </div>
                                 </div>
@@ -344,15 +427,32 @@ export default function FindPasswordPage() {
                                         : "변경 완료"}
                                 </button>
 
-                                <button
-                                    className="password-reset-login-link"
-                                    type="button"
-                                    onClick={() =>
-                                        window.location.assign("/login")
-                                    }
-                                >
-                                    로그인으로 돌아가기
-                                </button>
+                                <div className="password-reset-bottom-actions">
+                                    <button
+                                        className="password-reset-login-link"
+                                        type="button"
+                                        onClick={() =>
+                                            window.location.assign(
+                                                "/login"
+                                            )
+                                        }
+                                    >
+                                        로그인으로 돌아가기
+                                    </button>
+
+                                    {canWithdraw && (
+                                        <button
+                                            className="password-reset-withdraw"
+                                            type="button"
+                                            disabled={withdrawLoading}
+                                            onClick={handleWithdraw}
+                                        >
+                                            {withdrawLoading
+                                                ? "처리 중..."
+                                                : "회원 탈퇴"}
+                                        </button>
+                                    )}
+                                </div>
                             </form>
                         </div>
                     </section>

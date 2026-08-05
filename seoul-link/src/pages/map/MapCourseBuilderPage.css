@@ -59,3 +59,45 @@
         flex-basis: auto;
     }
 }
+
+/*
+ * 데스크톱 기준 캔버스
+ *
+ * 프로젝트의 다른 주요 페이지처럼 콘텐츠 폭과 높이에 상한을 두어
+ * 1920×1080과 Windows 150% 배율의 2880×1800(대략 1920×1200 CSS 화면)에서
+ * 지도 코스 화면의 비율이 달라지지 않도록 한다.
+ */
+@media (min-width: 1121px) {
+    .map-course-content {
+        align-items: flex-start;
+    }
+
+    .map-course-content > .course-builder-page {
+        height: min(100%, 894px);
+    }
+}
+
+/*
+ * 브라우저가 실제 고해상도 CSS 픽셀을 그대로 사용하는 화면 대응.
+ * 1920×1080 기준 캔버스를 해상도 구간에 맞춰 한 번에 확대한다.
+ */
+@media (min-width: 2300px) and (min-height: 1400px) {
+    .map-course-content {
+        --map-course-shell-width: 1800px;
+        padding: 125px 60px 18px;
+    }
+
+    .map-course-content > .course-builder-page {
+        flex: 0 0 1440px;
+        width: 1440px !important;
+        max-width: 1440px !important;
+        height: 894px;
+    }
+}
+
+@media (min-width: 2800px) and (min-height: 1600px) {
+    .map-course-content {
+        --map-course-shell-width: 2160px;
+        padding: 150px 72px 21px;
+    }
+}

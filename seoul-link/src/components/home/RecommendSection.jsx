@@ -229,7 +229,6 @@ function RecommendSection() {
                                 detailPath={detailPath}
                                 requiresLogin={hasMyRecommendedCourses}
                                 variant="home"
-                                showHeart={!hasMyRecommendedCourses}
                                 maxTags={3}
                             />
                         );

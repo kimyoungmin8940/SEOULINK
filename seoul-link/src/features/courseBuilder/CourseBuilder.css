@@ -1136,3 +1136,43 @@
         left: 58px;
     }
 }
+
+/*
+ * 고해상도 비율 확대
+ *
+ * 내부의 지도, 패널, 버튼, 아이콘, 글자를 각각 수정하지 않고
+ * 1920×1080에서 완성된 1440×894 코스 빌더 전체를 같은 비율로 확대한다.
+ * 기본 해상도에서는 기존 스타일이 그대로 유지된다.
+ */
+@media (min-width: 2300px) and (min-height: 1400px) {
+    .course-builder-page {
+        width: 1440px;
+        max-width: 1440px;
+        height: 894px;
+        min-height: 894px;
+        max-height: 894px;
+        zoom: 1.25;
+    }
+}
+
+@media (min-width: 2800px) and (min-height: 1600px) {
+    .course-builder-page {
+        zoom: 1.5;
+    }
+}
+
+/* zoom을 지원하지 않는 브라우저용 동일 비율 보조 처리 */
+@supports not (zoom: 1) {
+    @media (min-width: 2300px) and (min-height: 1400px) {
+        .course-builder-page {
+            transform: scale(1.25);
+            transform-origin: top center;
+        }
+    }
+
+    @media (min-width: 2800px) and (min-height: 1600px) {
+        .course-builder-page {
+            transform: scale(1.5);
+        }
+    }
+}

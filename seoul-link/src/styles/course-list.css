@@ -246,6 +246,7 @@
 }
 
 .recommended-history-item__image-wrap {
+  position: relative;
   height: 154px;
   min-height: 154px;
   background: #dbe7f1;
@@ -262,6 +263,22 @@
 
 .recommended-history-item:hover .recommended-history-item__image {
   transform: scale(1.02);
+}
+
+.recommended-history-item__example-image-label {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 2;
+  padding: 4px 8px;
+  border-radius: 7px;
+  background: rgba(24, 51, 74, 0.82);
+  color: #ffffff;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1.2;
+  pointer-events: none;
 }
 
 .recommended-history-item__body {

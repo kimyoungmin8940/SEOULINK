@@ -25,7 +25,10 @@ import {
 } from '../../utils/courseHistory';
 import { syncStoredRecommendationHistory } from '../../utils/recommendationHistorySync';
 import { requireLogin } from '../../utils/authGuard';
-import { getCourseCoverImageUrls } from '../../utils/courseImage';
+import {
+    getCourseCoverImageUrls,
+    getCourseFallbackImage,
+} from '../../utils/courseImage';
 import {
     isTemporaryLogin,
     recommendedCourseHistoryPreview,
@@ -203,6 +206,8 @@ function getCourseId(course) {
 
 function RecommendedHistoryListItem({ course }) {
     const coverImageUrls = getCourseCoverImageUrls(course);
+    const fallbackImageUrl = course?.coverFallbackImageUrl
+        || getCourseFallbackImage(course);
 
     const moveToRecommendedCourseDetail = () => {
         if (!requireLogin()) return;
@@ -218,7 +223,9 @@ function RecommendedHistoryListItem({ course }) {
             returnPath: `${window.location.pathname}${window.location.search}`,
             summary: {
                 ...course,
-                coverImageUrl: course.coverImageUrl || course.imageUrl || null,
+                coverImageUrl: coverImageUrls[0] || null,
+                coverImageUrls,
+                coverFallbackImageUrl: fallbackImageUrl,
             },
         }));
 
@@ -244,8 +251,11 @@ function RecommendedHistoryListItem({ course }) {
             <div className="recommended-history-item__image-wrap">
                 <CourseImage
                     imageUrls={coverImageUrls}
+                    fallbackImageUrl={fallbackImageUrl}
                     className="recommended-history-item__image"
                     alt={`${course.title} 대표 이미지`}
+                    fallbackLabel="예시 사진"
+                    fallbackLabelClassName="recommended-history-item__example-image-label"
                 />
             </div>
 

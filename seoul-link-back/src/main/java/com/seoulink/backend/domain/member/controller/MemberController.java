@@ -13,6 +13,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+
 
 @RestController
 @RequestMapping("/api/members")
@@ -52,4 +56,13 @@ public class MemberController {
     public void resetPassword(@Valid @RequestBody PasswordResetRequest request) {
         memberService.resetPassword(request);
     }
+    @DeleteMapping("/{memberId}")
+    public ResponseEntity<Void> withdrawMember(
+            @PathVariable Long memberId
+    ) {
+        memberService.withdrawMember(memberId);
+
+        return ResponseEntity.noContent().build();
+    }
+
 }

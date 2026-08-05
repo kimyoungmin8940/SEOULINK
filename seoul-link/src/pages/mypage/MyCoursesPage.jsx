@@ -38,6 +38,7 @@ import {
 
 import "../../styles/mypage.css";
 import "../../styles/savedCourses.css";
+import { getCourseFallbackImage } from "../../utils/courseImage";
 
 const PAGE_SIZE = 4;
 const COURSE_DETAIL_ENTRY_KEY = "seoulinkCourseDetailEntry";
@@ -157,30 +158,46 @@ function getCourseImageCandidates(course) {
     ))];
 }
 
-/** 예시 이미지 없이 코스 안의 실제 장소 사진을 순서대로 사용합니다. */
+
+
 function SavedCourseCoverImage({ course }) {
     const imageCandidates = useMemo(
         () => getCourseImageCandidates(course),
         [course]
     );
+
+    const fallbackImageUrl = useMemo(
+        () => getCourseFallbackImage(course),
+        [course]
+    );
+
     const [imageIndex, setImageIndex] = useState(0);
-    const imageUrl = imageCandidates[imageIndex] || null;
+
+    const currentImageUrl =
+        imageCandidates[imageIndex] || fallbackImageUrl;
+
+    const isUsingFallback =
+        !imageCandidates[imageIndex];
 
     useEffect(() => {
         setImageIndex(0);
-    }, [course?.courseId]);
-
-    if (!imageUrl) {
-        return null;
-    }
+    }, [
+        course?.courseId,
+        course?.recommendationKey,
+        course?.sourceCourseKey,
+    ]);
 
     return (
         <img
-            src={imageUrl}
-            alt={`${course.title} 대표 이미지`}
-            onError={() =>
-                setImageIndex((currentIndex) => currentIndex + 1)
-            }
+            src={currentImageUrl}
+            alt={`${course.title || "코스"} 대표 이미지`}
+            onError={() => {
+                if (!isUsingFallback) {
+                    setImageIndex(
+                        (currentIndex) => currentIndex + 1
+                    );
+                }
+            }}
         />
     );
 }
