@@ -1,0 +1,63 @@
+기준본: seoulink-database-fixed(4).zip
+추가 반영: seoulink-database-fixed2.zip
+
+두 번째 파일에서 반영:
+- schema/05_course.sql
+  - TRAVEL_COURSES.SOURCE_COURSE_KEY 추가
+  - COURSE_TYPE에 THEME 추가
+  - 잘못된 테마 UNIQUE 제약/함수 기반 인덱스 제거
+- schema/09_comments.sql
+  - COURSE_TYPE 및 SOURCE_COURSE_KEY 설명 추가
+
+통합 과정에서 추가:
+- migrations/010_add_theme_course_source_key.sql
+- verify/09_verify_theme_course.sql
+- upgrade_existing.sql에 migration 010 연결
+- verify_all.sql에 verify 09 연결
+- README.md 갱신
+
+보존:
+- 첫 번째 DB의 나머지 스키마, 마이그레이션, 시드, 검증 파일 전체
+- TRAVEL_COURSES.IS_SAVED
+- 현재 COURSE_DETAILS 구조
+- 현재 SURVEY_RESULT 구조
+
+
+최신 장소 데이터 통합:
+- 기준본: seoulink-database-fixed(6).zip
+- 추가 파일: TOUR_관광지 (1).sql, RESTAURANT_식당 (1).sql, CAFE_카페 (1).sql, HOTEL_호텔 (1).sql
+- seed/places/01_tour.sql: 신규 52개 추가, 최종 200개
+- seed/places/02_restaurant.sql: 신규 49개 추가, 최종 147개
+- seed/places/03_cafe.sql: 신규 50개 추가, 최종 132개
+- seed/places/04_hotel.sql: 신규 50개 추가, 최종 99개
+- 기존 키의 행은 첫 번째 기준본 값 그대로 보존
+
+
+2026-08-03 장소 데이터 추가 통합:
+- 기준본: seoulink-database-fixed(8).zip
+- 추가 파일: TOUR_관광지 (2).sql, RESTAURANT_식당 (2).sql, CAFE_카페 (2).sql, HOTEL_호텔 (2).sql
+- seed/places/01_tour.sql: 신규 29개 추가, 최종 229개
+- seed/places/02_restaurant.sql: 신규 23개 추가, 최종 170개
+- seed/places/03_cafe.sql: 신규 18개 추가, 최종 150개
+- seed/places/04_hotel.sql: 신규 40개 추가, 최종 139개
+- apply_place_data.sql 추가
+- 기존 키의 행은 기준본 값 그대로 보존
+
+2026-08-04 대표 이미지 보완 통합:
+- 기준본: seoulink-database-fixed(10).zip
+- 반영 파일: TOUR_관광지 (3).sql, RESTAURANT_식당 (3).sql, CAFE_카페 (3).sql, HOTEL_호텔 (3).sql
+- 신규 장소 없음, 최종 장소 수 688개 유지
+- 이미지 관련 6개 컬럼만 총 73개 장소에 반영
+- TOUR 20 / RESTAURANT 23 / CAFE 28 / HOTEL 2
+- 이미지 외 모든 장소 데이터와 기준본 파일 구조 보존
+
+2026-08-04 추가 장소·이미지 재통합:
+- 기준본: seoulink-database-fixed(13).zip
+- 반영 파일: 01_tour.sql, 02_restaurant.sql, 03_cafe.sql, 04_hotel.sql
+- seed/places/01_tour.sql: 신규 1개 + 기존 이미지 정보 21개 갱신, 최종 230개
+- seed/places/02_restaurant.sql: 신규 10개 + 기존 이미지 정보 23개 갱신, 최종 180개
+- seed/places/03_cafe.sql: 신규 0개 + 기존 이미지 정보 30개 갱신, 최종 150개
+- seed/places/04_hotel.sql: 신규 1개 + 기존 이미지 정보 2개 갱신, 최종 140개
+- 기존 장소의 이미지 외 데이터 및 DB 구조는 기준본 그대로 보존
+- 최종 장소 수 700개
+

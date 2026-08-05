@@ -1,0 +1,17 @@
+DBeaver 실행 오류 수정 내역
+
+1. reset/01_drop_tables.sql
+   - 익명 PL/SQL 블록 뒤의 단독 '/' 제거
+   - DBeaver가 '/'를 별도 SQL로 실행해 발생하던 ORA-00900 방지
+
+2. seed/05_demo_reviews.sql
+   - 로컬 FUNCTION/PROCEDURE 선언 사이에 잘못 들어간 '/' 전부 제거
+   - PLS-00103 오류 방지
+
+3. 그 외 PL/SQL 스크립트
+   - DBeaver Alt+X 실행 호환을 위해 단독 '/' 구분자 제거
+
+처음부터 재설치:
+  reset/01_drop_tables.sql  -> Alt+X
+  install_all.sql           -> Alt+X
+  verify_all.sql            -> Alt+X

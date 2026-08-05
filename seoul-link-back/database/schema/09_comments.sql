@@ -1,0 +1,258 @@
+COMMENT ON TABLE MEMBER IS '서비스 회원의 로그인, 프로필, 계정 상태 정보를 저장하는 테이블';
+COMMENT ON COLUMN MEMBER.MEMBER_ID IS '회원 고유 번호, 자동 증가 기본키';
+COMMENT ON COLUMN MEMBER.EMAIL IS '회원 이메일, 로그인 ID로 사용 가능하며 중복 불가';
+COMMENT ON COLUMN MEMBER.PASSWORD IS '회원 비밀번호, 실제 서비스에서는 암호화된 해시값 저장';
+COMMENT ON COLUMN MEMBER.NAME IS '회원 실명 또는 이름';
+COMMENT ON COLUMN MEMBER.NICKNAME IS '서비스에서 표시되는 회원 닉네임, 중복 불가';
+COMMENT ON COLUMN MEMBER.PHONE IS '회원 연락처';
+COMMENT ON COLUMN MEMBER.SOCIAL_PROVIDER IS '소셜 로그인 제공자, GOOGLE/NAVER/KAKAO 중 하나';
+COMMENT ON COLUMN MEMBER.SOCIAL_ID IS '소셜 로그인 제공자가 발급한 사용자 고유 ID';
+COMMENT ON COLUMN MEMBER.LOGIN_TYPE IS '로그인 유형, 일반 로그인은 LOCAL, 소셜 로그인은 SOCIAL';
+COMMENT ON COLUMN MEMBER.STATUS IS '회원 상태, ACTIVE/WITHDRAWN 중 하나';
+COMMENT ON COLUMN MEMBER.CREATED_AT IS '회원 가입 일시';
+COMMENT ON COLUMN MEMBER.UPDATED_AT IS '회원 정보 마지막 수정 일시';
+
+/* =========================
+   TRAVEL_TYPE_MASTER: 여행 유형 마스터
+   ========================= */
+COMMENT ON TABLE TRAVEL_TYPE_MASTER IS '취향 검사 결과로 분류되는 여행 유형 코드와 설명을 관리하는 기준 테이블';
+COMMENT ON COLUMN TRAVEL_TYPE_MASTER.TRAVEL_CODE IS '5글자 여행 유형 코드, 예: ATLSR';
+COMMENT ON COLUMN TRAVEL_TYPE_MASTER.TYPE_TITLE IS '여행 유형 이름 또는 제목';
+COMMENT ON COLUMN TRAVEL_TYPE_MASTER.TYPE_DESCRIPTION IS '여행 유형에 대한 상세 설명';
+COMMENT ON COLUMN TRAVEL_TYPE_MASTER.IMAGE_URL IS '여행 유형을 대표하는 이미지 URL';
+
+/* =========================
+   SURVEY_QUESTION: 취향 검사 질문
+   ========================= */
+COMMENT ON TABLE SURVEY_QUESTION IS '여행 취향 검사를 구성하는 질문 정보를 저장하는 테이블';
+COMMENT ON COLUMN SURVEY_QUESTION.QUESTION_ID IS '취향 검사 질문 고유 번호, 자동 증가 기본키';
+COMMENT ON COLUMN SURVEY_QUESTION.QUESTION_TEXT IS '사용자에게 보여줄 질문 문구';
+COMMENT ON COLUMN SURVEY_QUESTION.CATEGORY IS '질문 분류, 예: 여행성향/음식취향/문화취향 등';
+
+/* =========================
+   SURVEY_OPTION: 취향 검사 선택지
+   ========================= */
+COMMENT ON TABLE SURVEY_OPTION IS '각 취향 검사 질문에 연결되는 선택지와 점수 정보를 저장하는 테이블';
+COMMENT ON COLUMN SURVEY_OPTION.OPTION_ID IS '선택지 고유 번호, 자동 증가 기본키';
+COMMENT ON COLUMN SURVEY_OPTION.QUESTION_ID IS '선택지가 속한 질문 번호, SURVEY_QUESTION 참조';
+COMMENT ON COLUMN SURVEY_OPTION.OPTION_TEXT IS '사용자에게 보여줄 선택지 문구';
+COMMENT ON COLUMN SURVEY_OPTION.SCORE_CODE IS '선택지가 반영되는 여행 성향 코드 또는 점수 분류';
+COMMENT ON COLUMN SURVEY_OPTION.SCORE_VALUE IS '선택지 선택 시 반영되는 점수 값';
+
+/* =========================
+   PLACES: 장소 정보
+   ========================= */
+COMMENT ON TABLE PLACES IS '관광지, 식당, 카페, 숙소 등 추천 가능한 장소 정보를 저장하는 테이블';
+COMMENT ON COLUMN PLACES.PLACE_ID IS '장소 고유 번호, 자동 증가 기본키';
+COMMENT ON COLUMN PLACES.API_PROVIDER IS '장소 정보를 가져온 API 제공처, 예: TOURAPI/KAKAO/NAVER';
+COMMENT ON COLUMN PLACES.API_PLACE_ID IS '외부 API에서 제공하는 장소 고유 ID';
+COMMENT ON COLUMN PLACES.CONTENT_ID IS 'TourAPI 등에서 제공하는 콘텐츠 ID';
+COMMENT ON COLUMN PLACES.NAME IS '장소명';
+COMMENT ON COLUMN PLACES.CATEGORY IS '장소 분류, TOUR/RESTAURANT/CAFE/HOTEL 중 하나';
+COMMENT ON COLUMN PLACES.API_CATEGORY IS '외부 API에서 제공하는 원본 카테고리명';
+COMMENT ON COLUMN PLACES.REGION IS '장소가 속한 지역명, 예: 서울 종로구';
+COMMENT ON COLUMN PLACES.ADDRESS IS '지번 주소 또는 기본 주소';
+COMMENT ON COLUMN PLACES.ROAD_ADDRESS IS '도로명 주소';
+COMMENT ON COLUMN PLACES.LATITUDE IS '장소 위도 값';
+COMMENT ON COLUMN PLACES.LONGITUDE IS '장소 경도 값';
+COMMENT ON COLUMN PLACES.PHONE IS '장소 전화번호';
+COMMENT ON COLUMN PLACES.PLACE_URL IS '장소 상세 페이지 또는 외부 링크';
+COMMENT ON COLUMN PLACES.RATING IS '장소 평점, 0점 이상 5점 이하';
+COMMENT ON COLUMN PLACES.REVIEW_COUNT IS '장소에 등록된 후기 수';
+COMMENT ON COLUMN PLACES.DESCRIPTION IS '장소 상세 설명';
+COMMENT ON COLUMN PLACES.IMAGE_URL IS '장소 대표 이미지 URL';
+COMMENT ON COLUMN PLACES.TAG_HISTORY IS '역사/전통 분위기 태그 여부, Y/N';
+COMMENT ON COLUMN PLACES.TAG_MODERN IS '현대적/트렌디한 분위기 태그 여부, Y/N';
+COMMENT ON COLUMN PLACES.TAG_BUDGET IS '가성비 성향 태그 여부, Y/N';
+COMMENT ON COLUMN PLACES.TAG_LUXURY IS '고급/럭셔리 성향 태그 여부, Y/N';
+COMMENT ON COLUMN PLACES.TAG_STABLE IS '차분하고 안정적인 코스 성향 태그 여부, Y/N';
+COMMENT ON COLUMN PLACES.TAG_DOPAMINE IS '자극적이고 활동적인 코스 성향 태그 여부, Y/N';
+COMMENT ON COLUMN PLACES.TAG_RELAX IS '휴식/힐링 성향 태그 여부, Y/N';
+COMMENT ON COLUMN PLACES.TAG_PACKED IS '빽빽한 일정 또는 알찬 코스 성향 태그 여부, Y/N';
+COMMENT ON COLUMN PLACES.IS_ACTIVE IS '장소 사용 여부, Y이면 추천 가능';
+COMMENT ON COLUMN PLACES.CREATED_AT IS '장소 데이터 등록 일시';
+COMMENT ON COLUMN PLACES.UPDATED_AT IS '장소 데이터 마지막 수정 일시';
+
+/* =========================
+   PAYMENT: 결제 정보
+   ========================= */
+COMMENT ON TABLE PAYMENT IS '유료 챗봇 기간권 결제 내역과 이용 가능 기간을 관리하는 테이블';
+COMMENT ON COLUMN PAYMENT.PAYMENT_ID IS '결제 고유 번호, 자동 증가 기본키';
+COMMENT ON COLUMN PAYMENT.MEMBER_ID IS '결제한 회원 번호, MEMBER 참조';
+COMMENT ON COLUMN PAYMENT.PRODUCT_NAME IS '결제 상품명, 예: 하루 패스/위클리 패스/트래블 패스';
+COMMENT ON COLUMN PAYMENT.AMOUNT IS '원 단위 정수 결제 금액';
+COMMENT ON COLUMN PAYMENT.PAYMENT_METHOD IS '결제 수단, 예: 카드/카카오페이/토스페이';
+COMMENT ON COLUMN PAYMENT.PAYMENT_PROVIDER IS '결제 API 제공사, 예: TOSS/KAKAO/DANAL';
+COMMENT ON COLUMN PAYMENT.ORDER_ID IS '서비스 내부 주문 번호, 중복 불가';
+COMMENT ON COLUMN PAYMENT.PAYMENT_KEY IS 'PG사 승인 키, 값이 있는 경우 중복 불가';
+COMMENT ON COLUMN PAYMENT.PAYMENT_STATUS IS '결제 상태, READY/PAID/CANCELED/FAILED 중 하나';
+COMMENT ON COLUMN PAYMENT.EXPIRED_AT IS '이용권 만료 일시';
+COMMENT ON COLUMN PAYMENT.PAID_AT IS '결제 승인 일시';
+COMMENT ON COLUMN PAYMENT.CANCELED_AT IS '결제 취소 일시';
+COMMENT ON COLUMN PAYMENT.FAIL_REASON IS '결제 실패 또는 취소 사유';
+COMMENT ON COLUMN PAYMENT.CREATED_AT IS '결제 요청 생성 일시';
+
+/* =========================
+   TRAVEL_SURVEY: 여행 취향 검사 실행 기록
+   ========================= */
+COMMENT ON TABLE TRAVEL_SURVEY IS '사용자가 여행 취향 검사를 진행한 기록과 기본 여행 조건을 저장하는 테이블';
+COMMENT ON COLUMN TRAVEL_SURVEY.SURVEY_ID IS '취향 검사 실행 고유 번호, 자동 증가 기본키';
+COMMENT ON COLUMN TRAVEL_SURVEY.MEMBER_ID IS '검사를 진행한 회원 번호, 비회원 검사를 허용하면 NULL 가능';
+COMMENT ON COLUMN TRAVEL_SURVEY.GUEST_TOKEN IS '비회원 검사 결과를 회원가입 후 연결하기 위한 임시 토큰';
+COMMENT ON COLUMN TRAVEL_SURVEY.REGION IS '사용자가 선택한 여행 지역';
+COMMENT ON COLUMN TRAVEL_SURVEY.START_DATE IS '여행 시작일';
+COMMENT ON COLUMN TRAVEL_SURVEY.END_DATE IS '여행 종료일';
+COMMENT ON COLUMN TRAVEL_SURVEY.COMPANION_TYPE IS '여행 동행 유형';
+COMMENT ON COLUMN TRAVEL_SURVEY.TRANSPORT_TYPE IS '여행 전체 이동수단, PUBLIC/WALKING/CAR 중 하나';
+COMMENT ON COLUMN TRAVEL_SURVEY.CREATED_AT IS '취향 검사 생성 일시';
+COMMENT ON COLUMN TRAVEL_SURVEY.EXPIRES_AT IS '비회원 검사 결과를 회원 계정에 연결할 수 있는 만료 일시';
+COMMENT ON COLUMN TRAVEL_SURVEY.CLAIMED_AT IS '비회원 검사 결과가 회원 계정에 연결된 일시';
+
+/* =========================
+   SURVEY_ANSWER: 취향 검사 답변
+   ========================= */
+COMMENT ON TABLE SURVEY_ANSWER IS '사용자가 취향 검사에서 선택한 질문별 답변을 저장하는 테이블';
+COMMENT ON COLUMN SURVEY_ANSWER.ANSWER_ID IS '답변 고유 번호, 자동 증가 기본키';
+COMMENT ON COLUMN SURVEY_ANSWER.SURVEY_ID IS '답변이 속한 취향 검사 실행 번호';
+COMMENT ON COLUMN SURVEY_ANSWER.QUESTION_ID IS '사용자가 답변한 질문 번호';
+COMMENT ON COLUMN SURVEY_ANSWER.OPTION_ID IS '사용자가 선택한 선택지 번호';
+
+/* =========================
+   TRAVEL_TYPE_PLACE: 여행 유형별 장소 매핑
+   ========================= */
+COMMENT ON TABLE TRAVEL_TYPE_PLACE IS '여행 유형과 장소를 연결하고 추천 가중치를 관리하는 매핑 테이블';
+COMMENT ON COLUMN TRAVEL_TYPE_PLACE.TYPE_PLACE_ID IS '여행 유형-장소 매핑 고유 번호, 자동 증가 기본키';
+COMMENT ON COLUMN TRAVEL_TYPE_PLACE.TRAVEL_CODE IS '여행 유형 코드, TRAVEL_TYPE_MASTER 참조';
+COMMENT ON COLUMN TRAVEL_TYPE_PLACE.PLACE_ID IS '추천 장소 번호, PLACES 참조';
+COMMENT ON COLUMN TRAVEL_TYPE_PLACE.WEIGHT_SCORE IS '해당 여행 유형에서 장소를 추천할 때 적용할 가중치 점수';
+
+/* =========================
+   SURVEY_RESULT: 취향 검사 결과
+   ========================= */
+COMMENT ON TABLE SURVEY_RESULT IS '취향 검사 결과로 산출된 여행 유형을 저장하는 테이블';
+COMMENT ON COLUMN SURVEY_RESULT.RESULT_ID IS '취향 검사 결과 고유 번호, 자동 증가 기본키';
+COMMENT ON COLUMN SURVEY_RESULT.SURVEY_ID IS '결과가 연결된 취향 검사 실행 번호';
+COMMENT ON COLUMN SURVEY_RESULT.TRAVEL_CODE IS '검사 결과로 결정된 여행 유형 코드';
+COMMENT ON COLUMN SURVEY_RESULT.CREATED_AT IS '검사 결과 생성 일시';
+
+/* =========================
+   TRAVEL_COURSES: 여행 코스
+   ========================= */
+COMMENT ON TABLE TRAVEL_COURSES IS '취향 검사 또는 챗봇을 통해 생성된 여행 코스의 기본 정보를 저장하는 테이블';
+COMMENT ON COLUMN TRAVEL_COURSES.COURSE_ID IS '여행 코스 고유 번호, 자동 증가 기본키';
+COMMENT ON COLUMN TRAVEL_COURSES.MEMBER_ID IS '코스를 생성하거나 소유한 회원 번호';
+COMMENT ON COLUMN TRAVEL_COURSES.RESULT_ID IS '취향 검사 결과 기반 코스인 경우 연결되는 결과 번호';
+COMMENT ON COLUMN TRAVEL_COURSES.PAYMENT_ID IS '유료 챗봇으로 생성된 코스인 경우 연결되는 결제 번호';
+COMMENT ON COLUMN TRAVEL_COURSES.TITLE IS '여행 코스 제목';
+COMMENT ON COLUMN TRAVEL_COURSES.DESCRIPTION IS '여행 코스 설명';
+COMMENT ON COLUMN TRAVEL_COURSES.TRAVEL_CODE IS '코스에 연결된 여행 유형 코드';
+COMMENT ON COLUMN TRAVEL_COURSES.COURSE_TYPE IS '코스 생성 방식, CUSTOM/SURVEY/CHATBOT/THEME 중 하나';
+COMMENT ON COLUMN TRAVEL_COURSES.SOURCE_COURSE_KEY IS '회원이 저장한 기본 테마 코스를 식별하는 원본 코스 키, 일반 코스는 NULL';
+COMMENT ON COLUMN TRAVEL_COURSES.REGION IS '코스의 주요 여행 지역';
+COMMENT ON COLUMN TRAVEL_COURSES.IS_PUBLIC IS '코스 공개 여부, Y/N';
+COMMENT ON COLUMN TRAVEL_COURSES.VIEW_COUNT IS '코스 조회 수';
+COMMENT ON COLUMN TRAVEL_COURSES.IS_SAVED IS '추천 이력 중 사용자가 내 코스에 저장했는지 여부, Y/N';
+COMMENT ON COLUMN TRAVEL_COURSES.TOTAL_DISTANCE_KM IS '코스 전체 이동거리 합계, km 단위';
+COMMENT ON COLUMN TRAVEL_COURSES.TOTAL_TRAVEL_MINUTES IS '코스 전체 이동시간 합계, 분 단위';
+COMMENT ON COLUMN TRAVEL_COURSES.TOTAL_VISIT_MINUTES IS '코스 전체 예상 방문시간 합계, 분 단위';
+COMMENT ON COLUMN TRAVEL_COURSES.TOTAL_COURSE_MINUTES IS '이동시간과 예상 방문시간을 합한 전체 코스시간, 분 단위';
+COMMENT ON COLUMN TRAVEL_COURSES.CREATED_AT IS '코스 생성 일시';
+COMMENT ON COLUMN TRAVEL_COURSES.UPDATED_AT IS '코스 마지막 수정 일시';
+
+/* =========================
+   COURSE_DETAILS: 여행 코스 상세 장소
+   ========================= */
+COMMENT ON TABLE COURSE_DETAILS IS '여행 코스에 포함되는 장소의 방문 순서, 일정, 메모를 저장하는 테이블';
+COMMENT ON COLUMN COURSE_DETAILS.COURSE_DETAIL_ID IS '코스 상세 고유 번호, 자동 증가 기본키';
+COMMENT ON COLUMN COURSE_DETAILS.COURSE_ID IS '상세 장소가 속한 여행 코스 번호';
+COMMENT ON COLUMN COURSE_DETAILS.PLACE_ID IS '코스에 포함된 장소 번호';
+COMMENT ON COLUMN COURSE_DETAILS.DAY_NO IS '여행 며칠 차인지 나타내는 번호';
+COMMENT ON COLUMN COURSE_DETAILS.PLACE_ORDER IS '같은 날짜 안에서의 장소 방문 순서';
+COMMENT ON COLUMN COURSE_DETAILS.MEMO IS '장소별 코스 메모';
+COMMENT ON COLUMN COURSE_DETAILS.VISIT_TIME IS '권장 방문 시간 또는 일정 시간대';
+COMMENT ON COLUMN COURSE_DETAILS.STAY_MINUTES IS '권장 체류 시간, 분 단위';
+COMMENT ON COLUMN COURSE_DETAILS.VISIT_DATE IS '해당 장소를 방문할 날짜';
+COMMENT ON COLUMN COURSE_DETAILS.DISTANCE_FROM_PREV_KM IS '직전 장소로부터의 이동거리, km 단위';
+COMMENT ON COLUMN COURSE_DETAILS.TRAVEL_MINUTES_FROM_PREV IS '직전 장소로부터의 이동시간, 분 단위';
+COMMENT ON COLUMN COURSE_DETAILS.TRANSIT_PATH_TYPE IS '장소 간 실제 이동 경로 유형, WALKING/SUBWAY/BUS/BUS_SUBWAY';
+COMMENT ON COLUMN COURSE_DETAILS.ROUTE_ESTIMATED IS '경로 조회 실패 등으로 추정 이동 정보를 사용했으면 1, 실제 경로면 0';
+COMMENT ON COLUMN COURSE_DETAILS.CREATED_AT IS '코스 상세 등록 일시';
+
+/* =========================
+   CHATBOT_HISTORY: 유료 챗봇 이용 기록
+   ========================= */
+COMMENT ON TABLE CHATBOT_HISTORY IS '유료 챗봇 질문, 답변, 추천 코스 생성 기록을 저장하는 테이블';
+COMMENT ON COLUMN CHATBOT_HISTORY.CHAT_ID IS '챗봇 이용 기록 고유 번호, 자동 증가 기본키';
+COMMENT ON COLUMN CHATBOT_HISTORY.MEMBER_ID IS '챗봇을 이용한 회원 번호';
+COMMENT ON COLUMN CHATBOT_HISTORY.PAYMENT_ID IS '챗봇 이용권 결제 번호';
+COMMENT ON COLUMN CHATBOT_HISTORY.CONVERSATION_ID IS '하나의 연속된 챗봇 대화방을 식별하는 UUID';
+COMMENT ON COLUMN CHATBOT_HISTORY.QUESTION IS '사용자가 챗봇에 입력한 질문 내용';
+COMMENT ON COLUMN CHATBOT_HISTORY.TRAVEL_CONCEPT IS '사용자가 요청한 여행 컨셉, 예: 야경/드라이브/도서관 투어';
+COMMENT ON COLUMN CHATBOT_HISTORY.ANSWER IS '챗봇이 생성한 답변 내용';
+COMMENT ON COLUMN CHATBOT_HISTORY.COURSE_SUMMARY IS '챗봇이 추천한 코스 요약';
+COMMENT ON COLUMN CHATBOT_HISTORY.CREATED_AT IS '챗봇 이용 기록 생성 일시';
+
+/* =========================
+   REVIEW: 방문 후기
+   ========================= */
+COMMENT ON TABLE REVIEW IS '회원이 장소에 대해 작성한 방문 후기 게시글을 저장하는 테이블';
+COMMENT ON COLUMN REVIEW.REVIEW_ID IS '후기 고유 번호, 자동 증가 기본키';
+COMMENT ON COLUMN REVIEW.MEMBER_ID IS '후기를 작성한 회원 번호';
+COMMENT ON COLUMN REVIEW.PLACE_ID IS '후기 대상 장소 번호';
+COMMENT ON COLUMN REVIEW.REVIEW_TITLE IS '후기 제목';
+COMMENT ON COLUMN REVIEW.REVIEW_CONTENT IS '후기 본문 내용';
+COMMENT ON COLUMN REVIEW.RATING IS '회원이 부여한 평점, 0.0~5.0';
+COMMENT ON COLUMN REVIEW.IMAGE_URL IS '후기에 첨부된 대표 이미지 URL';
+COMMENT ON COLUMN REVIEW.VIEW_COUNT IS '후기 조회 수';
+COMMENT ON COLUMN REVIEW.CREATED_AT IS '후기 작성 일시';
+COMMENT ON COLUMN REVIEW.UPDATED_AT IS '후기 마지막 수정 일시';
+COMMENT ON COLUMN REVIEW.IS_DELETED IS '후기 논리 삭제 여부, Y/N';
+
+/* =========================
+   REVIEW_LIKE: 후기 좋아요
+   ========================= */
+COMMENT ON TABLE REVIEW_LIKE IS '회원이 방문 후기에 누른 좋아요 정보를 저장하는 테이블';
+COMMENT ON COLUMN REVIEW_LIKE.LIKE_ID IS '좋아요 고유 번호, 자동 증가 기본키';
+COMMENT ON COLUMN REVIEW_LIKE.REVIEW_ID IS '좋아요를 누른 후기 번호';
+COMMENT ON COLUMN REVIEW_LIKE.MEMBER_ID IS '좋아요를 누른 회원 번호';
+COMMENT ON COLUMN REVIEW_LIKE.CREATED_AT IS '좋아요를 누른 일시';
+
+/* =========================
+   REVIEW_COMMENT: 후기 댓글
+   ========================= */
+COMMENT ON TABLE REVIEW_COMMENT IS '방문 후기 게시글에 달린 댓글 정보를 저장하는 테이블';
+COMMENT ON COLUMN REVIEW_COMMENT.COMMENT_ID IS '댓글 고유 번호, 자동 증가 기본키';
+COMMENT ON COLUMN REVIEW_COMMENT.REVIEW_ID IS '댓글이 달린 후기 번호';
+COMMENT ON COLUMN REVIEW_COMMENT.MEMBER_ID IS '댓글을 작성한 회원 번호';
+COMMENT ON COLUMN REVIEW_COMMENT.CONTENT IS '댓글 내용';
+COMMENT ON COLUMN REVIEW_COMMENT.CREATED_AT IS '댓글 작성 일시';
+COMMENT ON COLUMN REVIEW_COMMENT.UPDATED_AT IS '댓글 마지막 수정 일시';
+COMMENT ON COLUMN REVIEW_COMMENT.IS_DELETED IS '댓글 논리 삭제 여부, Y/N';
+
+COMMIT;
+
+/* =========================
+   REVIEW additional metadata comments
+   Existing comments above are intentionally left unchanged.
+   ========================= */
+COMMENT ON COLUMN REVIEW.COURSE_ID IS '후기가 연결된 여행 코스 번호, TRAVEL_COURSES 참조이며 선택값';
+COMMENT ON COLUMN REVIEW.VISIT_DATE IS '작성자가 실제로 장소를 방문한 날짜';
+COMMENT ON COLUMN REVIEW.COMPANION IS '후기 동행 유형, 혼자/연인/친구/가족 중 하나';
+
+/* =========================
+   REVIEW_IMAGE: 후기 사진 스토리보드
+   ========================= */
+COMMENT ON TABLE REVIEW_IMAGE IS '후기별 사진 URL과 화면 표시 순서를 저장하는 테이블';
+COMMENT ON COLUMN REVIEW_IMAGE.REVIEW_IMAGE_ID IS '후기 사진 고유 번호, 자동 증가 기본키';
+COMMENT ON COLUMN REVIEW_IMAGE.REVIEW_ID IS '사진이 연결된 후기 번호, REVIEW 참조';
+COMMENT ON COLUMN REVIEW_IMAGE.IMAGE_URL IS '서버 uploads 또는 외부 저장소에 있는 후기 사진 주소';
+COMMENT ON COLUMN REVIEW_IMAGE.DISPLAY_ORDER IS '후기 상세 화면에 표시할 사진 순서, 1부터 시작';
+COMMENT ON COLUMN REVIEW_IMAGE.CREATED_AT IS '후기 사진 정보 등록 일시';
+
+/* =========================
+   REVIEW_TAG: 후기 검색 태그
+   ========================= */
+COMMENT ON TABLE REVIEW_TAG IS '후기 검색과 필터에 사용하는 태그를 저장하는 테이블';
+COMMENT ON COLUMN REVIEW_TAG.REVIEW_TAG_ID IS '후기 태그 고유 번호, 자동 증가 기본키';
+COMMENT ON COLUMN REVIEW_TAG.REVIEW_ID IS '태그가 연결된 후기 번호, REVIEW 참조';
+COMMENT ON COLUMN REVIEW_TAG.TAG_NAME IS '후기에 연결한 검색용 태그 이름';

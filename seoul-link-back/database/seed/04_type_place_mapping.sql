@@ -1,0 +1,2 @@
+-- The source seoulink (1).sql defines TRAVEL_TYPE_PLACE but has no INSERT or MERGE data for it.
+-- Add type-to-place mapping data here when recommendation weights are finalized.
