@@ -1445,9 +1445,9 @@ public class CourseOptimizationService {
             return true;
         }
 
-        // 대중교통의 30분 기준은 선호 조건일 뿐 강제 교체 사유가 아니다.
-        // 40분 이하 장소 조합은 유지하고 실제 경로 보정에서 이동시간이 짧은
-        // 대체 후보를 우선 평가한다.
+        // 추정 단계에서는 30분 초과 한 구간만으로 바로 교체하지 않는다.
+        // 실제 경로 보정에서 DAY 전체를 확인한 뒤 30분 초과는 최대 한 구간만
+        // 남기고, 두 번째 장거리 구간부터 대체·장소 감소 대상으로 처리한다.
         if (transportMode == TransportMode.PUBLIC_TRANSIT) {
             return false;
         }

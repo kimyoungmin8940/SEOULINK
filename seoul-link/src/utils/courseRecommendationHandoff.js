@@ -2,11 +2,162 @@ import { normalizeTransportMode, TRANSPORT_MODES } from './courseTransport';
 
 export const COURSE_RECOMMEND_REQUEST_KEY = 'seoulinkCourseRecommendRequest';
 export const COURSE_RECOMMEND_RESPONSE_KEY = 'seoulinkCourseRecommendResponse';
+export const COURSE_RESOLVED_ROUTE_SNAPSHOT_KEY =
+    'seoulinkResolvedCourseRouteSnapshots';
 
 const SUPPORTED_CATEGORIES = ['TOUR', 'RESTAURANT', 'CAFE', 'HOTEL'];
 const SUPPORTED_COMPANION_TYPES = ['SOLO', 'COUPLE', 'FRIENDS', 'FAMILY'];
 const MAX_EXCLUDED_RECOMMENDATIONS = 60;
 const MAX_PREVIOUSLY_RECOMMENDED_PLACES = 500;
+const MAX_RESOLVED_ROUTE_SNAPSHOTS = 18;
+
+/** 해당 DAY에서 화면에 표시할 모든 이동 구간이 실제 API값인지 확인합니다. */
+function isResolvedRouteDay(day) {
+    if (!day?.routeDetailsAttempted || !Array.isArray(day?.places)) {
+        return false;
+    }
+
+    return day.places.every((place, index) => (
+        !(
+            (index > 0 || Boolean(day?.routeOriginPlace))
+            && Boolean(place?.routeEstimated)
+        )
+    ));
+}
+
+/** 상세 화면 재사용에는 필요 없는 대체 후보 목록을 제외해 세션 용량을 줄입니다. */
+function toResolvedRouteDaySnapshot(day) {
+    const withoutAlternatives = (place) => {
+        if (!place || typeof place !== 'object') return place;
+        const snapshot = { ...place };
+        delete snapshot.alternativeCandidates;
+        return snapshot;
+    };
+
+    return {
+        ...day,
+        routeOriginPlace: withoutAlternatives(day.routeOriginPlace),
+        places: (day.places || []).map(withoutAlternatives),
+    };
+}
+
+/** 추천 결과에서 이미 받은 실제 경로를 courseId별 상세 진입용으로 보관합니다. */
+export function persistResolvedCourseRouteSnapshots(response) {
+    if (
+        typeof sessionStorage === 'undefined'
+        || !response
+        || !Array.isArray(response?.courseOptions)
+    ) {
+        return;
+    }
+
+    let stored = { courses: {} };
+    try {
+        const parsed = JSON.parse(
+            sessionStorage.getItem(COURSE_RESOLVED_ROUTE_SNAPSHOT_KEY),
+        );
+        if (parsed?.courses && typeof parsed.courses === 'object') {
+            stored = parsed;
+        }
+    } catch {
+        stored = { courses: {} };
+    }
+
+    response.courseOptions.forEach((option) => {
+        const courseId = Number(option?.courseId);
+        const resolvedDays = (option?.days || [])
+            .filter(isResolvedRouteDay)
+            .map(toResolvedRouteDaySnapshot);
+
+        if (!Number.isInteger(courseId) || courseId < 1 || resolvedDays.length === 0) {
+            return;
+        }
+
+        const previous = stored.courses[String(courseId)] || {};
+        const daysByNumber = new Map(
+            (previous?.option?.days || []).map(
+                (day) => [Number(day?.dayNo), day],
+            ),
+        );
+        resolvedDays.forEach((day) => {
+            daysByNumber.set(Number(day?.dayNo), day);
+        });
+
+        stored.courses[String(courseId)] = {
+            resultId: response.resultId ?? previous.resultId ?? null,
+            travelCode: response.travelCode ?? previous.travelCode ?? null,
+            transportMode:
+                response.transportMode ?? previous.transportMode ?? null,
+            savedAt: Date.now(),
+            option: {
+                ...(previous.option || {}),
+                ...option,
+                days: [...daysByNumber.values()].sort(
+                    (left, right) => Number(left?.dayNo) - Number(right?.dayNo),
+                ),
+            },
+        };
+    });
+
+    const retainedCourses = Object.fromEntries(
+        Object.entries(stored.courses)
+            .sort(([, left], [, right]) => (
+                Number(right?.savedAt) - Number(left?.savedAt)
+            ))
+            .slice(0, MAX_RESOLVED_ROUTE_SNAPSHOTS),
+    );
+
+    try {
+        sessionStorage.setItem(
+            COURSE_RESOLVED_ROUTE_SNAPSHOT_KEY,
+            JSON.stringify({ courses: retainedCourses }),
+        );
+    } catch {
+        // 세션 저장 공간이 부족해도 추천 결과 자체와 DB 동기화는 계속합니다.
+    }
+}
+
+/** 상세 courseId와 일치하는 최신 실제 경로 스냅샷을 반환합니다. */
+export function getResolvedCourseRouteSnapshot(courseId) {
+    const normalizedCourseId = Number(courseId);
+    if (
+        typeof sessionStorage === 'undefined'
+        || !Number.isInteger(normalizedCourseId)
+        || normalizedCourseId < 1
+    ) {
+        return null;
+    }
+
+    const readStoredSnapshot = () => {
+        const parsed = JSON.parse(
+            sessionStorage.getItem(COURSE_RESOLVED_ROUTE_SNAPSHOT_KEY),
+        );
+        return parsed?.courses?.[String(normalizedCourseId)] || null;
+    };
+
+    try {
+        const storedSnapshot = readStoredSnapshot();
+        if (storedSnapshot) return storedSnapshot;
+
+        // 수정 전부터 세션에 남아 있던 추천 응답도 상세 진입 순간 한 번
+        // 복구해, 새 추천을 다시 받지 않아도 이미 조회한 실제값을 사용합니다.
+        const storedResponse = JSON.parse(
+            sessionStorage.getItem(COURSE_RECOMMEND_RESPONSE_KEY),
+        );
+        const storedHistory = JSON.parse(
+            sessionStorage.getItem('seoulinkCourseRecommendHistory'),
+        );
+        [
+            storedResponse,
+            storedHistory?.previous?.response,
+            storedHistory?.next?.response,
+        ].filter(Boolean).forEach(persistResolvedCourseRouteSnapshots);
+
+        return readStoredSnapshot();
+    } catch {
+        return null;
+    }
+}
 
 function requestError(message) {
     throw new TypeError(`추천 코스 입력 오류: ${message}`);

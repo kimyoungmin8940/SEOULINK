@@ -52,6 +52,7 @@ import {
     normalizeTravelCode,
     rememberCourseTravelCode,
 } from '../../utils/courseTravelCode';
+import { getResolvedCourseRouteSnapshot } from '../../utils/courseRecommendationHandoff';
 import {
     getCourseCoverImageUrls,
     getCourseFallbackImage,
@@ -491,11 +492,92 @@ function adaptCurrentCourseResponse(response) {
     };
 }
 
+/**
+ * 추천 결과 화면에서 이미 실제 API 조회를 끝낸 DAY는 서버의 이전 예상
+ * 스냅샷보다 우선합니다. 대체로 장소 구성이 바뀐 경우에도 DAY 전체를 함께
+ * 교체해 거리·시간만 엉뚱한 장소에 붙지 않도록 합니다.
+ */
+function mergeResolvedRecommendationRoutes(response, courseId) {
+    const snapshot = getResolvedCourseRouteSnapshot(courseId);
+    const snapshotOption = snapshot?.option;
+    const snapshotDays = Array.isArray(snapshotOption?.days)
+        ? snapshotOption.days
+        : [];
+    const responseResultId = Number(response?.resultId);
+    const snapshotResultId = Number(snapshot?.resultId);
+
+    if (
+        snapshotDays.length === 0
+        || (
+            Number.isInteger(responseResultId)
+            && responseResultId > 0
+            && Number.isInteger(snapshotResultId)
+            && snapshotResultId > 0
+            && responseResultId !== snapshotResultId
+        )
+    ) {
+        return response;
+    }
+
+    const responseDays = Array.isArray(response?.days) ? response.days : [];
+    const snapshotDayByNumber = new Map(
+        snapshotDays.map((day) => [Number(day?.dayNo), day]),
+    );
+    const mergedDays = responseDays.map((day) => (
+        snapshotDayByNumber.get(Number(day?.dayNo)) || day
+    ));
+    const responseDayNumbers = new Set(
+        responseDays.map((day) => Number(day?.dayNo)),
+    );
+    snapshotDays.forEach((day) => {
+        if (!responseDayNumbers.has(Number(day?.dayNo))) {
+            mergedDays.push(day);
+        }
+    });
+    mergedDays.sort(
+        (left, right) => Number(left?.dayNo) - Number(right?.dayNo),
+    );
+
+    const hasCompleteSnapshot = responseDays.length > 0
+        && responseDays.every(
+            (day) => snapshotDayByNumber.has(Number(day?.dayNo)),
+        );
+
+    return {
+        ...response,
+        transportMode: response?.transportMode || snapshot?.transportMode,
+        travelCode: response?.travelCode || snapshot?.travelCode,
+        days: mergedDays,
+        placeCount: undefined,
+        dayCount: undefined,
+        // 모든 DAY가 실제값이면 추천 결과의 합계를 그대로 쓰고, 일부 DAY만
+        // 준비됐으면 아래 정규화 단계가 합계를 다시 계산하게 합니다.
+        totalDistanceKm: hasCompleteSnapshot
+            ? snapshotOption.totalDistanceKm
+            : undefined,
+        totalTravelTimeMinutes: hasCompleteSnapshot
+            ? snapshotOption.totalTravelTimeMinutes
+            : undefined,
+        totalVisitTimeMinutes: hasCompleteSnapshot
+            ? snapshotOption.totalVisitTimeMinutes
+            : undefined,
+        totalCourseTimeMinutes: hasCompleteSnapshot
+            ? snapshotOption.totalCourseTimeMinutes
+            : undefined,
+    };
+}
+
 /** 목록 카드에서만 유지되는 이미지·태그는 상세 API의 null 값을 덮지 않는 범위에서 보존합니다. */
 function normalizeApiCourseDetail(response, courseId) {
+    const routeResolvedResponse = mergeResolvedRecommendationRoutes(
+        response,
+        courseId,
+    );
     const summary = readCourseDetailEntry(courseId)?.summary || {};
     const rememberedTravelCode = getRememberedCourseTravelCode(courseId);
-    const responseTags = Array.isArray(response?.tags) ? response.tags.filter(Boolean) : [];
+    const responseTags = Array.isArray(routeResolvedResponse?.tags)
+        ? routeResolvedResponse.tags.filter(Boolean)
+        : [];
     const summaryTags = Array.isArray(summary?.tags) ? summary.tags.filter(Boolean) : [];
     const summaryRegions = Array.isArray(summary?.regions)
         ? summary.regions.filter(Boolean)
@@ -503,35 +585,37 @@ function normalizeApiCourseDetail(response, courseId) {
 
     return normalizeCourseDetail({
         ...summary,
-        ...response,
-        travelCode: response?.travelCode
-            || response?.preferenceCode
-            || response?.typeCode
-            || response?.surveyTypeCode
+        ...routeResolvedResponse,
+        travelCode: routeResolvedResponse?.travelCode
+            || routeResolvedResponse?.preferenceCode
+            || routeResolvedResponse?.typeCode
+            || routeResolvedResponse?.surveyTypeCode
             || summary?.travelCode
             || summary?.preferenceCode
             || summary?.typeCode
             || rememberedTravelCode
             || getCurrentTravelCode(recommendationPreview.travelCode),
-        coverImageUrl: response?.coverImageUrl
+        coverImageUrl: routeResolvedResponse?.coverImageUrl
             || summary?.coverImageUrl
             || summary?.imageUrl
             || null,
-        coverImageUrls: Array.isArray(response?.coverImageUrls)
-            && response.coverImageUrls.length > 0
-            ? response.coverImageUrls
+        coverImageUrls: Array.isArray(routeResolvedResponse?.coverImageUrls)
+            && routeResolvedResponse.coverImageUrls.length > 0
+            ? routeResolvedResponse.coverImageUrls
             : summary?.coverImageUrls,
-        region: response?.region
+        region: routeResolvedResponse?.region
             || summary?.region
             || summary?.area
             || summaryRegions.join(' · ')
             || null,
-        transportMode: response?.transportMode || summary?.transportMode || null,
-        estimatedTravelTimes: response?.estimatedTravelTimes
+        transportMode: routeResolvedResponse?.transportMode
+            || summary?.transportMode
+            || null,
+        estimatedTravelTimes: routeResolvedResponse?.estimatedTravelTimes
             ?? summary?.estimatedTravelTimes
             ?? false,
         tags: responseTags.length > 0 ? responseTags : summaryTags,
-        liked: response?.liked ?? summary?.liked ?? false,
+        liked: routeResolvedResponse?.liked ?? summary?.liked ?? false,
     });
 }
 
@@ -763,7 +847,7 @@ function hasPublicTransitDayLimitViolation(day) {
 
     return (day?.places || []).some((place, index) => {
         if (index === 0 && !day?.routeOriginPlace) return false;
-        if (Boolean(place?.routeEstimated)) return false;
+        if (place?.routeEstimated) return false;
 
         const travelMinutes = Number(place?.travelTimeFromPreviousMinutes);
         if (!Number.isFinite(travelMinutes)) return false;
@@ -794,6 +878,16 @@ function hasResolvedPublicTransitRouteViolation(routeDetails) {
         }
         return false;
     });
+}
+
+function hasEstimatedResolvedRouteResponse(routeDetails) {
+    const places = Array.isArray(routeDetails?.optimizedPlaces)
+        ? routeDetails.optimizedPlaces
+        : [];
+
+    return places.some((place, index) => (
+        index > 0 && Boolean(place?.routeEstimated)
+    ));
 }
 
 function needsCourseRouteRefresh(course) {
@@ -1076,6 +1170,11 @@ async function refreshEstimatedDetailRoutes(course, memberId) {
                 placeCandidates: candidates,
                 alternativeCandidates: [],
             });
+            if (hasEstimatedResolvedRouteResponse(routeDetails)) {
+                throw new Error(
+                    `${transportLabel} 실제 경로를 받지 못한 구간이 있습니다.`,
+                );
+            }
             if (
                 transportMode === 'PUBLIC_TRANSIT'
                 && hasResolvedPublicTransitRouteViolation(routeDetails)
@@ -1127,6 +1226,21 @@ async function refreshEstimatedDetailRoutes(course, memberId) {
                     ) {
                         throw new Error(
                             `DAY ${day.dayNo} 원래 장소 구성의 실제 경로를 확인할 수 없습니다.`,
+                            { cause: error },
+                        );
+                    }
+                    if (hasEstimatedResolvedRouteResponse(originalRouteDetails)) {
+                        throw new Error(
+                            `DAY ${day.dayNo} 원래 장소 구성에 예상 경로가 남아 있습니다.`,
+                            { cause: error },
+                        );
+                    }
+                    if (hasResolvedPublicTransitRouteViolation(
+                        originalRouteDetails,
+                    )) {
+                        throw new Error(
+                            `DAY ${day.dayNo} 원래 장소 구성이 30분 초과 DAY당 1개·40분 절대 상한을 벗어났습니다.`,
+                            { cause: error },
                         );
                     }
 
@@ -1138,6 +1252,7 @@ async function refreshEstimatedDetailRoutes(course, memberId) {
                     if (mergedCourse === refreshedCourse) {
                         throw new Error(
                             `DAY ${day.dayNo} 원래 장소 경로 응답에 표시할 장소가 없습니다.`,
+                            { cause: error },
                         );
                     }
 
@@ -1465,10 +1580,14 @@ function CourseDetailPage() {
 
         routeRefreshStartedRef.current.add(refreshKey);
         setRouteRefreshStatus('loading');
+        const courseHasEstimatedTravelLegs = (course?.days || []).some(
+            hasEstimatedTravelLeg,
+        );
         setToast({
             tone: 'info',
             message: isPublicTransitLimitRepair
-                ? '실제 대중교통 경로를 가져오는 중이에요. 완료되면 거리와 시간이 자동으로 업데이트됩니다.'
+                && !courseHasEstimatedTravelLegs
+                ? '대중교통 이동시간 제한에 맞춰 동선을 다시 확인하는 중이에요.'
                 : `실제 ${refreshTransport?.label || '이동'} 경로를 가져오는 중이에요. 완료되면 거리와 시간이 자동으로 업데이트됩니다.`,
         });
         let refreshPromise = detailRouteRefreshPromises.get(refreshKey);
@@ -1482,26 +1601,49 @@ function CourseDetailPage() {
         refreshPromise
             .then((refreshedCourse) => {
                 setCourse(refreshedCourse);
-                const refreshCompleted = !needsCourseRouteRefresh(refreshedCourse);
-                setRouteRefreshStatus(refreshCompleted ? 'complete' : 'partial');
-                setToast(
-                    refreshCompleted
-                        ? {
-                            tone: 'success',
-                            message: `${refreshTransport?.label || '이동'} 실제 경로로 다시 확인했어요.`,
-                        }
-                        : {
-                            tone: 'info',
-                            message: '실제 경로 확인이 끝났지만 일부 구간은 예상값으로 유지돼요.',
-                        },
+                const hasRemainingEstimatedLegs = (
+                    refreshedCourse?.days || []
+                ).some(hasEstimatedTravelLeg);
+                const hasRemainingPublicTransitLimitViolation =
+                    normalizeTransportMode(refreshedCourse?.transportMode)
+                        === 'PUBLIC_TRANSIT'
+                    && (refreshedCourse?.days || []).some(
+                        hasPublicTransitDayLimitViolation,
+                    );
+
+                setRouteRefreshStatus(
+                    hasRemainingEstimatedLegs ? 'partial' : 'complete',
                 );
+                if (hasRemainingEstimatedLegs) {
+                    setToast({
+                        tone: 'error',
+                        message: '실제 경로를 확인하지 못한 일부 구간만 예상값으로 표시돼요.',
+                    });
+                    return;
+                }
+
+                if (hasRemainingPublicTransitLimitViolation) {
+                    setRouteRefreshStatus('failed');
+                    setToast({
+                        tone: 'error',
+                        message: '대중교통 이동시간 제한을 만족하는 실제 동선을 반영하지 못했어요.',
+                    });
+                    return;
+                }
+
+                setToast({
+                    tone: 'success',
+                    message: `추천 결과에서 확인한 실제 ${refreshTransport?.label || '이동'} 경로가 반영됐어요.`,
+                });
             })
             .catch((error) => {
                 console.warn('상세 실제 경로 보정 실패:', error);
                 setRouteRefreshStatus('failed');
                 setToast({
                     tone: 'error',
-                    message: '실제 경로를 가져오지 못해 예상값으로 유지돼요.',
+                    message: courseHasEstimatedTravelLegs
+                        ? '일부 구간의 실제 경로를 가져오지 못해 해당 구간만 예상값으로 유지돼요.'
+                        : '대중교통 이동시간 제한을 만족하는 실제 동선을 반영하지 못했어요.',
                 });
             });
     }, [course, courseId, memberId, source, status]);
