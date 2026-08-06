@@ -1151,9 +1151,12 @@ function CourseDetailPage() {
         && themeBookmarks.isSaved(themeCourse?.sourceCourseKey);
     const themeCourseBookmarkBusy = isThemeCoursePath
         && themeBookmarks.isBusy(themeCourse?.sourceCourseKey);
-    const isSurveyRecommendation = String(course?.courseType || '')
+    const savedCourseType = String(course?.courseType || '')
         .trim()
-        .toUpperCase() === 'SURVEY';
+        .toUpperCase();
+    const isToggleableSavedCourse = ['SURVEY', 'THEME'].includes(
+        savedCourseType,
+    );
     const scheduleNotice = activeDayRouteIsRefreshing
         ? `실제 ${transport?.label || '이동'} 경로를 가져오는 중이에요. 완료되면 거리와 시간이 자동으로 업데이트됩니다.`
         : activeDayHasEstimatedTravelTimes
@@ -1214,7 +1217,7 @@ function CourseDetailPage() {
         if (
             isSavingCourse
             || !course
-            || (savedCourseId && !isSurveyRecommendation)
+            || (savedCourseId && !isToggleableSavedCourse)
         ) return;
 
         if (!requireLogin('코스 저장은 로그인 후 이용할 수 있습니다.')) {
@@ -1358,7 +1361,7 @@ function CourseDetailPage() {
                                     isThemeCoursePath
                                         ? themeCourseBookmarkBusy
                                         : isSavingCourse
-                                            || (Boolean(savedCourseId) && !isSurveyRecommendation)
+                                            || (Boolean(savedCourseId) && !isToggleableSavedCourse)
                                 }
                                 aria-label={
                                     isThemeCoursePath

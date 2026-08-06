@@ -217,8 +217,11 @@ public class CourseService {
 
         return travelCourseRepository
                 .findByMemberIdAndSourceCourseKey(memberId, normalizedSourceCourseKey)
-                // 북마크 조회 API에서 THEME 이외의 코스가 조회되지 않도록 확인
-                .filter(course -> "THEME".equalsIgnoreCase(course.getCourseType()))
+                // THEME 코스이면서 실제 저장 상태인 행만 북마크로 인정한다.
+                .filter(course ->
+                        "THEME".equalsIgnoreCase(course.getCourseType())
+                                && course.isSaved()
+                )
                 .map(course ->
                         ThemeCourseBookmarkResponse.builder()
                                 .saved(true)
@@ -480,7 +483,7 @@ public class CourseService {
         return normalizedSourceCourseKey;
     }
 
-    /** 회원이 저장한 테마 코스 북마크를 삭제한다. */
+    /** 회원이 저장한 테마 코스 북마크를 해제한다. */
     @Transactional
     public void deleteThemeCourseBookmark(
             Long memberId,
@@ -499,8 +502,13 @@ public class CourseService {
                 )
                 .orElseThrow(() -> new IllegalArgumentException("저장된 테마 코스를 찾을 수 없습니다."));
 
-        courseDetailRepository.deleteByCourseId(course.getCourseId());
-        travelCourseRepository.delete(course);
+        if (!course.isSaved()) {
+            return;
+        }
+
+        // 후기 등 다른 데이터가 코스를 참조할 수 있으므로 행을 삭제하지 않고
+        // 저장 상태만 해제한다.
+        course.markUnsaved();
     }
 
     /** 잘못된 코스 식별자가 Repository까지 전달되지 않도록 공통 검증한다. */
