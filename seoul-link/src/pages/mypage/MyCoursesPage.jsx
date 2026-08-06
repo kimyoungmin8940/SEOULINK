@@ -23,22 +23,22 @@ import {
     UserRound,
 } from "lucide-react";
 
-import Header from "../../components/common/Header.jsx";
-import Footer from "../../components/common/Footer.jsx";
-import MypageSidebar from "../../components/common/MypageSidebar.jsx";
+import Header from "../../components/common/Header";
+import Footer from "../../components/common/Footer";
+import MypageSidebar from "../../components/common/MypageSidebar";
 import {
     getSavedRecommendedCourses,
     removeSavedRecommendedCourse,
-} from "../../api/courseApi.js";
-import { authStore } from "../../store/authStore.js";
+} from "../../api/courseApi";
+import { authStore } from "../../store/authStore";
 import {
     getCurrentMemberId,
     normalizeMyCourseList,
-} from "../../utils/courseHistory.js";
+} from "../../utils/courseHistory";
 
 import "../../styles/mypage.css";
 import "../../styles/savedCourses.css";
-import { getCourseFallbackImage } from "../../utils/courseImage.js";
+import { getCourseFallbackImage } from "../../utils/courseImage";
 
 const PAGE_SIZE = 4;
 const COURSE_DETAIL_ENTRY_KEY = "seoulinkCourseDetailEntry";
@@ -211,6 +211,10 @@ function rememberCourseDetailEntry(course) {
             summary: course,
         })
     );
+
+    // 브라우저 뒤로가기 시 이전 저장 목록이 잠깐 보이지 않도록
+    // 상세페이지로 이동하기 전에 현재 목록 화면을 숨긴 상태로 캐시합니다.
+    document.documentElement.style.visibility = "hidden";
 }
 
 function formatDuration(totalMinutes, placeCount) {

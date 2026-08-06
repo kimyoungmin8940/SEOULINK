@@ -131,6 +131,7 @@ function Router() {
             );
 
             if (!removedCourseId) {
+                document.documentElement.style.visibility = '';
                 return;
             }
 
