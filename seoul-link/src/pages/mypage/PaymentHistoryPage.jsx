@@ -21,7 +21,7 @@ import {
 import Header from '../../components/common/Header';
 import Footer from '../../components/common/Footer';
 import MypageSidebar from '../../components/common/MypageSidebar';
-import { deletePaymentHistory, getMyPayments } from '../../api/paymentApi';
+import { cancelPayment, getMyPayments } from '../../api/paymentApi';
 import { authStore } from '../../store/authStore';
 import '../../styles/mypage.css';
 import '../../styles/payment-history.css';
@@ -107,7 +107,7 @@ export default function PaymentHistoryPage() {
     const [openId, setOpenId] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const [deletingPaymentId, setDeletingPaymentId] = useState(null);
+    const [cancellingPaymentId, setCancellingPaymentId] = useState(null);
 
     const userName = member.nickname?.trim() || member.name?.trim() || '여행자';
     const email = member.email || 'user@seoulink.com';
@@ -155,21 +155,34 @@ export default function PaymentHistoryPage() {
         receipt.print();
     };
 
-    const deletePayment = async (payment) => {
-        if (!member.memberId || deletingPaymentId) return;
+    const cancelPaymentRequest = async (payment) => {
+        if (!member.memberId || cancellingPaymentId) return;
 
-        const approved = window.confirm('결제가 취소됩니다. 취소하시겠습니까?');
+        const approved = window.confirm(
+            '결제를 취소하면 이용권을 더 이상 사용할 수 없습니다. 취소하시겠습니까?',
+        );
         if (!approved) return;
 
         try {
-            setDeletingPaymentId(payment.paymentId);
-            await deletePaymentHistory(payment.paymentId, member.memberId);
-            setPayments((current) => current.filter(({ paymentId }) => paymentId !== payment.paymentId));
-            setOpenId((current) => current === payment.paymentId ? null : current);
+            setCancellingPaymentId(payment.paymentId);
+
+            const canceledPayment = await cancelPayment(
+                payment.paymentId,
+                member.memberId,
+                '사용자 요청',
+            );
+
+            setPayments((current) =>
+                current.map((item) =>
+                    item.paymentId === payment.paymentId
+                        ? { ...item, ...canceledPayment }
+                        : item,
+                ),
+            );
         } catch (requestError) {
-            setError(requestError?.message || '결제내역을 삭제하지 못했습니다.');
+            setError(requestError?.message || '결제 취소에 실패했습니다.');
         } finally {
-            setDeletingPaymentId(null);
+            setCancellingPaymentId(null);
         }
     };
 
@@ -235,7 +248,7 @@ export default function PaymentHistoryPage() {
                                     <div className="detail-item"><small>결제 수단</small><b>{payment.paymentMethod || payment.paymentProvider || '-'}</b></div>
                                     <div className="detail-item"><small>주문 번호</small><b>{payment.orderId || '-'}</b></div>
                                     <div className="detail-item"><small>결제 일시</small><b>{formatDateTime(boughtAt)}</b></div>
-                                    <div className="payment-history-actions">{state.key !== 'canceled' && <button type="button" className="payment-delete-button" disabled={deletingPaymentId === payment.paymentId} onClick={() => deletePayment(payment)}>{deletingPaymentId === payment.paymentId ? '삭제 중...' : '결제 취소'}</button>}<button type="button" className="receipt-button" onClick={() => printReceipt(payment)}><FileText />영수증 보기</button>{state.canUse && <a className="chatbot-button" href="/chatbot"><BadgeCheck />AI 챗봇 이용하기</a>}</div>
+                                    <div className="payment-history-actions">{payment.paymentStatus === 'PAID' && <button type="button" className="payment-delete-button" disabled={cancellingPaymentId === payment.paymentId} onClick={() => cancelPaymentRequest(payment)}>{cancellingPaymentId === payment.paymentId ? '취소 처리 중...' : '결제 취소'}</button>}<button type="button" className="receipt-button" onClick={() => printReceipt(payment)}><FileText />영수증 보기</button>{state.canUse && <a className="chatbot-button" href="/chatbot"><BadgeCheck />AI 챗봇 이용하기</a>}</div>
                                 </div>}
                             </article>;
                         })}
