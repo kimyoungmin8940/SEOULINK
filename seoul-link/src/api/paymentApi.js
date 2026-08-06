@@ -22,6 +22,9 @@ export const recordPaymentFailure = ({ orderId, reason, canceled = false }) =>
 export const getMyPayments = (memberId) =>
   apiClient.get(`/payments?memberId=${memberId}`);
 
-/** 실제 환불이 아닌 서비스 내 결제 이력만 삭제한다. */
-export const deletePaymentHistory = (paymentId, memberId) =>
-  apiClient.delete(`/payments/${paymentId}?memberId=${memberId}`);
+/** 결제 이력은 남기고 상태만 CANCELED로 변경한다. */
+export const cancelPayment = (paymentId, memberId, reason = '사용자 요청') =>
+    apiClient.patch(
+        `/payments/${paymentId}/cancel?memberId=${memberId}&reason=${encodeURIComponent(reason)}`,
+        {},
+    );
