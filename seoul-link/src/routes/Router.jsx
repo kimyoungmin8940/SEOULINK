@@ -3,7 +3,7 @@
 // 현재 주소(pathname)에 맞는 페이지 컴포넌트를 보여주는 가벼운 라우터를 사용합니다.
 // 나중에 react-router-dom을 설치하면 이 파일만 Routes/Route 구조로 바꾸면 됩니다.
 
-import { useEffect } from 'react';
+import { useEffect, useLayoutEffect } from 'react';
 import Home from '../pages/home/Home';
 
 import LoginPage from "../pages/LoginPage";
@@ -47,6 +47,7 @@ import NotFoundPage from '../pages/NotFoundPage';
 import ServiceInfoPage from '../pages/service/ServiceInfoPage';
 import { isLoggedIn } from '../utils/authGuard';
 
+const SAVED_COURSES_CHANGED_KEY = 'seoulinkSavedCoursesChanged';
 
 function isProtectedPath(pathname) {
     const isPublicReviewDetail =
@@ -118,6 +119,67 @@ function LoginRedirect() {
 
 function Router() {
     const { pathname } = window.location;
+
+    useLayoutEffect(() => {
+        const refreshSavedCourses = () => {
+            if (window.location.pathname !== '/mypage/courses') {
+                return;
+            }
+
+            const removedCourseId = sessionStorage.getItem(
+                SAVED_COURSES_CHANGED_KEY,
+            );
+
+            if (!removedCourseId) {
+                return;
+            }
+
+            sessionStorage.removeItem(SAVED_COURSES_CHANGED_KEY);
+
+            const searchParams = new URLSearchParams();
+            searchParams.set('removedCourseId', removedCourseId);
+            searchParams.set('refresh', String(Date.now()));
+
+            window.location.replace(
+                `/mypage/courses?${searchParams.toString()}`,
+            );
+        };
+
+        const refreshWhenVisible = () => {
+            if (document.visibilityState === 'visible') {
+                refreshSavedCourses();
+            }
+        };
+
+        window.addEventListener('pageshow', refreshSavedCourses);
+        window.addEventListener('popstate', refreshSavedCourses);
+        window.addEventListener('focus', refreshSavedCourses);
+        document.addEventListener(
+            'visibilitychange',
+            refreshWhenVisible,
+        );
+
+        refreshSavedCourses();
+
+        return () => {
+            window.removeEventListener(
+                'pageshow',
+                refreshSavedCourses,
+            );
+            window.removeEventListener(
+                'popstate',
+                refreshSavedCourses,
+            );
+            window.removeEventListener(
+                'focus',
+                refreshSavedCourses,
+            );
+            document.removeEventListener(
+                'visibilitychange',
+                refreshWhenVisible,
+            );
+        };
+    }, [pathname]);
 
     // 주소를 직접 입력해도 로그인 필요한 페이지는 막습니다.
     // 취향 검사/결과, 테마 코스, 후기 목록/상세는 로그인 없이 볼 수 있습니다.

@@ -31,6 +31,7 @@ import CourseTransportIcon from '../../components/course/CourseTransportIcon';
 import {
     getCourseDetail,
     getMyCourses,
+    removeSavedRecommendedCourse,
     saveCourse,
 } from '../../api/courseApi';
 import useThemeCourseBookmarks from '../../hooks/useThemeCourseBookmarks';
@@ -115,6 +116,7 @@ const estimatedScheduleNotices = Object.freeze({
     DRIVING: '경로를 불러오지 못한 일부 자동차 구간은 예상값입니다. 실제 교통 상황에 따라 달라질 수 있습니다.',
 });
 const COURSE_DETAIL_ENTRY_KEY = 'seoulinkCourseDetailEntry';
+const SAVED_COURSES_CHANGED_KEY = 'seoulinkSavedCoursesChanged';
 
 /** 지원하는 상세 경로 전체가 정확히 일치할 때만 조회할 courseId를 구합니다. */
 function getCourseId() {
@@ -644,7 +646,7 @@ function buildDetailSaveRequest(course, memberId) {
             placeId: place.placeId,
             category: place.category,
             visitDate: place.visitDate || day.visitDate,
-            visitOrder: place.visitOrder ?? index + 1,
+            visitOrder: index + 1,
             visitTime: place.visitTime
                 || place.expectedVisitTimeHHmm
                 || place.displayVisitTime
@@ -1149,6 +1151,9 @@ function CourseDetailPage() {
         && themeBookmarks.isSaved(themeCourse?.sourceCourseKey);
     const themeCourseBookmarkBusy = isThemeCoursePath
         && themeBookmarks.isBusy(themeCourse?.sourceCourseKey);
+    const isSurveyRecommendation = String(course?.courseType || '')
+        .trim()
+        .toUpperCase() === 'SURVEY';
     const scheduleNotice = activeDayRouteIsRefreshing
         ? `실제 ${transport?.label || '이동'} 경로를 가져오는 중이에요. 완료되면 거리와 시간이 자동으로 업데이트됩니다.`
         : activeDayHasEstimatedTravelTimes
@@ -1206,7 +1211,11 @@ function CourseDetailPage() {
     };
 
     const handleSaveCourse = async () => {
-        if (isSavingCourse || savedCourseId || !course) return;
+        if (
+            isSavingCourse
+            || !course
+            || (savedCourseId && !isSurveyRecommendation)
+        ) return;
 
         if (!requireLogin('코스 저장은 로그인 후 이용할 수 있습니다.')) {
             return;
@@ -1232,6 +1241,20 @@ function CourseDetailPage() {
         setToast(null);
 
         try {
+            if (savedCourseId) {
+                await removeSavedRecommendedCourse(savedCourseId, memberId);
+                sessionStorage.setItem(
+                    SAVED_COURSES_CHANGED_KEY,
+                    String(savedCourseId),
+                );
+                setSavedCourseId(null);
+                setToast({
+                    tone: 'success',
+                    message: '저장한 추천 코스에서 삭제했어요.',
+                });
+                return;
+            }
+
             const savedCourse = await saveCourse(
                 buildDetailSaveRequest(course, memberId),
             );
@@ -1242,13 +1265,19 @@ function CourseDetailPage() {
             }
 
             rememberCourseTravelCode(nextSavedCourseId, course.travelCode);
+            sessionStorage.removeItem(SAVED_COURSES_CHANGED_KEY);
             setSavedCourseId(nextSavedCourseId);
-            window.location.href = '/mypage/courses';
+            setToast({
+                tone: 'success',
+                message: '저장한 추천 코스에 추가했어요.',
+            });
         } catch (error) {
             setToast({
                 tone: 'error',
                 message: error?.message
-                    || '코스를 저장하지 못했습니다. 잠시 후 다시 시도해주세요.',
+                    || (savedCourseId
+                        ? '코스 저장을 취소하지 못했습니다. 잠시 후 다시 시도해주세요.'
+                        : '코스를 저장하지 못했습니다. 잠시 후 다시 시도해주세요.'),
             });
         } finally {
             setIsSavingCourse(false);
@@ -1292,7 +1321,6 @@ function CourseDetailPage() {
     const handleReturnToCourseList = () => {
         const entry = readCourseDetailEntry(courseId);
         const returnPath = entry?.returnPath;
-
         if (typeof returnPath === 'string' && /^\/(?!\/)/.test(returnPath)) {
             window.location.href = returnPath;
             return;
@@ -1329,12 +1357,13 @@ function CourseDetailPage() {
                                 disabled={
                                     isThemeCoursePath
                                         ? themeCourseBookmarkBusy
-                                        : isSavingCourse || Boolean(savedCourseId)
+                                        : isSavingCourse
+                                            || (Boolean(savedCourseId) && !isSurveyRecommendation)
                                 }
                                 aria-label={
                                     isThemeCoursePath
                                         ? themeCourseSaved ? '저장 해제' : '코스 저장'
-                                        : savedCourseId ? '저장됨' : '코스 저장'
+                                        : savedCourseId ? '저장 해제' : '코스 저장'
                                 }
                                 aria-pressed={
                                     isThemeCoursePath
@@ -1362,7 +1391,9 @@ function CourseDetailPage() {
                                             ? '저장됨'
                                             : '저장'
                                     : isSavingCourse
-                                        ? '저장 중...'
+                                        ? savedCourseId
+                                            ? '저장 취소 중...'
+                                            : '저장 중...'
                                         : savedCourseId
                                             ? '저장됨'
                                             : '저장'}

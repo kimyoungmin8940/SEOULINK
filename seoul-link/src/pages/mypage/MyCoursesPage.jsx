@@ -23,22 +23,22 @@ import {
     UserRound,
 } from "lucide-react";
 
-import Header from "../../components/common/Header";
-import Footer from "../../components/common/Footer";
-import MypageSidebar from "../../components/common/MypageSidebar";
+import Header from "../../components/common/Header.jsx";
+import Footer from "../../components/common/Footer.jsx";
+import MypageSidebar from "../../components/common/MypageSidebar.jsx";
 import {
     getSavedRecommendedCourses,
     removeSavedRecommendedCourse,
-} from "../../api/courseApi";
-import { authStore } from "../../store/authStore";
+} from "../../api/courseApi.js";
+import { authStore } from "../../store/authStore.js";
 import {
     getCurrentMemberId,
     normalizeMyCourseList,
-} from "../../utils/courseHistory";
+} from "../../utils/courseHistory.js";
 
 import "../../styles/mypage.css";
 import "../../styles/savedCourses.css";
-import { getCourseFallbackImage } from "../../utils/courseImage";
+import { getCourseFallbackImage } from "../../utils/courseImage.js";
 
 const PAGE_SIZE = 4;
 const COURSE_DETAIL_ENTRY_KEY = "seoulinkCourseDetailEntry";
