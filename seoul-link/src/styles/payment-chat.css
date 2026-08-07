@@ -416,21 +416,11 @@
 }
 
 /*
- * The chatbot header and workspace are a single visual column.  The shared
- * header normally uses an 85vw rail, while the workspace has its own maximum
- * width.  On intermediate laptop widths that made the workspace wider than
- * its header.  Use one rail here, without affecting the rest of the site.
+ * Keep the shared header at the same width used on every other page.
+ * Only the chatbot workspace follows that common 85vw rail.
  */
-@media (min-width: 921px) {
-  .chatbot-page .header-glass,
+@media (min-width: 701px) {
   .chatbot-workspace {
-    width: min(1440px, calc(100% - 56px));
-  }
-}
-
-@media (min-width: 701px) and (max-width: 920px) {
-  .chatbot-page .header-glass,
-  .chatbot-workspace {
-    width: calc(100% - 32px);
+    width: min(85vw, 1440px);
   }
 }

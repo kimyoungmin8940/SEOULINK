@@ -48,13 +48,32 @@ public class PaymentService {
     // 금액과 회원을 검증한 뒤 결제 대기 주문을 저장한다.
     public Payment readyPayment(PaymentCreateRequest request) {
         validateMemberExists(request.getMemberId());
+
         PlanInfo plan = resolvePlan(request.getAmount());
+
+        boolean alreadyHasActivePass =
+                paymentRepository
+                        .existsByMemberIdAndProductNameAndPaymentStatusAndExpiredAtAfter(
+                                request.getMemberId(),
+                                plan.productName(),
+                                "PAID",
+                                LocalDateTime.now()
+                        );
+
+        if (alreadyHasActivePass) {
+            throw new IllegalStateException(
+                    "이미 사용 중인 동일 이용권이 있습니다. 만료 후 다시 구매할 수 있습니다."
+            );
+        }
 
         if (!"TOSS".equals(request.getPaymentProvider())) {
             throw new IllegalArgumentException(
-                    "지원하지 않는 결제 제공자입니다."
+                    "지원하지 않는 결제 제공사입니다."
             );
         }
+
+        // 아래 기존 결제 주문 생성 코드는 그대로 유지
+
 
         Payment payment = new Payment();
         payment.setMemberId(request.getMemberId());

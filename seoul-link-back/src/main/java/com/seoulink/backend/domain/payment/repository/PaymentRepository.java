@@ -5,7 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
 import java.util.Optional;
-
+import java.time.LocalDateTime;
 /**
  * 도메인 데이터를 조회하고 저장하는 리포지토리입니다.
  */
@@ -18,4 +18,11 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
             String paymentStatus,
             java.time.LocalDateTime now
     );
+    boolean existsByMemberIdAndProductNameAndPaymentStatusAndExpiredAtAfter(
+            Long memberId,
+            String productName,
+            String paymentStatus,
+            LocalDateTime now
+    );
+
 }

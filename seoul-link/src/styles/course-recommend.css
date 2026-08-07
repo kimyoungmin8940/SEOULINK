@@ -1497,9 +1497,8 @@
 }
 
 .course-result-compare-list {
-  max-height: 370px;
-  padding-right: 3px;
-  overflow-y: auto;
+  max-height: none;
+  overflow-y: visible;
   display: flex;
   flex-direction: column;
   gap: 7px;
@@ -1979,6 +1978,12 @@
 
   .course-result-sidebar {
     grid-template-columns: 1fr;
+  }
+
+  .course-result-compare-list {
+    max-height: 370px;
+    padding-right: 3px;
+    overflow-y: auto;
   }
 
   .course-result-tip-card {

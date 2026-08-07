@@ -211,6 +211,10 @@ function rememberCourseDetailEntry(course) {
             summary: course,
         })
     );
+
+    // 브라우저 뒤로가기 시 이전 저장 목록이 잠깐 보이지 않도록
+    // 상세페이지로 이동하기 전에 현재 목록 화면을 숨긴 상태로 캐시합니다.
+    document.documentElement.style.visibility = "hidden";
 }
 
 function formatDuration(totalMinutes, placeCount) {

@@ -168,6 +168,9 @@ const PUBLIC_TRANSIT_ROUTE_OVERLAP_TIERS = Object.freeze([
         alternativeLimit: 32,
         dayCandidateLimit: 96,
         allowPlaceReduction: true,
+        // 마지막 단계에서는 추천 결과 자체를 버리지 않는다. 후보 교체와 장소 수
+        // 감소를 모두 시도한 뒤 실제 경로를 받았다면 제한 경고를 남기고 적용한다.
+        allowConstraintFallback: true,
     }),
 ]);
 
@@ -1044,13 +1047,13 @@ function uniqueRouteCandidates(candidates) {
     return [...unique.values()];
 }
 
-/** 후보 교체가 불가능하면 P/R형 모두 일반 장소 3곳까지 단계적으로 줄입니다. */
+/** 후보 교체가 불가능하면 마지막 한 곳까지 단계적으로 줄여 추천 결과를 유지합니다. */
 function getMinimumResolvedOrdinaryPlaceCount(originalPlaces) {
     const originalOrdinaryPlaceCount = (Array.isArray(originalPlaces)
         ? originalPlaces
         : []
     ).filter((place) => !isHotelCategory(place?.category)).length;
-    return Math.min(originalOrdinaryPlaceCount, 3);
+    return Math.min(originalOrdinaryPlaceCount, 1);
 }
 
 function getRouteOverlapTiers(transportMode) {
@@ -1063,6 +1066,8 @@ function getRouteOverlapTiers(transportMode) {
         key: 'DEFAULT',
         sameDayOverlapLimit: overlapLimit,
         crossDayOverlapLimit: overlapLimit,
+        // 도보·자동차도 실제 경로를 받았다면 경로 보정 실패로 추천 전체를 막지 않는다.
+        allowConstraintFallback: true,
     }];
 }
 
@@ -1781,14 +1786,14 @@ async function prepareVisibleRoutesBeforeDisplay(
 
     let preparedResponse = responseData;
     let firstBuildError = '';
-    let firstActualRouteError = null;
+    let firstRouteWarning = '';
     let interrupted = false;
     const optionNos = (responseData.courseOptions || [])
         .map((option) => option?.optionNo)
         .filter((optionNo) => optionNo != null);
 
     // 요청을 미리 전부 만들지 않고 옵션별로 하나씩 생성·병합한다.
-    // 앞 옵션에서 실제 경로 보정으로 교체된 장소도 다음 옵션의 예약 장소에 즉시 반영된다.
+    // 한 옵션의 보정이 실패해도 나머지 옵션의 실제 경로 API는 끝까지 모두 호출한다.
     for (const optionNo of optionNos) {
         if (
             typeof shouldContinue === 'function'
@@ -1810,13 +1815,10 @@ async function prepareVisibleRoutesBeforeDisplay(
         const expectedPlaceCount = day.places.length
             + (routeOriginPlace ? 1 : 0);
         const minimumOrdinaryPlaceCount =
-            getMinimumResolvedOrdinaryPlaceCount(
-                day.places,
-            );
+            getMinimumResolvedOrdinaryPlaceCount(day.places);
         const overlapTiers = getRouteOverlapTiers(transportMode);
         let routeApplied = false;
         let lastRouteError = '';
-        let constraintFallback = false;
         let receivedActualRoute = false;
         const attemptedRequestSignatures = new Set();
 
@@ -1865,24 +1867,15 @@ async function prepareVisibleRoutesBeforeDisplay(
                     throw new Error('교통편 응답의 장소 구성을 확인할 수 없습니다.');
                 }
                 if (hasEstimatedRouteDetailsResponse(routeDetails)) {
-                    constraintFallback = true;
                     lastRouteError = createActualRouteUnavailableError(
                         transportMode,
                     ).message;
-                    // 예상값 응답은 캐시하지 않는다. 다음 완화 단계의 후보로
-                    // 모든 인접 구간을 다시 조회하고 실제값만 최종 적용한다.
-                    continue;
-                }
-                receivedActualRoute = true;
-                if (
-                    normalizeTransportMode(transportMode) === 'PUBLIC_TRANSIT'
-                    && hasPublicTransitRouteLimitViolation(routeDetails)
-                ) {
-                    constraintFallback = true;
-                    lastRouteError = '대중교통 실제 경로가 30분 초과 DAY당 1개·40분 절대 상한을 벗어났습니다.';
+                    // 예상값 응답은 최종 적용하지 않는다. 다음 완화 단계에서도 모든
+                    // 인접 구간을 다시 조회해 실제값을 받을 기회를 유지한다.
                     continue;
                 }
 
+                receivedActualRoute = true;
                 const { visibleResolvedPlaces } = getVisibleResolvedRoutePlaces(
                     routeDetails,
                     routeOriginPlace,
@@ -1890,13 +1883,23 @@ async function prepareVisibleRoutesBeforeDisplay(
                 const resolvedOrdinaryPlaceCount = ordinaryRoutePlaceIds(
                     visibleResolvedPlaces,
                 ).size;
+                const constraintMessages = [];
+
+                if (
+                    normalizeTransportMode(transportMode) === 'PUBLIC_TRANSIT'
+                    && hasPublicTransitRouteLimitViolation(routeDetails)
+                ) {
+                    constraintMessages.push(
+                        '대중교통 실제 경로가 30분 초과 DAY당 1개·40분 절대 상한을 벗어났습니다.',
+                    );
+                }
                 if (
                     normalizeTransportMode(transportMode) === 'PUBLIC_TRANSIT'
                     && resolvedOrdinaryPlaceCount < minimumOrdinaryPlaceCount
                 ) {
-                    constraintFallback = true;
-                    lastRouteError = `대중교통 40분 제한을 지키는 과정에서 일반 장소가 ${resolvedOrdinaryPlaceCount}곳으로 줄어 최소 ${minimumOrdinaryPlaceCount}곳을 충족하지 못했습니다.`;
-                    continue;
+                    constraintMessages.push(
+                        `일반 장소가 ${resolvedOrdinaryPlaceCount}곳으로 줄어 최소 ${minimumOrdinaryPlaceCount}곳보다 적습니다.`,
+                    );
                 }
 
                 const overlapViolation = getRouteDetailOverlapViolation(
@@ -1909,11 +1912,18 @@ async function prepareVisibleRoutesBeforeDisplay(
                     day.places,
                 );
                 if (overlapViolation) {
-                    constraintFallback = true;
-                    lastRouteError = overlapViolation;
+                    constraintMessages.push(overlapViolation);
+                }
+
+                if (
+                    constraintMessages.length > 0
+                    && !overlapTier?.allowConstraintFallback
+                ) {
+                    lastRouteError = constraintMessages.join(' ');
                     continue;
                 }
 
+                const appliedWarning = constraintMessages.join(' ');
                 preparedResponse = mergeRouteDetails(
                     preparedResponse,
                     option.optionNo,
@@ -1922,8 +1932,14 @@ async function prepareVisibleRoutesBeforeDisplay(
                     preparedResponse?.dailyStartTime
                         ?? recommendRequest?.dailyStartTime,
                     routeOriginPlace,
-                    '',
+                    appliedWarning,
                 );
+                if (appliedWarning) {
+                    firstRouteWarning ||= (
+                        '추천 코스는 유지하고 실제 경로를 모두 반영했어요. '
+                        + '이동 제한을 맞추기 어려운 구간은 장소 수를 줄이거나 확인된 실제값으로 표시했습니다.'
+                    );
+                }
                 routeApplied = true;
                 break;
             } catch (error) {
@@ -1939,7 +1955,6 @@ async function prepareVisibleRoutesBeforeDisplay(
                         )
                     );
                 if (retryableMinimumFailure) {
-                    constraintFallback = true;
                     continue;
                 }
                 break;
@@ -1981,51 +1996,53 @@ async function prepareVisibleRoutesBeforeDisplay(
                         '현재 장소 구성의 실제 대중교통 경로를 확인할 수 없습니다.',
                     );
                 }
-
                 if (hasEstimatedRouteDetailsResponse(originalRouteDetails)) {
-                    lastRouteError = createActualRouteUnavailableError(
-                        transportMode,
-                    ).message;
-                } else {
-                    receivedActualRoute = true;
-                    const { visibleResolvedPlaces } =
-                        getVisibleResolvedRoutePlaces(
-                            originalRouteDetails,
-                            routeOriginPlace,
-                        );
-                    const overlapViolation = getRouteDetailOverlapViolation(
-                        preparedResponse,
-                        option,
-                        day,
-                        visibleResolvedPlaces,
-                        transportMode,
-                        PUBLIC_TRANSIT_ROUTE_OVERLAP_TIERS[0],
-                        day.places,
-                    );
-
-                    if (hasPublicTransitRouteLimitViolation(
-                        originalRouteDetails,
-                    )) {
-                        constraintFallback = true;
-                        lastRouteError =
-                            '현재 장소 구성이 30분 초과 DAY당 1개·40분 절대 상한을 벗어났습니다.';
-                    } else if (overlapViolation) {
-                        constraintFallback = true;
-                        lastRouteError = overlapViolation;
-                    } else {
-                        preparedResponse = mergeRouteDetails(
-                            preparedResponse,
-                            option.optionNo,
-                            day.dayNo,
-                            originalRouteDetails,
-                            preparedResponse?.dailyStartTime
-                                ?? recommendRequest?.dailyStartTime,
-                            routeOriginPlace,
-                            '',
-                        );
-                        routeApplied = true;
-                    }
+                    throw createActualRouteUnavailableError(transportMode);
                 }
+
+                receivedActualRoute = true;
+                const { visibleResolvedPlaces } = getVisibleResolvedRoutePlaces(
+                    originalRouteDetails,
+                    routeOriginPlace,
+                );
+                const fallbackWarnings = [];
+                if (hasPublicTransitRouteLimitViolation(originalRouteDetails)) {
+                    fallbackWarnings.push(
+                        '현재 장소 구성이 30분 초과 DAY당 1개·40분 절대 상한을 벗어났습니다.',
+                    );
+                }
+                const overlapViolation = getRouteDetailOverlapViolation(
+                    preparedResponse,
+                    option,
+                    day,
+                    visibleResolvedPlaces,
+                    transportMode,
+                    PUBLIC_TRANSIT_ROUTE_OVERLAP_TIERS[0],
+                    day.places,
+                );
+                if (overlapViolation) {
+                    fallbackWarnings.push(overlapViolation);
+                }
+
+                // 모든 보정이 실패해도 새 추천 자체를 폐기하지 않는다. 원래 장소의
+                // 실제 API값을 합쳐 세 추천 코스가 반드시 화면에 남도록 한다.
+                preparedResponse = mergeRouteDetails(
+                    preparedResponse,
+                    option.optionNo,
+                    day.dayNo,
+                    originalRouteDetails,
+                    preparedResponse?.dailyStartTime
+                        ?? recommendRequest?.dailyStartTime,
+                    routeOriginPlace,
+                    fallbackWarnings.join(' '),
+                );
+                if (fallbackWarnings.length > 0) {
+                    firstRouteWarning ||= (
+                        '추천 코스는 유지하고 모든 대중교통 구간의 실제값을 불러왔어요. '
+                        + '대체 동선이 부족한 구간은 현재 장소 구성의 실제값으로 표시했습니다.'
+                    );
+                }
+                routeApplied = true;
             } catch (error) {
                 lastRouteError = error?.message
                     || '현재 장소 구성의 실제 대중교통 경로를 확인할 수 없습니다.';
@@ -2033,28 +2050,24 @@ async function prepareVisibleRoutesBeforeDisplay(
         }
 
         if (!routeApplied && !interrupted) {
-            const error = receivedActualRoute
+            const routeError = receivedActualRoute
                 ? createActualRouteConstraintUnavailableError(transportMode)
                 : createActualRouteUnavailableError(transportMode);
             if (lastRouteError) {
-                error.cause = new Error(lastRouteError);
+                routeError.cause = new Error(lastRouteError);
             }
-            if (constraintFallback) {
-                error.constraintFallback = true;
-            }
-            // 한 옵션이 실패해도 나머지 옵션의 모든 인접 구간 조회는 계속한다.
-            // 화면 반영만 보류하고 세 옵션 조회가 끝난 뒤 한 번에 실패시킨다.
-            firstActualRouteError ||= error;
+            // 실제 경로 API 한 옵션이 실패해도 새 추천 응답 전체를 버리지 않는다.
+            // 나머지 옵션 호출은 이미 계속 진행했고, 실패한 DAY는 기존 추천값을 유지한다.
+            firstRouteWarning ||= (
+                `${routeError.message} 새 추천 코스는 그대로 표시하며 해당 DAY는 다시 조회할 수 있습니다.`
+            );
         }
-    }
-
-    if (firstActualRouteError && !interrupted) {
-        throw firstActualRouteError;
     }
 
     return {
         response: preparedResponse,
         buildError: firstBuildError,
+        routeWarning: firstRouteWarning,
         interrupted,
     };
 }
@@ -2435,6 +2448,11 @@ function CourseRecommendPage() {
                     tone: 'error',
                     message: preparedResult.buildError,
                 });
+            } else if (preparedResult.routeWarning) {
+                setNotice({
+                    tone: 'info',
+                    message: preparedResult.routeWarning,
+                });
             }
         } catch (error) {
             setStatus('error');
@@ -2717,14 +2735,18 @@ function CourseRecommendPage() {
                 showingNextRecommendation,
             );
 
-            if (
-                preparedResult.buildError
-                && (!backgroundPrefetch || shouldActivatePreparedDay)
-            ) {
-                setNotice({
-                    tone: 'error',
-                    message: preparedResult.buildError,
-                });
+            if (!backgroundPrefetch || shouldActivatePreparedDay) {
+                if (preparedResult.buildError) {
+                    setNotice({
+                        tone: 'error',
+                        message: preparedResult.buildError,
+                    });
+                } else if (preparedResult.routeWarning) {
+                    setNotice({
+                        tone: 'info',
+                        message: preparedResult.routeWarning,
+                    });
+                }
             }
         } catch (error) {
             let failedDays = failedRoutePrefetchDaysRef.current.get(
@@ -3041,10 +3063,15 @@ function CourseRecommendPage() {
                     tone: 'error',
                     message: preparedResult.buildError,
                 }
-                : {
-                    tone: 'success',
-                    message: '같은 취향을 바탕으로 다른 추천 코스와 현재 DAY의 실제 이동시간을 준비했어요.',
-                });
+                : preparedResult.routeWarning
+                    ? {
+                        tone: 'info',
+                        message: preparedResult.routeWarning,
+                    }
+                    : {
+                        tone: 'success',
+                        message: '같은 취향을 바탕으로 다른 추천 코스와 현재 DAY의 실제 이동시간을 준비했어요.',
+                    });
         } catch (error) {
             setIsPreparingVisibleRoutes(false);
             setNotice({

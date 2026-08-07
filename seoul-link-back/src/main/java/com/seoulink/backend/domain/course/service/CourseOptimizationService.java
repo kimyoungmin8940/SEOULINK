@@ -44,9 +44,9 @@ public class CourseOptimizationService {
     private static final double PUBLIC_TRANSIT_MAX_MINUTES = 40.0;
     private static final double PUBLIC_TRANSIT_HOTEL_MAX_MINUTES = 40.0;
     private static final int PUBLIC_TRANSIT_MAX_REPAIR_ALTERNATIVES = 8;
-    // 실제 경로 보정 중 장소를 계속 삭제해 숙소만 남는 결과를 만들지 않는다.
-    // 후보 교체로 해결되지 않으면 P/R형 모두 일반 장소 3곳까지 단계적으로 줄인다.
-    private static final int MIN_ACTUAL_ROUTE_ORDINARY_PLACES = 3;
+    // 실제 경로 보정 중 추천 DAY 자체가 사라지지 않도록 일반 장소 한 곳은 유지한다.
+    // 후보 교체로 해결되지 않으면 마지막 한 곳까지 단계적으로 줄여 코스를 반드시 반환한다.
+    private static final int MIN_ACTUAL_ROUTE_ORDINARY_PLACES = 1;
 
     private final DistanceService distanceService;
     private final VisitDurationService visitDurationService;
@@ -641,22 +641,36 @@ public class CourseOptimizationService {
                 );
             }
 
-            // 40분 상한은 유지하되 장소를 계속 지워 숙소만 남기는 결과는 만들지 않는다.
-            // 최소 개수를 깨야 한다면 프런트가 중복 제한을 단계적으로 완화한 후보 풀로
-            // 같은 DAY를 다시 요청할 수 있도록 실패를 명확히 반환한다.
+            // 마지막 일반 장소까지 제거하면 DAY 자체가 비게 되므로 한 곳은 유지한다.
+            // 이 지점까지 왔다는 것은 후보 교체와 장소 수 감소를 모두 수행한 상태다.
+            // 최종 한 곳에서도 제한을 완전히 맞추지 못하면 예외로 추천 전체를 버리지 않고,
+            // 현재까지 줄인 장소 구성의 실제 API값을 반환해 프런트가 코스를 표시하게 한다.
             if (!isHotelCategory(
                     repairedCandidates.get(violationIndex).getCategory()
             ) && countOrdinaryPlaces(repairedCandidates)
                     <= minimumOrdinaryPlaceCount) {
-                throw new PublicTransitMinimumPlaceException(
-                        minimumOrdinaryPlaceCount
+                return new PublicTransitRouteRepair(
+                        List.copyOf(repairedCandidates),
+                        routeMatrix
                 );
             }
             repairedCandidates.remove(violationIndex);
         }
 
-        throw new IllegalStateException(
-                "대중교통 이동 제한을 만족하는 경로를 만들지 못했습니다."
+        // 방어용 반복 상한에 도달해도 추천 결과 전체를 실패시키지 않는다.
+        // 현재까지 축소된 구성의 실제 경로를 한 번 더 조회해 반환한다.
+        List<Integer> fallbackRouteIndexes = createIndexes(
+                repairedCandidates.size()
+        );
+        RouteMatrix fallbackRouteMatrix =
+                distanceService.calculateRouteLegMatrix(
+                        repairedCandidates,
+                        TransportMode.PUBLIC_TRANSIT,
+                        fallbackRouteIndexes
+                );
+        return new PublicTransitRouteRepair(
+                List.copyOf(repairedCandidates),
+                fallbackRouteMatrix
         );
     }
 

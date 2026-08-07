@@ -56,6 +56,9 @@ function RecommendSection() {
         status: catalogStatus,
     } = useThemeCourseCatalog('all');
     const [myRecommendedCourses, setMyRecommendedCourses] = useState([]);
+    const [isRecommendedCoursesLoading, setIsRecommendedCoursesLoading] = useState(
+        () => isLoggedIn && Boolean(memberId),
+    );
     const [themeSaveCounts, setThemeSaveCounts] = useState({});
 
     useEffect(() => {
@@ -88,21 +91,25 @@ function RecommendSection() {
     useEffect(() => {
         if (!isLoggedIn || !memberId) {
             setMyRecommendedCourses([]);
+            setIsRecommendedCoursesLoading(false);
             return undefined;
         }
 
         const controller = new AbortController();
         setMyRecommendedCourses([]);
+        setIsRecommendedCoursesLoading(true);
 
         getRecommendedCourses(memberId, { signal: controller.signal })
             .then((response) => {
                 if (controller.signal.aborted) return;
                 setMyRecommendedCourses(normalizeRecommendedCourseList(response));
+                setIsRecommendedCoursesLoading(false);
             })
             .catch((error) => {
                 if (error?.name !== 'AbortError') {
                     // 조회 실패 시에도 더미 추천으로 대체하지 않고 인기 테마를 유지한다.
                     setMyRecommendedCourses([]);
+                    setIsRecommendedCoursesLoading(false);
                 }
             });
 
@@ -111,6 +118,10 @@ function RecommendSection() {
 
     const hasMyRecommendedCourses =
         isLoggedIn && Boolean(memberId) && myRecommendedCourses.length > 0;
+    const isCheckingRecommendedCourses =
+        isLoggedIn && Boolean(memberId) && isRecommendedCoursesLoading;
+    const shouldShowPersonalizedSection =
+        hasMyRecommendedCourses || isCheckingRecommendedCourses;
 
     const popularThemeCourses = useMemo(
         () => catalogCourses
@@ -149,16 +160,16 @@ function RecommendSection() {
     const coursesToShow = hasMyRecommendedCourses
         ? myRecommendedCourses.slice(0, 4)
         : popularThemeCourses;
-    const isThemeCatalogLoading =
-        !hasMyRecommendedCourses && catalogStatus === 'loading';
+    const isCourseListLoading = isCheckingRecommendedCourses
+        || (!hasMyRecommendedCourses && catalogStatus === 'loading');
 
-    const sectionTitle = hasMyRecommendedCourses
+    const sectionTitle = shouldShowPersonalizedSection
         ? '취향에 맞는 추천 코스'
         : '인기 테마 추천 코스';
-    const sectionDescription = hasMyRecommendedCourses
+    const sectionDescription = shouldShowPersonalizedSection
         ? '취향 검사로 추천받은 최신 코스 4개를 확인해보세요.'
         : '지금 가장 인기 있는 테마 코스를 미리 만나보세요.';
-    const moreLink = hasMyRecommendedCourses
+    const moreLink = shouldShowPersonalizedSection
         ? '/courses/recommendations'
         : '/courses/themes/popular';
 
@@ -193,11 +204,15 @@ function RecommendSection() {
             </div>
 
             <div
-                className={`course-grid course-grid--home${isThemeCatalogLoading ? ' is-loading' : ''}`}
-                aria-busy={isThemeCatalogLoading}
-                aria-label={isThemeCatalogLoading ? '테마 코스를 불러오는 중' : undefined}
+                className={`course-grid course-grid--home${isCourseListLoading ? ' is-loading' : ''}`}
+                aria-busy={isCourseListLoading}
+                aria-label={isCourseListLoading
+                    ? isCheckingRecommendedCourses
+                        ? '추천 코스를 불러오는 중'
+                        : '테마 코스를 불러오는 중'
+                    : undefined}
             >
-                {isThemeCatalogLoading
+                {isCourseListLoading
                     ? [1, 2, 3, 4].map((item) => (
                         <div
                             className="course-card course-card--home course-card-loading"
